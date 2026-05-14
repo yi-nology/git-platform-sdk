@@ -100,6 +100,8 @@ func classifyHost(host string) (Platform, string) {
 		return PlatformGitHub, "https://api.github.com"
 	case strings.Contains(lower, "code.tencent.com"):
 		return PlatformTencentCode, "https://git.code.tencent.com/api/v3"
+	case strings.Contains(lower, "codeberg.org"):
+		return PlatformForgejo, "https://codeberg.org"
 	case strings.Contains(lower, "gitlab.com"):
 		return PlatformGitLab, "https://gitlab.com/api/v4"
 	case strings.Contains(lower, "gitea.com"):

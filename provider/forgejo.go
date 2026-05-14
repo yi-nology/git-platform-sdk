@@ -15,16 +15,16 @@ import (
 	"strings"
 	"time"
 
-	gitea "code.gitea.io/sdk/gitea"
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 )
 
-type giteaProvider struct {
-	client *gitea.Client
+type forgejoProvider struct {
+	client *forgejo.Client
 }
 
-func NewGiteaProvider(baseURL, token string, skipTLS bool) *giteaProvider {
+func NewForgejoProvider(baseURL, token string, skipTLS bool) *forgejoProvider {
 	if baseURL == "" {
-		baseURL = "https://gitea.com"
+		baseURL = "https://codeberg.org"
 	}
 	baseURL = strings.TrimSuffix(strings.TrimSuffix(baseURL, "/"), "/api/v1")
 	transport := &http.Transport{}
@@ -32,26 +32,26 @@ func NewGiteaProvider(baseURL, token string, skipTLS bool) *giteaProvider {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
-	client, err := gitea.NewClient(baseURL, gitea.SetToken(token), gitea.SetHTTPClient(httpClient))
+	client, err := forgejo.NewClient(baseURL, forgejo.SetToken(token), forgejo.SetHTTPClient(httpClient))
 	if err != nil {
-		return &giteaProvider{}
+		return &forgejoProvider{}
 	}
-	return &giteaProvider{client: client}
+	return &forgejoProvider{client: client}
 }
 
-func (g *giteaProvider) Platform() Platform { return PlatformGitea }
+func (f *forgejoProvider) Platform() Platform { return PlatformForgejo }
 
-func (g *giteaProvider) TestConnection(ctx context.Context) (*TestConnectionResult, error) {
-	user, _, err := g.client.GetMyUserInfo()
+func (f *forgejoProvider) TestConnection(ctx context.Context) (*TestConnectionResult, error) {
+	user, _, err := f.client.GetMyUserInfo()
 	if err != nil {
 		return &TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
 	result := &TestConnectionResult{
 		Connected: true,
-		Platform:  string(g.Platform()),
+		Platform:  string(f.Platform()),
 		UserName:  user.UserName,
 	}
-	_, err = g.ListRepos(ctx, ListRepoOptions{Page: 1, PerPage: 1})
+	_, err = f.ListRepos(ctx, ListRepoOptions{Page: 1, PerPage: 1})
 	result.CanListRepos = err == nil
 	result.CanReadCR = result.CanListRepos
 	result.CanWriteCR = result.CanListRepos
@@ -59,7 +59,7 @@ func (g *giteaProvider) TestConnection(ctx context.Context) (*TestConnectionResu
 	return result, nil
 }
 
-func (g *giteaProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error) {
+func (f *forgejoProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error) {
 	if opts.Page == 0 {
 		opts.Page = 1
 	}
@@ -67,44 +67,44 @@ func (g *giteaProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]
 		opts.PerPage = 20
 	}
 	if opts.Owner != "" {
-		results, _, err := g.client.SearchRepos(gitea.SearchRepoOptions{
-			ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
+		results, _, err := f.client.SearchRepos(forgejo.SearchRepoOptions{
+			ListOptions: forgejo.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
 		})
 		if err != nil {
 			return nil, err
 		}
 		filtered := make([]*PlatformRepo, 0)
 		for _, r := range results {
-			pr := convertGiteaRepo(r)
+			pr := convertForgejoRepo(r)
 			if strings.EqualFold(pr.Owner, opts.Owner) {
 				filtered = append(filtered, pr)
 			}
 		}
 		return filtered, nil
 	}
-	reposRaw, _, err := g.client.ListMyRepos(gitea.ListReposOptions{
-		ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
+	reposRaw, _, err := f.client.ListMyRepos(forgejo.ListReposOptions{
+		ListOptions: forgejo.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
 	})
 	if err != nil {
 		return nil, err
 	}
 	repos := make([]*PlatformRepo, 0, len(reposRaw))
 	for _, r := range reposRaw {
-		repos = append(repos, convertGiteaRepo(r))
+		repos = append(repos, convertForgejoRepo(r))
 	}
 	return repos, nil
 }
 
-func (g *giteaProvider) GetRepo(ctx context.Context, owner, repo string) (*PlatformRepo, error) {
-	r, _, err := g.client.GetRepo(owner, repo)
+func (f *forgejoProvider) GetRepo(ctx context.Context, owner, repo string) (*PlatformRepo, error) {
+	r, _, err := f.client.GetRepo(owner, repo)
 	if err != nil {
 		return nil, err
 	}
-	return convertGiteaRepo(r), nil
+	return convertForgejoRepo(r), nil
 }
 
-func (g *giteaProvider) CreateCR(ctx context.Context, opts CreateCROptions) (*ChangeRequest, error) {
-	pr, _, err := g.client.CreatePullRequest(opts.Owner, opts.Repo, gitea.CreatePullRequestOption{
+func (f *forgejoProvider) CreateCR(ctx context.Context, opts CreateCROptions) (*ChangeRequest, error) {
+	pr, _, err := f.client.CreatePullRequest(opts.Owner, opts.Repo, forgejo.CreatePullRequestOption{
 		Head:  opts.SourceBranch,
 		Base:  opts.TargetBranch,
 		Title: opts.Title,
@@ -113,83 +113,82 @@ func (g *giteaProvider) CreateCR(ctx context.Context, opts CreateCROptions) (*Ch
 	if err != nil {
 		return nil, err
 	}
-	return convertGiteaPR(pr), nil
+	return convertForgejoPR(pr), nil
 }
 
-func (g *giteaProvider) GetCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
-	pr, _, err := g.client.GetPullRequest(owner, repo, int64(number))
+func (f *forgejoProvider) GetCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
+	pr, _, err := f.client.GetPullRequest(owner, repo, int64(number))
 	if err != nil {
 		return nil, err
 	}
-	return convertGiteaPR(pr), nil
+	return convertForgejoPR(pr), nil
 }
 
-func (g *giteaProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
+func (f *forgejoProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
 	if opts.Page == 0 {
 		opts.Page = 1
 	}
 	if opts.PerPage == 0 {
 		opts.PerPage = 20
 	}
-	prs, resp, err := g.client.ListRepoPullRequests(opts.Owner, opts.Repo, gitea.ListPullRequestsOptions{
-		State:       gitea.StateType(opts.State),
-		ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
+	prs, resp, err := f.client.ListRepoPullRequests(opts.Owner, opts.Repo, forgejo.ListPullRequestsOptions{
+		State:       forgejo.StateType(opts.State),
+		ListOptions: forgejo.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
 	})
 	if err != nil {
 		return nil, 0, err
 	}
 	crs := make([]*ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
-		crs = append(crs, convertGiteaPR(pr))
+		crs = append(crs, convertForgejoPR(pr))
 	}
-	total := parseGiteaTotalCount(resp)
+	total := parseForgejoTotalCount(resp)
 	if total < len(crs) {
 		total = len(crs)
 	}
 	return crs, total, nil
 }
 
-func (g *giteaProvider) MergeCR(ctx context.Context, owner, repo string, number int, opts MergeCROptions) (*ChangeRequest, error) {
-	style := gitea.MergeStyleMerge
+func (f *forgejoProvider) MergeCR(ctx context.Context, owner, repo string, number int, opts MergeCROptions) (*ChangeRequest, error) {
+	style := forgejo.MergeStyleMerge
 	if opts.Squash {
-		style = gitea.MergeStyleSquash
+		style = forgejo.MergeStyleSquash
 	}
-	deleteBranch := opts.RemoveSourceBranch
-	_, resp, err := g.client.MergePullRequest(owner, repo, int64(number), gitea.MergePullRequestOption{
+	_, resp, err := f.client.MergePullRequest(owner, repo, int64(number), forgejo.MergePullRequestOption{
 		Style:                  style,
 		Title:                  opts.MergeCommitMessage,
-		DeleteBranchAfterMerge: &deleteBranch,
+		DeleteBranchAfterMerge: opts.RemoveSourceBranch,
 	})
 	if err != nil {
 		if resp != nil && resp.StatusCode == 405 {
-			cr, getErr := g.GetCR(ctx, owner, repo, number)
+			cr, getErr := f.GetCR(ctx, owner, repo, number)
 			if getErr == nil && cr.State == CRStateMerged {
 				return cr, nil
 			}
 		}
 		return nil, err
 	}
-	return g.GetCR(ctx, owner, repo, number)
+	return f.GetCR(ctx, owner, repo, number)
 }
 
-func (g *giteaProvider) CloseCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
-	state := gitea.StateClosed
-	_, _, err := g.client.EditPullRequest(owner, repo, int64(number), gitea.EditPullRequestOption{
+func (f *forgejoProvider) CloseCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
+	state := forgejo.StateClosed
+	_, _, err := f.client.EditPullRequest(owner, repo, int64(number), forgejo.EditPullRequestOption{
 		State: &state,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return g.GetCR(ctx, owner, repo, number)
+	return f.GetCR(ctx, owner, repo, number)
 }
 
-func (g *giteaProvider) CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error) {
+func (f *forgejoProvider) CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error) {
 	events := opts.Events
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
 	}
-	hook, _, err := g.client.CreateRepoHook(opts.Owner, opts.Repo, gitea.CreateHookOption{
-		Type:   gitea.HookTypeGitea,
+	hook, _, err := f.client.CreateRepoHook(opts.Owner, opts.Repo, forgejo.CreateHookOption{
+		Type:   forgejo.HookTypeForgejo,
 		Config: map[string]string{"url": opts.URL, "content_type": "json", "secret": opts.Secret},
 		Events: events,
 		Active: true,
@@ -197,92 +196,92 @@ func (g *giteaProvider) CreateWebhook(ctx context.Context, opts CreateWebhookOpt
 	if err != nil {
 		return nil, err
 	}
-	return convertGiteaHook(hook), nil
+	return convertForgejoHook(hook), nil
 }
 
-func (g *giteaProvider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	_, err := g.client.DeleteRepoHook(owner, repo, webhookID)
+func (f *forgejoProvider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
+	_, err := f.client.DeleteRepoHook(owner, repo, webhookID)
 	return err
 }
 
-func (g *giteaProvider) ListWebhooks(ctx context.Context, owner, repo string) ([]*PlatformWebhook, error) {
-	hooks, _, err := g.client.ListRepoHooks(owner, repo, gitea.ListHooksOptions{})
+func (f *forgejoProvider) ListWebhooks(ctx context.Context, owner, repo string) ([]*PlatformWebhook, error) {
+	hooks, _, err := f.client.ListRepoHooks(owner, repo, forgejo.ListHooksOptions{})
 	if err != nil {
 		return nil, err
 	}
 	result := make([]*PlatformWebhook, 0, len(hooks))
 	for _, h := range hooks {
-		result = append(result, convertGiteaHook(h))
+		result = append(result, convertForgejoHook(h))
 	}
 	return result, nil
 }
 
-func (g *giteaProvider) ListBranches(ctx context.Context, owner, repo string) ([]*PlatformBranch, error) {
-	branches, _, err := g.client.ListRepoBranches(owner, repo, gitea.ListRepoBranchesOptions{
-		ListOptions: gitea.ListOptions{PageSize: 100},
+func (f *forgejoProvider) ListBranches(ctx context.Context, owner, repo string) ([]*PlatformBranch, error) {
+	branches, _, err := f.client.ListRepoBranches(owner, repo, forgejo.ListRepoBranchesOptions{
+		ListOptions: forgejo.ListOptions{PageSize: 100},
 	})
 	if err != nil {
 		return nil, err
 	}
 	result := make([]*PlatformBranch, 0, len(branches))
 	for _, b := range branches {
-		result = append(result, convertGiteaBranch(b))
+		result = append(result, convertForgejoBranch(b))
 	}
 	return result, nil
 }
 
-func (g *giteaProvider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*PlatformBranch, error) {
-	b, _, err := g.client.CreateBranch(owner, repo, gitea.CreateBranchOption{
-		BranchName:   branch,
+func (f *forgejoProvider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*PlatformBranch, error) {
+	b, _, err := f.client.CreateBranch(owner, repo, forgejo.CreateBranchOption{
+		BranchName:    branch,
 		OldBranchName: ref,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return convertGiteaBranch(b), nil
+	return convertForgejoBranch(b), nil
 }
 
-func (g *giteaProvider) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
-	_, _, err := g.client.DeleteRepoBranch(owner, repo, branch)
+func (f *forgejoProvider) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
+	_, _, err := f.client.DeleteRepoBranch(owner, repo, branch)
 	return err
 }
 
-func (g *giteaProvider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*MergeDiff, error) {
-	diffBytes, _, err := g.client.GetPullRequestDiff(owner, repo, int64(number), gitea.PullRequestDiffOptions{})
+func (f *forgejoProvider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*MergeDiff, error) {
+	diffBytes, _, err := f.client.GetPullRequestDiff(owner, repo, int64(number), forgejo.PullRequestDiffOptions{})
 	if err != nil {
 		return nil, err
 	}
 	rawDiff := string(diffBytes)
 
-	files, err := g.GetCRFiles(ctx, owner, repo, number)
+	files, err := f.GetCRFiles(ctx, owner, repo, number)
 	if err != nil {
 		return nil, err
 	}
 	totalAdd, totalDel := 0, 0
-	for _, f := range files {
-		totalAdd += f.Additions
-		totalDel += f.Deletions
+	for _, fi := range files {
+		totalAdd += fi.Additions
+		totalDel += fi.Deletions
 	}
 	return &MergeDiff{Files: files, TotalAdd: totalAdd, TotalDel: totalDel, RawDiff: rawDiff}, nil
 }
 
-func (g *giteaProvider) GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*ChangedFile, error) {
-	changedFiles, _, err := g.client.ListPullRequestFiles(owner, repo, int64(number), gitea.ListPullRequestFilesOptions{
-		ListOptions: gitea.ListOptions{PageSize: 100},
+func (f *forgejoProvider) GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*ChangedFile, error) {
+	changedFiles, _, err := f.client.ListPullRequestFiles(owner, repo, int64(number), forgejo.ListPullRequestFilesOptions{
+		ListOptions: forgejo.ListOptions{PageSize: 100},
 	})
 	if err != nil {
 		return nil, err
 	}
 	result := make([]*ChangedFile, 0, len(changedFiles))
-	for _, f := range changedFiles {
+	for _, fi := range changedFiles {
 		cf := &ChangedFile{
-			OldPath:   f.PreviousFilename,
-			NewPath:   f.Filename,
-			Additions: f.Additions,
-			Deletions: f.Deletions,
-			IsNew:     f.Status == "added",
-			IsDeleted: f.Status == "removed",
-			IsRenamed: f.Status == "renamed",
+			OldPath:   fi.PreviousFilename,
+			NewPath:   fi.Filename,
+			Additions: fi.Additions,
+			Deletions: fi.Deletions,
+			IsNew:     fi.Status == "added",
+			IsDeleted: fi.Status == "removed",
+			IsRenamed: fi.Status == "renamed",
 		}
 		if cf.OldPath == "" {
 			cf.OldPath = cf.NewPath
@@ -292,8 +291,8 @@ func (g *giteaProvider) GetCRFiles(ctx context.Context, owner, repo string, numb
 	return result, nil
 }
 
-func (g *giteaProvider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
-	comment, _, err := g.client.CreateIssueComment(owner, repo, int64(number), gitea.CreateIssueCommentOption{
+func (f *forgejoProvider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
+	comment, _, err := f.client.CreateIssueComment(owner, repo, int64(number), forgejo.CreateIssueCommentOption{
 		Body: body,
 	})
 	if err != nil {
@@ -302,12 +301,12 @@ func (g *giteaProvider) CreateNote(ctx context.Context, owner, repo string, numb
 	return strconv.FormatInt(comment.ID, 10), nil
 }
 
-func (g *giteaProvider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
+func (f *forgejoProvider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
 	id, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
 		return err
 	}
-	resp, err := g.client.DeleteIssueComment(owner, repo, id)
+	resp, err := f.client.DeleteIssueComment(owner, repo, id)
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {
 			return nil
@@ -316,8 +315,8 @@ func (g *giteaProvider) DeleteNote(ctx context.Context, owner, repo string, numb
 	return err
 }
 
-func (g *giteaProvider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error) {
-	comment, _, err := g.client.CreateIssueComment(owner, repo, int64(number), gitea.CreateIssueCommentOption{
+func (f *forgejoProvider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error) {
+	comment, _, err := f.client.CreateIssueComment(owner, repo, int64(number), forgejo.CreateIssueCommentOption{
 		Body: opts.Body,
 	})
 	if err != nil {
@@ -326,18 +325,18 @@ func (g *giteaProvider) CreateDiscussion(ctx context.Context, owner, repo string
 	return strconv.FormatInt(comment.ID, 10), nil
 }
 
-func (g *giteaProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
-	stateMap := map[string]gitea.StatusState{
-		"success": gitea.StatusSuccess,
-		"failed":  gitea.StatusFailure,
-		"pending": gitea.StatusPending,
-		"error":   gitea.StatusError,
+func (f *forgejoProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
+	stateMap := map[string]forgejo.StatusState{
+		"success": forgejo.StatusSuccess,
+		"failed":  forgejo.StatusFailure,
+		"pending": forgejo.StatusPending,
+		"error":   forgejo.StatusError,
 	}
 	state := stateMap[opts.State]
 	if state == "" {
-		state = gitea.StatusPending
+		state = forgejo.StatusPending
 	}
-	_, _, err := g.client.CreateStatus(owner, repo, sha, gitea.CreateStatusOption{
+	_, _, err := f.client.CreateStatus(owner, repo, sha, forgejo.CreateStatusOption{
 		State:       state,
 		Context:     opts.Context,
 		Description: opts.Description,
@@ -346,35 +345,38 @@ func (g *giteaProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha
 	return err
 }
 
-func (g *giteaProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
-	data, _, err := g.client.GetFile(owner, repo, ref, path)
+func (f *forgejoProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
+	data, _, err := f.client.GetFile(owner, repo, ref, path)
 	if err != nil {
 		return "", err
 	}
 	return string(data), nil
 }
 
-func (g *giteaProvider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
+func (f *forgejoProvider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
 	labelIDs := make([]int64, 0, len(labels))
 	for _, l := range labels {
 		if id, err := strconv.ParseInt(l, 10, 64); err == nil {
 			labelIDs = append(labelIDs, id)
 		}
 	}
-	_, _, err := g.client.AddIssueLabels(owner, repo, int64(number), gitea.IssueLabelsOption{
+	_, _, err := f.client.AddIssueLabels(owner, repo, int64(number), forgejo.IssueLabelsOption{
 		Labels: labelIDs,
 	})
 	return err
 }
 
-func (g *giteaProvider) ParseWebhookEvent(r *http.Request, secret string) (*NormalizedEvent, error) {
-	if err := g.ValidateWebhookSignature(r, secret); err != nil {
+func (f *forgejoProvider) ParseWebhookEvent(r *http.Request, secret string) (*NormalizedEvent, error) {
+	if err := f.ValidateWebhookSignature(r, secret); err != nil {
 		return nil, err
 	}
 	body, _ := io.ReadAll(r.Body)
 	r.Body = io.NopCloser(bytes.NewReader(body))
 
-	eventType := r.Header.Get("X-Gitea-Event")
+	eventType := r.Header.Get("X-Forgejo-Event")
+	if eventType == "" {
+		eventType = r.Header.Get("X-Gitea-Event")
+	}
 	var pl struct {
 		Action string `json:"action"`
 		Sender struct {
@@ -397,9 +399,9 @@ func (g *giteaProvider) ParseWebhookEvent(r *http.Request, secret string) (*Norm
 			Base struct {
 				Ref string `json:"ref"`
 			} `json:"base"`
-			Merged  bool      `json:"merged"`
-			HTMLURL string    `json:"html_url"`
-			User    struct {
+			Merged   bool      `json:"merged"`
+			HTMLURL  string    `json:"html_url"`
+			User     struct {
 				ID    int    `json:"id"`
 				Login string `json:"login"`
 			} `json:"user"`
@@ -423,8 +425,8 @@ func (g *giteaProvider) ParseWebhookEvent(r *http.Request, secret string) (*Norm
 	actor := &CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
 	event := &NormalizedEvent{
-		ID:        fmt.Sprintf("gt-%d-%d", time.Now().UnixNano(), pl.Number),
-		Source:    g.Platform(),
+		ID:        fmt.Sprintf("fj-%d-%d", time.Now().UnixNano(), pl.Number),
+		Source:    f.Platform(),
 		Timestamp: time.Now(),
 		Actor:     actor,
 		Repo:      er,
@@ -442,7 +444,7 @@ func (g *giteaProvider) ParseWebhookEvent(r *http.Request, secret string) (*Norm
 			event.CR = &ChangeRequest{
 				ID: int64(pl.PullRequest.Number), Number: pl.PullRequest.Number,
 				Title: pl.PullRequest.Title, Description: pl.PullRequest.Body,
-				State:        mapGiteaState(pl.PullRequest.State, pl.PullRequest.Merged),
+				State:        mapForgejoState(pl.PullRequest.State, pl.PullRequest.Merged),
 				SourceBranch: pl.PullRequest.Head.Ref, TargetBranch: pl.PullRequest.Base.Ref,
 				WebURL:    pl.PullRequest.HTMLURL,
 				Author:    &CRUser{ID: int64(pl.PullRequest.User.ID), Username: pl.PullRequest.User.Login},
@@ -463,13 +465,16 @@ func (g *giteaProvider) ParseWebhookEvent(r *http.Request, secret string) (*Norm
 	return event, nil
 }
 
-func (g *giteaProvider) ValidateWebhookSignature(r *http.Request, secret string) error {
+func (f *forgejoProvider) ValidateWebhookSignature(r *http.Request, secret string) error {
 	if secret == "" {
 		return nil
 	}
-	sig := r.Header.Get("X-Gitea-Signature")
+	sig := r.Header.Get("X-Forgejo-Signature")
 	if sig == "" {
-		return fmt.Errorf("missing X-Gitea-Signature header")
+		sig = r.Header.Get("X-Gitea-Signature")
+	}
+	if sig == "" {
+		return fmt.Errorf("missing webhook signature header")
 	}
 	body, _ := io.ReadAll(r.Body)
 	r.Body = io.NopCloser(bytes.NewReader(body))
@@ -482,7 +487,7 @@ func (g *giteaProvider) ValidateWebhookSignature(r *http.Request, secret string)
 	return nil
 }
 
-func convertGiteaRepo(r *gitea.Repository) *PlatformRepo {
+func convertForgejoRepo(r *forgejo.Repository) *PlatformRepo {
 	if r == nil {
 		return nil
 	}
@@ -500,11 +505,11 @@ func convertGiteaRepo(r *gitea.Repository) *PlatformRepo {
 		SSHURL:        r.SSHURL,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
-		Platform:      PlatformGitea,
+		Platform:      PlatformForgejo,
 	}
 }
 
-func convertGiteaPR(pr *gitea.PullRequest) *ChangeRequest {
+func convertForgejoPR(pr *forgejo.PullRequest) *ChangeRequest {
 	if pr == nil {
 		return nil
 	}
@@ -534,7 +539,7 @@ func convertGiteaPR(pr *gitea.PullRequest) *ChangeRequest {
 		Number:       int(pr.Index),
 		Title:        pr.Title,
 		Description:  pr.Body,
-		State:        mapGiteaState(string(pr.State), pr.HasMerged),
+		State:        mapForgejoState(string(pr.State), pr.HasMerged),
 		SourceBranch: pr.Head.Ref,
 		TargetBranch: pr.Base.Ref,
 		Author:       author,
@@ -545,14 +550,14 @@ func convertGiteaPR(pr *gitea.PullRequest) *ChangeRequest {
 	}
 }
 
-func convertGiteaBranch(b *gitea.Branch) *PlatformBranch {
+func convertForgejoBranch(b *forgejo.Branch) *PlatformBranch {
 	if b == nil {
 		return nil
 	}
 	return &PlatformBranch{Name: b.Name}
 }
 
-func convertGiteaHook(h *gitea.Hook) *PlatformWebhook {
+func convertForgejoHook(h *forgejo.Hook) *PlatformWebhook {
 	if h == nil {
 		return nil
 	}
@@ -563,7 +568,7 @@ func convertGiteaHook(h *gitea.Hook) *PlatformWebhook {
 	}
 }
 
-func mapGiteaState(state string, merged bool) CRState {
+func mapForgejoState(state string, merged bool) CRState {
 	if merged {
 		return CRStateMerged
 	}
@@ -573,7 +578,7 @@ func mapGiteaState(state string, merged bool) CRState {
 	return CRStateOpened
 }
 
-func parseGiteaTotalCount(resp *gitea.Response) int {
+func parseForgejoTotalCount(resp *forgejo.Response) int {
 	if resp == nil {
 		return 0
 	}

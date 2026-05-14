@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,42 +19,39 @@ func encodeProjectPath(owner, repo string) string {
 }
 
 type tencentCodeProvider struct {
-	baseURL string
-	token   string
-	client  *http.Client
+	*baseProvider
+	skipTLS bool
 }
 
 func NewTencentCodeProvider(baseURL, token string, skipTLS bool) *tencentCodeProvider {
 	if baseURL == "" {
 		baseURL = "https://git.code.tencent.com/api/v3"
 	}
-	transport := &http.Transport{}
+	bp := newBaseProvider(baseURL, token, skipTLS, authHeaderPrivateToken, "Tencent Code")
 	if skipTLS {
-		transport.TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true,
-			MinVersion:         tls.VersionTLS12,
-			MaxVersion:         tls.VersionTLS12,
-			CipherSuites: []uint16{
-				tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+		bp.client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+				MinVersion:         tls.VersionTLS12,
+				MaxVersion:         tls.VersionTLS12,
+				CipherSuites: []uint16{
+					tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+					tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+					tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+					tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+					tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				},
 			},
 		}
 	}
-	return &tencentCodeProvider{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		token:   token,
-		client:  &http.Client{Timeout: 30 * time.Second, Transport: transport},
-	}
+	return &tencentCodeProvider{baseProvider: bp, skipTLS: skipTLS}
 }
 
 func (t *tencentCodeProvider) Platform() Platform { return PlatformTencentCode }
@@ -195,22 +193,53 @@ func (t *tencentCodeProvider) ListCRs(ctx context.Context, opts ListCROptions) (
 		path += "&target_branch=" + opts.TargetBranch
 	}
 	var mrs []tcMR
-	if err := t.doRequest(ctx, "GET", path, nil, &mrs); err != nil {
+	headers, err := t.doRequestWithHeaders(ctx, "GET", path, nil, &mrs)
+	if err != nil {
 		return nil, 0, err
 	}
 	crs := make([]*ChangeRequest, 0, len(mrs))
 	for i := range mrs {
 		crs = append(crs, mrs[i].toCR())
 	}
-	return crs, len(crs), nil
+	return crs, parseTotalCount(headers, len(crs)), nil
 }
 
 func (t *tencentCodeProvider) MergeCR(ctx context.Context, owner, repo string, number int, opts MergeCROptions) (*ChangeRequest, error) {
-	return nil, fmt.Errorf("腾讯工蜂暂不支持通过 API 合并 MR，请在网页端手动操作")
+	encoded := encodeProjectPath(owner, repo)
+	var existingMR tcMR
+	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), nil, &existingMR); err == nil {
+		if existingMR.MergeStatus != "" && existingMR.MergeStatus != "can_be_merged" && existingMR.MergeStatus != "checking" {
+			return nil, fmt.Errorf("MR cannot be merged (status: %s). It may have conflicts or an active pipeline", existingMR.MergeStatus)
+		}
+		if mapTCState(existingMR.State) != CRStateOpened {
+			return nil, fmt.Errorf("MR is not in 'opened' state (current: %s)", existingMR.State)
+		}
+	}
+	body := map[string]interface{}{}
+	if opts.MergeCommitMessage != "" {
+		body["merge_commit_message"] = opts.MergeCommitMessage
+	}
+	if opts.Squash {
+		body["squash"] = true
+	}
+	if opts.RemoveSourceBranch {
+		body["should_remove_source_branch"] = true
+	}
+	var mr tcMR
+	if err := t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_requests/%d/merge", encoded, number), body, &mr); err != nil {
+		return nil, fmt.Errorf("merge failed: %w", err)
+	}
+	return mr.toCR(), nil
 }
 
 func (t *tencentCodeProvider) CloseCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
-	return nil, fmt.Errorf("腾讯工蜂暂不支持通过 API 关闭 MR，请在网页端手动操作")
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{"state_event": "close"}
+	var mr tcMR
+	if err := t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), body, &mr); err != nil {
+		return nil, err
+	}
+	return mr.toCR(), nil
 }
 
 func (t *tencentCodeProvider) CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error) {
@@ -375,10 +404,19 @@ func (t *tencentCodeProvider) GetFileContent(ctx context.Context, owner, repo, p
 		params = "?ref=" + ref
 	}
 	var resp struct {
-		Content string `json:"content"`
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
 	}
 	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/files/%s%s", encoded, path, params), nil, &resp); err != nil {
 		return "", err
+	}
+	if resp.Encoding == "base64" {
+		content := strings.ReplaceAll(resp.Content, "\n", "")
+		decoded, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			return "", err
+		}
+		return string(decoded), nil
 	}
 	return resp.Content, nil
 }
@@ -391,32 +429,108 @@ func (t *tencentCodeProvider) UpdateCRLabels(ctx context.Context, owner, repo st
 	return t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), body, nil)
 }
 
-func (t *tencentCodeProvider) doRequest(ctx context.Context, method, path string, body interface{}, result interface{}) error {
-	var reqBody io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return err
+func (t *tencentCodeProvider) ParseWebhookEvent(r *http.Request, secret string) (*NormalizedEvent, error) {
+	if err := t.ValidateWebhookSignature(r, secret); err != nil {
+		return nil, err
+	}
+	body, _ := io.ReadAll(r.Body)
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	var pl struct {
+		ObjectKind string `json:"object_kind"`
+		User       struct {
+			ID       int    `json:"id"`
+			Username string `json:"username"`
+			Name     string `json:"name"`
+		} `json:"user"`
+		Repository struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"repository"`
+		Project struct {
+			PathWithNS string `json:"path_with_namespace"`
+		} `json:"project"`
+		ObjectAttributes struct {
+			IID          int    `json:"iid"`
+			Title        string `json:"title"`
+			Description  string `json:"description"`
+			State        string `json:"state"`
+			SourceBranch string `json:"source_branch"`
+			TargetBranch string `json:"target_branch"`
+			Action       string `json:"action"`
+			MergeStatus  string `json:"merge_status"`
+			URL          string `json:"url"`
+			LastCommit   struct {
+				ID string `json:"id"`
+			} `json:"last_commit"`
+			CreatedAt tcTime `json:"created_at"`
+			UpdatedAt tcTime `json:"updated_at"`
+		} `json:"object_attributes"`
+		Ref        string `json:"ref"`
+		Before     string `json:"before"`
+		After      string `json:"after"`
+		TotalCount int    `json:"total_commits_count"`
+		Commits    []struct {
+			ID string `json:"id"`
+		} `json:"commits"`
+	}
+	if err := json.Unmarshal(body, &pl); err != nil {
+		return nil, err
+	}
+
+	repoName := pl.Project.PathWithNS
+	if repoName == "" {
+		repoName = pl.Repository.Name
+	}
+	parts := strings.SplitN(repoName, "/", 2)
+	er := &EventRepo{FullName: repoName}
+	if len(parts) == 2 {
+		er.Owner = parts[0]
+		er.Name = parts[1]
+	}
+	actor := &CRUser{ID: int64(pl.User.ID), Username: pl.User.Username, Name: pl.User.Name}
+
+	event := &NormalizedEvent{
+		ID:     fmt.Sprintf("tc-%d-%d", time.Now().UnixNano(), pl.ObjectAttributes.IID),
+		Source: t.Platform(), Timestamp: time.Now(), Actor: actor, Repo: er,
+	}
+
+	switch pl.ObjectKind {
+	case "merge_request":
+		state := mapTCState(pl.ObjectAttributes.State)
+		action := pl.ObjectAttributes.Action
+		if action == "merge" {
+			action = "merged"
 		}
-		reqBody = bytes.NewReader(b)
+		event.Type = "cr." + action
+		event.CommitSHA = pl.ObjectAttributes.LastCommit.ID
+		event.CR = &ChangeRequest{
+			ID: int64(pl.ObjectAttributes.IID), Number: pl.ObjectAttributes.IID,
+			Title: pl.ObjectAttributes.Title, Description: pl.ObjectAttributes.Description,
+			State: state, SourceBranch: pl.ObjectAttributes.SourceBranch,
+			TargetBranch: pl.ObjectAttributes.TargetBranch, MergeStatus: pl.ObjectAttributes.MergeStatus,
+			WebURL: pl.ObjectAttributes.URL, Author: actor,
+			CreatedAt: pl.ObjectAttributes.CreatedAt.Time, UpdatedAt: pl.ObjectAttributes.UpdatedAt.Time,
+		}
+	case "push":
+		event.Type = "push"
+		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
+		event.CommitSHA = pl.After
+	case "tag_push":
+		event.Type = "tag.created"
+		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
+	case "issue":
+		event.Type = "issue"
+	case "note":
+		event.Type = "comment"
 	}
-	req, err := http.NewRequestWithContext(ctx, method, t.baseURL+path, reqBody)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("PRIVATE-TOKEN", t.token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := t.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("Tencent Code API %s %s returned %d: %s", method, path, resp.StatusCode, string(respBody))
-	}
-	if result != nil && resp.StatusCode != http.StatusNoContent {
-		return json.Unmarshal(respBody, result)
+	return event, nil
+}
+
+func (t *tencentCodeProvider) ValidateWebhookSignature(r *http.Request, secret string) error {
+	token := r.Header.Get("X-Token")
+	if token == "" || token != secret {
+		return fmt.Errorf("invalid Tencent Code webhook token")
 	}
 	return nil
 }

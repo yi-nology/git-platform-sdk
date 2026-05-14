@@ -1,203 +1,184 @@
 package provider
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/go-github/v69/github"
+	"golang.org/x/oauth2"
 )
 
 type githubProvider struct {
-	baseURL string
-	token   string
-	client  *http.Client
+	client   *github.Client
+	baseURL  string
 }
 
 func NewGitHubProvider(baseURL, token string, skipTLS bool) *githubProvider {
-	if baseURL == "" {
-		baseURL = "https://api.github.com"
-	}
 	transport := &http.Transport{}
 	if skipTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	return &githubProvider{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		token:   token,
-		client:  &http.Client{Timeout: 30 * time.Second, Transport: transport},
+	src := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	httpClient := &http.Client{
+		Transport: &oauth2.Transport{Source: src, Base: transport},
+		Timeout:   30 * time.Second,
 	}
+	if baseURL == "" {
+		return &githubProvider{
+			client:  github.NewClient(httpClient),
+			baseURL: "https://api.github.com",
+		}
+	}
+	client, err := github.NewEnterpriseClient(baseURL, "", httpClient)
+	if err != nil {
+		return &githubProvider{
+			client:  github.NewClient(httpClient),
+			baseURL: "https://api.github.com",
+		}
+	}
+	return &githubProvider{client: client, baseURL: baseURL}
 }
 
 func (g *githubProvider) Platform() Platform { return PlatformGitHub }
 
 func (g *githubProvider) TestConnection(ctx context.Context) (*TestConnectionResult, error) {
-	var user struct {
-		Login string `json:"login"`
-	}
-	if err := g.doRequest(ctx, "GET", "/user", nil, &user); err != nil {
+	user, _, err := g.client.Users.Get(ctx, "")
+	if err != nil {
 		return &TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
-
 	result := &TestConnectionResult{
 		Connected: true,
 		Platform:  string(g.Platform()),
-		UserName:  user.Login,
+		UserName:  user.GetLogin(),
 	}
-
-	// 权限探测
-	// 1. 尝试列出仓库
-	_, err := g.ListRepos(ctx, ListRepoOptions{Page: 1, PerPage: 1})
+	_, err = g.ListRepos(ctx, ListRepoOptions{Page: 1, PerPage: 1})
 	result.CanListRepos = err == nil
-
-	// 2. 检查 scopes（从 response header）
-	// 简化处理，假设能列出仓库则有基本权限
 	result.CanReadCR = result.CanListRepos
 	result.CanWriteCR = result.CanListRepos
-
-	// 3. Webhook 权限检查需要特定 repo 才能测试，这里简化处理
 	result.CanWebhook = result.CanListRepos
-
 	return result, nil
 }
 
 func (g *githubProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error) {
-	path := "/user/repos"
+	listOpts := &github.RepositoryListOptions{
+		ListOptions: github.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
+	}
+	if listOpts.Page == 0 {
+		listOpts.Page = 1
+	}
+	if listOpts.PerPage == 0 {
+		listOpts.PerPage = 20
+	}
+	var repos []*github.Repository
+	var err error
 	if opts.Owner != "" {
-		path = fmt.Sprintf("/users/%s/repos", opts.Owner)
+		repos, _, err = g.client.Repositories.ListByOrg(ctx, opts.Owner, &github.RepositoryListByOrgOptions{
+			ListOptions: listOpts.ListOptions,
+		})
+	} else {
+		repos, _, err = g.client.Repositories.List(ctx, "", listOpts)
 	}
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
-	}
-	path = fmt.Sprintf("%s?page=%d&per_page=%d", path, opts.Page, opts.PerPage)
-	var repos []struct {
-		ID            int    `json:"id"`
-		FullName      string `json:"full_name"`
-		Name          string `json:"name"`
-		Description   string `json:"description"`
-		CloneURL      string `json:"clone_url"`
-		SSHURL        string `json:"ssh_url"`
-		DefaultBranch string `json:"default_branch"`
-		Private       bool   `json:"private"`
-	}
-	if err := g.doRequest(ctx, "GET", path, nil, &repos); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	result := make([]*PlatformRepo, 0, len(repos))
 	for _, r := range repos {
-		parts := strings.SplitN(r.FullName, "/", 2)
-		owner := ""
-		if len(parts) == 2 {
-			owner = parts[0]
-		}
-		result = append(result, &PlatformRepo{
-			ID: int64(r.ID), FullName: r.FullName, Name: r.Name, Owner: owner,
-			Description: r.Description, CloneURL: r.CloneURL, SSHURL: r.SSHURL,
-			DefaultBranch: r.DefaultBranch, Private: r.Private, Platform: g.Platform(),
-		})
+		result = append(result, convertGithubRepo(r))
 	}
 	return result, nil
 }
 
 func (g *githubProvider) GetRepo(ctx context.Context, owner, repo string) (*PlatformRepo, error) {
-	var r struct {
-		ID            int    `json:"id"`
-		FullName      string `json:"full_name"`
-		Name          string `json:"name"`
-		Description   string `json:"description"`
-		CloneURL      string `json:"clone_url"`
-		SSHURL        string `json:"ssh_url"`
-		DefaultBranch string `json:"default_branch"`
-		Private       bool   `json:"private"`
-	}
-	if err := g.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s", owner, repo), nil, &r); err != nil {
+	r, _, err := g.client.Repositories.Get(ctx, owner, repo)
+	if err != nil {
 		return nil, err
 	}
-	parts := strings.SplitN(r.FullName, "/", 2)
-	ownerR := ""
-	if len(parts) == 2 {
-		ownerR = parts[0]
-	}
-	return &PlatformRepo{
-		ID: int64(r.ID), FullName: r.FullName, Name: r.Name, Owner: ownerR,
-		Description: r.Description, CloneURL: r.CloneURL, SSHURL: r.SSHURL,
-		DefaultBranch: r.DefaultBranch, Private: r.Private, Platform: g.Platform(),
-	}, nil
+	return convertGithubRepo(r), nil
 }
 
 func (g *githubProvider) CreateCR(ctx context.Context, opts CreateCROptions) (*ChangeRequest, error) {
-	body := map[string]interface{}{
-		"title": opts.Title, "body": opts.Description,
-		"head": opts.SourceBranch, "base": opts.TargetBranch,
+	newPR := &github.NewPullRequest{
+		Title: github.String(opts.Title),
+		Body:  github.String(opts.Description),
+		Head:  github.String(opts.SourceBranch),
+		Base:  github.String(opts.TargetBranch),
 	}
-	var pr githubPR
-	if err := g.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/pulls", opts.Owner, opts.Repo), body, &pr); err != nil {
+	pr, _, err := g.client.PullRequests.Create(ctx, opts.Owner, opts.Repo, newPR)
+	if err != nil {
 		return nil, err
 	}
-	return pr.toCR(), nil
+	return convertGithubPR(pr), nil
 }
 
 func (g *githubProvider) GetCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
-	var pr githubPR
-	if err := g.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), nil, &pr); err != nil {
+	pr, _, err := g.client.PullRequests.Get(ctx, owner, repo, number)
+	if err != nil {
 		return nil, err
 	}
-	return pr.toCR(), nil
+	return convertGithubPR(pr), nil
 }
 
 func (g *githubProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
-	if opts.Page == 0 {
-		opts.Page = 1
+	listOpts := &github.PullRequestListOptions{
+		ListOptions: github.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
 	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
+	if listOpts.Page == 0 {
+		listOpts.Page = 1
 	}
-	path := fmt.Sprintf("/repos/%s/%s/pulls?page=%d&per_page=%d", opts.Owner, opts.Repo, opts.Page, opts.PerPage)
+	if listOpts.PerPage == 0 {
+		listOpts.PerPage = 20
+	}
 	if opts.State != "" {
-		path += "&state=" + mapGHStateToGitHub(opts.State)
+		listOpts.State = mapCRStateToGithub(opts.State)
 	}
-	var prs []githubPR
-	if err := g.doRequest(ctx, "GET", path, nil, &prs); err != nil {
+	if opts.SourceBranch != "" {
+		listOpts.Head = opts.Owner + ":" + opts.SourceBranch
+	}
+	if opts.TargetBranch != "" {
+		listOpts.Base = opts.TargetBranch
+	}
+	prs, resp, err := g.client.PullRequests.List(ctx, opts.Owner, opts.Repo, listOpts)
+	if err != nil {
 		return nil, 0, err
 	}
 	crs := make([]*ChangeRequest, 0, len(prs))
-	for i := range prs {
-		crs = append(crs, prs[i].toCR())
+	for _, pr := range prs {
+		crs = append(crs, convertGithubPR(pr))
 	}
-	return crs, len(crs), nil
+	total := len(crs)
+	if resp != nil && resp.LastPage > 0 {
+		total = len(crs) * resp.LastPage
+	}
+	return crs, total, nil
 }
 
 func (g *githubProvider) MergeCR(ctx context.Context, owner, repo string, number int, opts MergeCROptions) (*ChangeRequest, error) {
-	body := map[string]interface{}{}
-	if opts.MergeCommitMessage != "" {
-		body["commit_message"] = opts.MergeCommitMessage
-	}
+	mergeOpts := &github.PullRequestOptions{}
 	if opts.Squash {
-		body["merge_method"] = "squash"
+		mergeOpts.MergeMethod = "squash"
 	}
-	var result struct {
-		Merged bool `json:"merged"`
-	}
-	if err := g.doRequest(ctx, "PUT", fmt.Sprintf("/repos/%s/%s/pulls/%d/merge", owner, repo, number), body, &result); err != nil {
+	_, _, err := g.client.PullRequests.Merge(ctx, owner, repo, number, opts.MergeCommitMessage, mergeOpts)
+	if err != nil {
 		return nil, err
 	}
 	return g.GetCR(ctx, owner, repo, number)
 }
 
 func (g *githubProvider) CloseCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
-	body := map[string]interface{}{"state": "closed"}
-	var pr githubPR
-	if err := g.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), body, &pr); err != nil {
+	pr, _, err := g.client.PullRequests.Edit(ctx, owner, repo, number, &github.PullRequest{
+		State: github.String("closed"),
+	})
+	if err != nil {
 		return nil, err
 	}
-	return pr.toCR(), nil
+	return convertGithubPR(pr), nil
 }
 
 func (g *githubProvider) CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error) {
@@ -205,96 +186,319 @@ func (g *githubProvider) CreateWebhook(ctx context.Context, opts CreateWebhookOp
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
 	}
-	body := map[string]interface{}{
-		"name": "web", "url": opts.URL, "secret": opts.Secret,
-		"events": events, "active": true,
+	hook := &github.Hook{
+		Name:   github.String("web"),
+		Events: events,
+		Config: &github.HookConfig{
+			URL:    github.String(opts.URL),
+			Secret: github.String(opts.Secret),
+		},
+		Active: github.Bool(true),
 	}
-	var wh struct {
-		ID  int    `json:"id"`
-		URL string `json:"url"`
-	}
-	if err := g.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/hooks", opts.Owner, opts.Repo), body, &wh); err != nil {
+	h, _, err := g.client.Repositories.CreateHook(ctx, opts.Owner, opts.Repo, hook)
+	if err != nil {
 		return nil, err
 	}
-	return &PlatformWebhook{ID: int64(wh.ID), URL: wh.URL}, nil
+	return convertGithubHook(h), nil
 }
 
 func (g *githubProvider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	return g.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, repo, webhookID), nil, nil)
+	_, err := g.client.Repositories.DeleteHook(ctx, owner, repo, webhookID)
+	return err
 }
 
 func (g *githubProvider) ListWebhooks(ctx context.Context, owner, repo string) ([]*PlatformWebhook, error) {
-	var whs []struct {
-		ID  int    `json:"id"`
-		URL string `json:"url"`
-	}
-	if err := g.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/hooks", owner, repo), nil, &whs); err != nil {
+	hooks, _, err := g.client.Repositories.ListHooks(ctx, owner, repo, nil)
+	if err != nil {
 		return nil, err
 	}
-	result := make([]*PlatformWebhook, 0, len(whs))
-	for _, wh := range whs {
-		result = append(result, &PlatformWebhook{ID: int64(wh.ID), URL: wh.URL})
+	result := make([]*PlatformWebhook, 0, len(hooks))
+	for _, h := range hooks {
+		result = append(result, convertGithubHook(h))
 	}
 	return result, nil
 }
 
-func (g *githubProvider) doRequest(ctx context.Context, method, path string, body interface{}, result interface{}) error {
-	var reqBody io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return err
+func (g *githubProvider) ValidateWebhookSignature(r *http.Request, secret string) error {
+	if secret == "" {
+		return nil
+	}
+	_, err := github.ValidatePayload(r, []byte(secret))
+	return err
+}
+
+func (g *githubProvider) ParseWebhookEvent(r *http.Request, secret string) (*NormalizedEvent, error) {
+	payload, err := github.ValidatePayload(r, []byte(secret))
+	if err != nil {
+		return nil, err
+	}
+	eventType := github.WebHookType(r)
+	event, err := github.ParseWebHook(eventType, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	ne := &NormalizedEvent{
+		Source:     g.Platform(),
+		Timestamp:  time.Now(),
+		RawPayload: json.RawMessage(payload),
+	}
+
+	switch e := event.(type) {
+	case *github.PullRequestEvent:
+		ne.Type = "cr." + mapGithubAction(e.GetAction(), e.GetPullRequest().GetMerged())
+		if e.GetSender() != nil {
+			ne.Actor = &CRUser{
+				ID:        e.GetSender().GetID(),
+				Username:  e.GetSender().GetLogin(),
+				AvatarURL: e.GetSender().GetAvatarURL(),
+			}
 		}
-		reqBody = bytes.NewReader(b)
+		if e.GetRepo() != nil {
+			ne.Repo = convertGithubEventRepo(e.GetRepo().GetFullName())
+		}
+		if e.GetPullRequest() != nil {
+			ne.CR = convertGithubPR(e.GetPullRequest())
+			ne.CommitSHA = e.GetPullRequest().GetHead().GetSHA()
+		}
+	case *github.PushEvent:
+		ne.Type = "push"
+		ne.Branch = strings.TrimPrefix(e.GetRef(), "refs/heads/")
+		ne.CommitSHA = e.GetAfter()
+		if e.GetSender() != nil {
+			ne.Actor = &CRUser{
+				ID:        e.GetSender().GetID(),
+				Username:  e.GetSender().GetLogin(),
+				AvatarURL: e.GetSender().GetAvatarURL(),
+			}
+		}
+		if e.GetRepo() != nil {
+			ne.Repo = convertGithubEventRepo(e.GetRepo().GetFullName())
+		}
+	case *github.CreateEvent:
+		ne.Type = "branch.created"
+		ne.Branch = e.GetRef()
+		if e.GetSender() != nil {
+			ne.Actor = &CRUser{
+				ID:        e.GetSender().GetID(),
+				Username:  e.GetSender().GetLogin(),
+				AvatarURL: e.GetSender().GetAvatarURL(),
+			}
+		}
+	case *github.DeleteEvent:
+		ne.Type = "branch.deleted"
+		ne.Branch = e.GetRef()
+		if e.GetSender() != nil {
+			ne.Actor = &CRUser{
+				ID:        e.GetSender().GetID(),
+				Username:  e.GetSender().GetLogin(),
+				AvatarURL: e.GetSender().GetAvatarURL(),
+			}
+		}
 	}
-	req, err := http.NewRequestWithContext(ctx, method, g.baseURL+path, reqBody)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+g.token)
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("GitHub API %s %s returned %d: %s", method, path, resp.StatusCode, string(respBody))
-	}
-	if result != nil && resp.StatusCode != http.StatusNoContent {
-		return json.Unmarshal(respBody, result)
-	}
-	return nil
+
+	return ne, nil
 }
 
-type githubPR struct {
-	ID     int    `json:"id"`
-	Number int    `json:"number"`
-	Title  string `json:"title"`
-	Body   string `json:"body"`
-	State  string `json:"state"`
-	Head   struct {
-		Ref string `json:"ref"`
-	} `json:"head"`
-	Base struct {
-		Ref string `json:"ref"`
-	} `json:"base"`
-	User struct {
-		ID    int    `json:"id"`
-		Login string `json:"login"`
-	} `json:"user"`
-	HTMLURL   string    `json:"html_url"`
-	Mergeable *bool     `json:"mergeable"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+func (g *githubProvider) ListBranches(ctx context.Context, owner, repo string) ([]*PlatformBranch, error) {
+	branches, _, err := g.client.Repositories.ListBranches(ctx, owner, repo, &github.BranchListOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*PlatformBranch, 0, len(branches))
+	for _, b := range branches {
+		result = append(result, convertGithubBranch(b))
+	}
+	return result, nil
 }
 
-func (pr *githubPR) toCR() *ChangeRequest {
+func (g *githubProvider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*PlatformBranch, error) {
+	_, _, err := g.client.Git.CreateRef(ctx, owner, repo, &github.Reference{
+		Ref: github.String("refs/heads/" + branch),
+		Object: &github.GitObject{
+			SHA: github.String(ref),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &PlatformBranch{Name: branch}, nil
+}
+
+func (g *githubProvider) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
+	_, err := g.client.Git.DeleteRef(ctx, owner, repo, "heads/"+branch)
+	return err
+}
+
+func (g *githubProvider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*MergeDiff, error) {
+	diff := &MergeDiff{}
+	page := 1
+	for {
+		files, _, err := g.client.PullRequests.ListFiles(ctx, owner, repo, number, &github.ListOptions{
+			Page:    page,
+			PerPage: 100,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			cf := &ChangedFile{
+				OldPath:   f.GetPreviousFilename(),
+				NewPath:   f.GetFilename(),
+				Diff:      f.GetPatch(),
+				Additions: f.GetAdditions(),
+				Deletions: f.GetDeletions(),
+				IsNew:     f.GetStatus() == "added",
+				IsDeleted: f.GetStatus() == "removed",
+				IsRenamed: f.GetStatus() == "renamed",
+			}
+			if cf.OldPath == "" {
+				cf.OldPath = cf.NewPath
+			}
+			diff.Files = append(diff.Files, cf)
+			diff.TotalAdd += cf.Additions
+			diff.TotalDel += cf.Deletions
+			diff.RawDiff += fmt.Sprintf("diff --git a/%s b/%s\n", cf.OldPath, cf.NewPath)
+			if cf.IsNew {
+				diff.RawDiff += "new file mode 100644\n"
+			}
+			if cf.IsDeleted {
+				diff.RawDiff += "deleted file mode 100644\n"
+			}
+			if cf.IsRenamed {
+				diff.RawDiff += fmt.Sprintf("rename from %s\nrename to %s\n", cf.OldPath, cf.NewPath)
+			}
+			if !cf.IsNew {
+				diff.RawDiff += fmt.Sprintf("--- a/%s\n", cf.OldPath)
+			}
+			if !cf.IsDeleted {
+				diff.RawDiff += fmt.Sprintf("+++ b/%s\n", cf.NewPath)
+			}
+			diff.RawDiff += f.GetPatch() + "\n"
+		}
+		if len(files) < 100 {
+			break
+		}
+		page++
+	}
+	return diff, nil
+}
+
+func (g *githubProvider) GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*ChangedFile, error) {
+	diff, err := g.GetCRDiff(ctx, owner, repo, number)
+	if err != nil {
+		return nil, err
+	}
+	return diff.Files, nil
+}
+
+func (g *githubProvider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
+	comment, _, err := g.client.Issues.CreateComment(ctx, owner, repo, number, &github.IssueComment{
+		Body: github.String(body),
+	})
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt(comment.GetID(), 10), nil
+}
+
+func (g *githubProvider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
+	id, err := strconv.ParseInt(noteID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid note ID: %w", err)
+	}
+	_, err = g.client.Issues.DeleteComment(ctx, owner, repo, id)
+	return err
+}
+
+func (g *githubProvider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error) {
+	comment := &github.PullRequestComment{
+		Body: github.String(opts.Body),
+		Path: github.String(opts.FilePath),
+	}
+	if opts.NewLine > 0 {
+		comment.Line = github.Int(opts.NewLine)
+		comment.Side = github.String("RIGHT")
+	} else if opts.OldLine > 0 {
+		comment.Line = github.Int(opts.OldLine)
+		comment.Side = github.String("LEFT")
+	}
+	c, _, err := g.client.PullRequests.CreateComment(ctx, owner, repo, number, comment)
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt(c.GetID(), 10), nil
+}
+
+func (g *githubProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
+	status := &github.RepoStatus{
+		State:       github.String(opts.State),
+		Context:     github.String(opts.Context),
+		Description: github.String(opts.Description),
+		TargetURL:   github.String(opts.TargetURL),
+	}
+	_, _, err := g.client.Repositories.CreateStatus(ctx, owner, repo, sha, status)
+	return err
+}
+
+func (g *githubProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
+	opts := &github.RepositoryContentGetOptions{Ref: ref}
+	rc, _, err := g.client.Repositories.DownloadContents(ctx, owner, repo, path, opts)
+	if err != nil {
+		return "", err
+	}
+	if rc == nil {
+		return "", fmt.Errorf("file not found: %s", path)
+	}
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (g *githubProvider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
+	_, _, err := g.client.Issues.AddLabelsToIssue(ctx, owner, repo, number, labels)
+	return err
+}
+
+func convertGithubRepo(r *github.Repository) *PlatformRepo {
+	if r == nil {
+		return nil
+	}
+	parts := strings.SplitN(r.GetFullName(), "/", 2)
+	owner := ""
+	if len(parts) == 2 {
+		owner = parts[0]
+	}
+	return &PlatformRepo{
+		ID:            r.GetID(),
+		FullName:      r.GetFullName(),
+		Name:          r.GetName(),
+		Owner:         owner,
+		Description:   r.GetDescription(),
+		CloneURL:      r.GetCloneURL(),
+		SSHURL:        r.GetSSHURL(),
+		DefaultBranch: r.GetDefaultBranch(),
+		Private:       r.GetPrivate(),
+		Platform:      PlatformGitHub,
+	}
+}
+
+func convertGithubPR(pr *github.PullRequest) *ChangeRequest {
+	if pr == nil {
+		return nil
+	}
 	state := CRStateOpened
-	if pr.State == "closed" {
-		state = CRStateClosed
+	if pr.GetState() == "closed" {
+		if pr.GetMerged() {
+			state = CRStateMerged
+		} else {
+			state = CRStateClosed
+		}
 	}
 	mergeStatus := "unknown"
 	if pr.Mergeable != nil {
@@ -304,26 +508,66 @@ func (pr *githubPR) toCR() *ChangeRequest {
 			mergeStatus = "conflicting"
 		}
 	}
+	author := &CRUser{}
+	if pr.GetUser() != nil {
+		author = &CRUser{
+			ID:        pr.GetUser().GetID(),
+			Username:  pr.GetUser().GetLogin(),
+			AvatarURL: pr.GetUser().GetAvatarURL(),
+		}
+	}
 	return &ChangeRequest{
-		ID: int64(pr.Number), Number: pr.Number, Title: pr.Title, Description: pr.Body,
-		State: state, SourceBranch: pr.Head.Ref, TargetBranch: pr.Base.Ref,
-		Author:      &CRUser{ID: int64(pr.User.ID), Username: pr.User.Login},
-		MergeStatus: mergeStatus, WebURL: pr.HTMLURL,
-		CreatedAt: pr.CreatedAt, UpdatedAt: pr.UpdatedAt,
+		ID:           int64(pr.GetNumber()),
+		Number:       pr.GetNumber(),
+		Title:        pr.GetTitle(),
+		Description:  pr.GetBody(),
+		State:        state,
+		SourceBranch: pr.GetHead().GetRef(),
+		TargetBranch: pr.GetBase().GetRef(),
+		Author:       author,
+		MergeStatus:  mergeStatus,
+		WebURL:       pr.GetHTMLURL(),
+		CreatedAt:    pr.GetCreatedAt().Time,
+		UpdatedAt:    pr.GetUpdatedAt().Time,
 	}
 }
 
-func mapGHState(state string, merged bool) CRState {
-	if state == "closed" && merged {
-		return CRStateMerged
+func convertGithubBranch(b *github.Branch) *PlatformBranch {
+	if b == nil {
+		return nil
 	}
-	if state == "closed" && !merged {
-		return CRStateClosed
-	}
-	return CRStateOpened
+	return &PlatformBranch{Name: b.GetName()}
 }
 
-func mapGHStateToGitHub(state CRState) string {
+func convertGithubHook(h *github.Hook) *PlatformWebhook {
+	if h == nil {
+		return nil
+	}
+	return &PlatformWebhook{
+		ID:     h.GetID(),
+		URL:    h.GetURL(),
+		Events: h.Events,
+	}
+}
+
+func convertGithubEventRepo(fullName string) *EventRepo {
+	parts := strings.SplitN(fullName, "/", 2)
+	er := &EventRepo{FullName: fullName}
+	if len(parts) == 2 {
+		er.Owner = parts[0]
+		er.Name = parts[1]
+	}
+	return er
+}
+
+func mapGithubAction(action string, merged bool) string {
+	if action == "closed" && merged {
+		return "merged"
+	}
+	return action
+}
+
+func mapCRStateToGithub(state CRState) string {
 	switch state {
 	case CRStateOpened:
 		return "open"

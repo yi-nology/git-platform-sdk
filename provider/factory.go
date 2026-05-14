@@ -17,6 +17,8 @@ func NewProvider(cfg Config) (Provider, error) {
 		return NewGitHubProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
 	case PlatformGitea:
 		return NewGiteaProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
+	case PlatformForgejo:
+		return NewForgejoProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
 	case PlatformTencentCode:
 		return NewTencentCodeProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
 	default:

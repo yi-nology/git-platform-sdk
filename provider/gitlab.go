@@ -8,325 +8,574 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 type gitlabProvider struct {
-	baseURL string
-	token   string
-	client  *http.Client
+	client *gitlab.Client
 }
 
 func NewGitLabProvider(baseURL, token string, skipTLS bool) *gitlabProvider {
-	if baseURL == "" {
-		baseURL = "https://gitlab.com/api/v4"
-	}
 	transport := &http.Transport{}
 	if skipTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	return &gitlabProvider{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		token:   token,
-		client:  &http.Client{Timeout: 30 * time.Second, Transport: transport},
+	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
+	opts := []gitlab.ClientOptionFunc{gitlab.WithHTTPClient(httpClient)}
+	if baseURL != "" {
+		opts = append(opts, gitlab.WithBaseURL(baseURL))
 	}
+	client, err := gitlab.NewClient(token, opts...)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create GitLab client: %v", err))
+	}
+	return &gitlabProvider{client: client}
 }
 
 func (g *gitlabProvider) Platform() Platform { return PlatformGitLab }
 
 func (g *gitlabProvider) TestConnection(ctx context.Context) (*TestConnectionResult, error) {
-	var user struct {
-		Username string `json:"username"`
-	}
-	if err := g.doRequest(ctx, "GET", "/user", nil, &user); err != nil {
+	user, _, err := g.client.Users.CurrentUser(gitlab.WithContext(ctx))
+	if err != nil {
 		return &TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
-
 	result := &TestConnectionResult{
 		Connected: true,
 		Platform:  string(g.Platform()),
 		UserName:  user.Username,
 	}
-
-	// 权限探测
-	// 1. 尝试列出项目
-	_, err := g.ListRepos(ctx, ListRepoOptions{Page: 1, PerPage: 1})
+	_, err = g.ListRepos(ctx, ListRepoOptions{Page: 1, PerPage: 1})
 	result.CanListRepos = err == nil
-
-	// 2. 其他权限简化处理（基于 list repos 成功推断）
 	result.CanReadCR = result.CanListRepos
 	result.CanWriteCR = result.CanListRepos
 	result.CanWebhook = result.CanListRepos
-
 	return result, nil
 }
 
 func (g *gitlabProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error) {
-	path := "/projects"
+	page := int64(opts.Page)
+	perPage := int64(opts.PerPage)
+	if page == 0 {
+		page = 1
+	}
+	if perPage == 0 {
+		perPage = 20
+	}
+	var projects []*gitlab.Project
+	var err error
 	if opts.Owner != "" {
-		path = fmt.Sprintf("/groups/%s/projects", opts.Owner)
+		projects, _, err = g.client.Groups.ListGroupProjects(opts.Owner, &gitlab.ListGroupProjectsOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: perPage}}, gitlab.WithContext(ctx))
+	} else {
+		projects, _, err = g.client.Projects.ListProjects(&gitlab.ListProjectsOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: perPage}}, gitlab.WithContext(ctx))
 	}
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
-	}
-	path = fmt.Sprintf("%s?page=%d&per_page=%d", path, opts.Page, opts.PerPage)
-	var projects []struct {
-		ID            int    `json:"id"`
-		Name          string `json:"name"`
-		PathWithNS    string `json:"path_with_namespace"`
-		Description   string `json:"description"`
-		HTTPURL       string `json:"http_url_to_repo"`
-		SSHURL        string `json:"ssh_url_to_repo"`
-		DefaultBranch string `json:"default_branch"`
-		Visibility    string `json:"visibility"`
-	}
-	if err := g.doRequest(ctx, "GET", path, nil, &projects); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	repos := make([]*PlatformRepo, 0, len(projects))
 	for _, p := range projects {
-		parts := strings.SplitN(p.PathWithNS, "/", 2)
-		owner := ""
-		if len(parts) == 2 {
-			owner = parts[0]
-		}
-		repos = append(repos, &PlatformRepo{
-			ID: int64(p.ID), FullName: p.PathWithNS, Name: p.Name, Owner: owner,
-			Description: p.Description, CloneURL: p.HTTPURL, SSHURL: p.SSHURL,
-			DefaultBranch: p.DefaultBranch, Private: p.Visibility != "public", Platform: g.Platform(),
-		})
+		repos = append(repos, convertGitlabProject(p))
 	}
 	return repos, nil
 }
 
 func (g *gitlabProvider) GetRepo(ctx context.Context, owner, repo string) (*PlatformRepo, error) {
-	encoded := fmt.Sprintf("%s%%2F%s", owner, repo)
-	var p struct {
-		ID            int    `json:"id"`
-		Name          string `json:"name"`
-		PathWithNS    string `json:"path_with_namespace"`
-		Description   string `json:"description"`
-		HTTPURL       string `json:"http_url_to_repo"`
-		SSHURL        string `json:"ssh_url_to_repo"`
-		DefaultBranch string `json:"default_branch"`
-		Visibility    string `json:"visibility"`
-	}
-	if err := g.doRequest(ctx, "GET", "/projects/"+encoded, nil, &p); err != nil {
+	p, _, err := g.client.Projects.GetProject(owner+"/"+repo, nil, gitlab.WithContext(ctx))
+	if err != nil {
 		return nil, err
 	}
-	parts := strings.SplitN(p.PathWithNS, "/", 2)
-	ownerR := ""
-	if len(parts) == 2 {
-		ownerR = parts[0]
-	}
-	return &PlatformRepo{
-		ID: int64(p.ID), FullName: p.PathWithNS, Name: p.Name, Owner: ownerR,
-		Description: p.Description, CloneURL: p.HTTPURL, SSHURL: p.SSHURL,
-		DefaultBranch: p.DefaultBranch, Private: p.Visibility != "public", Platform: g.Platform(),
-	}, nil
+	return convertGitlabProject(p), nil
 }
 
 func (g *gitlabProvider) CreateCR(ctx context.Context, opts CreateCROptions) (*ChangeRequest, error) {
-	encoded := fmt.Sprintf("%s%%2F%s", opts.Owner, opts.Repo)
-	body := map[string]interface{}{
-		"source_branch": opts.SourceBranch, "target_branch": opts.TargetBranch,
-		"title": opts.Title, "description": opts.Description,
-		"remove_source_branch": opts.RemoveSourceBranch,
+	pid := opts.Owner + "/" + opts.Repo
+	createOpts := &gitlab.CreateMergeRequestOptions{
+		SourceBranch:       gitlab.Ptr(opts.SourceBranch),
+		TargetBranch:       gitlab.Ptr(opts.TargetBranch),
+		Title:              gitlab.Ptr(opts.Title),
+		Description:        gitlab.Ptr(opts.Description),
+		RemoveSourceBranch: gitlab.Ptr(opts.RemoveSourceBranch),
 	}
 	if len(opts.Labels) > 0 {
-		body["labels"] = strings.Join(opts.Labels, ",")
+		labels := gitlab.LabelOptions(opts.Labels)
+		createOpts.Labels = &labels
 	}
-	var mr gitlabMR
-	if err := g.doRequest(ctx, "POST", "/projects/"+encoded+"/merge_requests", body, &mr); err != nil {
+	mr, _, err := g.client.MergeRequests.CreateMergeRequest(pid, createOpts, gitlab.WithContext(ctx))
+	if err != nil {
 		return nil, err
 	}
-	return mr.toCR(), nil
+	return convertGitlabMR(mr), nil
 }
 
 func (g *gitlabProvider) GetCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
-	encoded := fmt.Sprintf("%s%%2F%s", owner, repo)
-	var mr gitlabMR
-	if err := g.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), nil, &mr); err != nil {
+	mr, _, err := g.client.MergeRequests.GetMergeRequest(owner+"/"+repo, int64(number), nil, gitlab.WithContext(ctx))
+	if err != nil {
 		return nil, err
 	}
-	return mr.toCR(), nil
+	return convertGitlabMR(mr), nil
 }
 
 func (g *gitlabProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
-	encoded := fmt.Sprintf("%s%%2F%s", opts.Owner, opts.Repo)
-	if opts.Page == 0 {
-		opts.Page = 1
+	pid := opts.Owner + "/" + opts.Repo
+	page := int64(opts.Page)
+	perPage := int64(opts.PerPage)
+	if page == 0 {
+		page = 1
 	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
+	if perPage == 0 {
+		perPage = 20
 	}
-	path := fmt.Sprintf("/projects/%s/merge_requests?page=%d&per_page=%d", encoded, opts.Page, opts.PerPage)
+	listOpts := &gitlab.ListProjectMergeRequestsOptions{
+		ListOptions: gitlab.ListOptions{Page: page, PerPage: perPage},
+	}
 	if opts.State != "" {
-		path += "&state=" + string(opts.State)
+		listOpts.State = gitlab.Ptr(string(opts.State))
 	}
 	if opts.SourceBranch != "" {
-		path += "&source_branch=" + opts.SourceBranch
+		listOpts.SourceBranch = gitlab.Ptr(opts.SourceBranch)
 	}
 	if opts.TargetBranch != "" {
-		path += "&target_branch=" + opts.TargetBranch
+		listOpts.TargetBranch = gitlab.Ptr(opts.TargetBranch)
 	}
-	var mrs []gitlabMR
-	if err := g.doRequest(ctx, "GET", path, nil, &mrs); err != nil {
+	mrs, resp, err := g.client.MergeRequests.ListProjectMergeRequests(pid, listOpts, gitlab.WithContext(ctx))
+	if err != nil {
 		return nil, 0, err
 	}
-	crs := make([]*ChangeRequest, 0, len(mrs))
-	for i := range mrs {
-		crs = append(crs, mrs[i].toCR())
+	total := len(mrs)
+	if resp != nil && resp.TotalItems > 0 {
+		total = int(resp.TotalItems)
 	}
-	return crs, len(crs), nil
+	crs := make([]*ChangeRequest, 0, len(mrs))
+	for _, mr := range mrs {
+		crs = append(crs, convertGitlabBasicMR(mr))
+	}
+	return crs, total, nil
 }
 
 func (g *gitlabProvider) MergeCR(ctx context.Context, owner, repo string, number int, opts MergeCROptions) (*ChangeRequest, error) {
-	encoded := fmt.Sprintf("%s%%2F%s", owner, repo)
-	var existingMR gitlabMR
-	if err := g.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), nil, &existingMR); err == nil {
-		if existingMR.MergeStatus != "" && existingMR.MergeStatus != "can_be_merged" && existingMR.MergeStatus != "checking" {
-			return nil, fmt.Errorf("MR cannot be merged (status: %s). It may have conflicts or an active pipeline", existingMR.MergeStatus)
+	pid := owner + "/" + repo
+	existing, _, err := g.client.MergeRequests.GetMergeRequest(pid, int64(number), nil, gitlab.WithContext(ctx))
+	if err == nil {
+		if existing.DetailedMergeStatus != "" && existing.DetailedMergeStatus != "mergeable" && existing.DetailedMergeStatus != "checking" {
+			return nil, fmt.Errorf("MR cannot be merged (status: %s). It may have conflicts or an active pipeline", existing.DetailedMergeStatus)
 		}
-		if existingMR.State != "opened" {
-			return nil, fmt.Errorf("MR is not in 'opened' state (current: %s)", existingMR.State)
+		if existing.State != "opened" {
+			return nil, fmt.Errorf("MR is not in 'opened' state (current: %s)", existing.State)
 		}
 	}
-	body := map[string]interface{}{}
+	acceptOpts := &gitlab.AcceptMergeRequestOptions{}
 	if opts.MergeCommitMessage != "" {
-		body["merge_commit_message"] = opts.MergeCommitMessage
+		acceptOpts.MergeCommitMessage = gitlab.Ptr(opts.MergeCommitMessage)
 	}
 	if opts.Squash {
-		body["squash"] = true
+		acceptOpts.Squash = gitlab.Ptr(true)
 	}
 	if opts.RemoveSourceBranch {
-		body["should_remove_source_branch"] = true
+		acceptOpts.ShouldRemoveSourceBranch = gitlab.Ptr(true)
 	}
-	var mr gitlabMR
-	if err := g.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_requests/%d/merge", encoded, number), body, &mr); err != nil {
-		return nil, fmt.Errorf("merge failed: %w. The MR may have conflicts, an active pipeline, or branch protection rules preventing merge", err)
+	mr, _, err := g.client.MergeRequests.AcceptMergeRequest(pid, int64(number), acceptOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("merge failed: %w", err)
 	}
-	return mr.toCR(), nil
+	return convertGitlabMR(mr), nil
 }
 
 func (g *gitlabProvider) CloseCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
-	encoded := fmt.Sprintf("%s%%2F%s", owner, repo)
-	body := map[string]interface{}{"state_event": "close"}
-	var mr gitlabMR
-	if err := g.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), body, &mr); err != nil {
+	pid := owner + "/" + repo
+	mr, _, err := g.client.MergeRequests.UpdateMergeRequest(pid, int64(number), &gitlab.UpdateMergeRequestOptions{StateEvent: gitlab.Ptr("close")}, gitlab.WithContext(ctx))
+	if err != nil {
 		return nil, err
 	}
-	return mr.toCR(), nil
+	return convertGitlabMR(mr), nil
 }
 
 func (g *gitlabProvider) CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error) {
-	encoded := fmt.Sprintf("%s%%2F%s", opts.Owner, opts.Repo)
-	body := map[string]interface{}{
-		"url": opts.URL, "token": opts.Secret,
-		"push_events": true,
+	pid := opts.Owner + "/" + opts.Repo
+	hookOpts := &gitlab.AddProjectHookOptions{
+		URL:   gitlab.Ptr(opts.URL),
+		Token: gitlab.Ptr(opts.Secret),
 	}
+	hookOpts.PushEvents = gitlab.Ptr(true)
 	if len(opts.Events) > 0 {
 		em := map[string]bool{}
 		for _, e := range opts.Events {
 			em[e] = true
 		}
 		if v, ok := em["push"]; ok {
-			body["push_events"] = v
+			hookOpts.PushEvents = gitlab.Ptr(v)
 		}
-		body["merge_requests_events"] = em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"]
-		body["tag_push_events"] = em["tag_push"] || em["tag"]
+		hookOpts.MergeRequestsEvents = gitlab.Ptr(em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"])
+		hookOpts.TagPushEvents = gitlab.Ptr(em["tag_push"] || em["tag"])
 	}
-	var wh struct {
-		ID  int    `json:"id"`
-		URL string `json:"url"`
-	}
-	if err := g.doRequest(ctx, "POST", "/projects/"+encoded+"/hooks", body, &wh); err != nil {
+	hook, _, err := g.client.Projects.AddProjectHook(pid, hookOpts, gitlab.WithContext(ctx))
+	if err != nil {
 		return nil, err
 	}
-	return &PlatformWebhook{ID: int64(wh.ID), URL: wh.URL}, nil
+	return convertGitlabHook(hook), nil
 }
 
 func (g *gitlabProvider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	encoded := fmt.Sprintf("%s%%2F%s", owner, repo)
-	return g.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/hooks/%d", encoded, webhookID), nil, nil)
+	_, err := g.client.Projects.DeleteProjectHook(owner+"/"+repo, webhookID, gitlab.WithContext(ctx))
+	return err
 }
 
 func (g *gitlabProvider) ListWebhooks(ctx context.Context, owner, repo string) ([]*PlatformWebhook, error) {
-	encoded := fmt.Sprintf("%s%%2F%s", owner, repo)
-	var whs []struct {
-		ID  int    `json:"id"`
-		URL string `json:"url"`
-	}
-	if err := g.doRequest(ctx, "GET", "/projects/"+encoded+"/hooks", nil, &whs); err != nil {
+	hooks, _, err := g.client.Projects.ListProjectHooks(owner+"/"+repo, nil, gitlab.WithContext(ctx))
+	if err != nil {
 		return nil, err
 	}
-	result := make([]*PlatformWebhook, 0, len(whs))
-	for _, wh := range whs {
-		result = append(result, &PlatformWebhook{ID: int64(wh.ID), URL: wh.URL})
+	result := make([]*PlatformWebhook, 0, len(hooks))
+	for _, h := range hooks {
+		result = append(result, convertGitlabHook(h))
 	}
 	return result, nil
 }
 
-func (g *gitlabProvider) doRequest(ctx context.Context, method, path string, body interface{}, result interface{}) error {
-	var reqBody io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return err
+func (g *gitlabProvider) ListBranches(ctx context.Context, owner, repo string) ([]*PlatformBranch, error) {
+	pid := owner + "/" + repo
+	branches, _, err := g.client.Branches.ListBranches(pid, &gitlab.ListBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*PlatformBranch, 0, len(branches))
+	for _, b := range branches {
+		result = append(result, convertGitlabBranch(b))
+	}
+	return result, nil
+}
+
+func (g *gitlabProvider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*PlatformBranch, error) {
+	pid := owner + "/" + repo
+	b, _, err := g.client.Branches.CreateBranch(pid, &gitlab.CreateBranchOptions{Branch: gitlab.Ptr(branch), Ref: gitlab.Ptr(ref)}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return convertGitlabBranch(b), nil
+}
+
+func (g *gitlabProvider) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
+	_, err := g.client.Branches.DeleteBranch(owner+"/"+repo, branch, gitlab.WithContext(ctx))
+	return err
+}
+
+func (g *gitlabProvider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*MergeDiff, error) {
+	pid := owner + "/" + repo
+	diffs, _, err := g.client.MergeRequests.ListMergeRequestDiffs(pid, int64(number), nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	diff := &MergeDiff{}
+	for _, c := range diffs {
+		additions, deletions := countDiffLines(c.Diff)
+		cf := &ChangedFile{
+			OldPath: c.OldPath, NewPath: c.NewPath, Diff: c.Diff,
+			Additions: additions, Deletions: deletions,
+			IsNew: c.NewFile, IsDeleted: c.DeletedFile, IsRenamed: c.RenamedFile,
 		}
-		reqBody = bytes.NewReader(b)
+		diff.Files = append(diff.Files, cf)
+		diff.TotalAdd += additions
+		diff.TotalDel += deletions
+		diff.RawDiff += fmt.Sprintf("diff --git a/%s b/%s\n", c.OldPath, c.NewPath)
+		if c.NewFile {
+			diff.RawDiff += "new file mode 100644\n"
+		}
+		if c.DeletedFile {
+			diff.RawDiff += "deleted file mode 100644\n"
+		}
+		if c.RenamedFile {
+			diff.RawDiff += fmt.Sprintf("rename from %s\nrename to %s\n", c.OldPath, c.NewPath)
+		}
+		if !c.NewFile {
+			diff.RawDiff += fmt.Sprintf("--- a/%s\n", c.OldPath)
+		}
+		if !c.DeletedFile {
+			diff.RawDiff += fmt.Sprintf("+++ b/%s\n", c.NewPath)
+		}
+		diff.RawDiff += c.Diff + "\n"
 	}
-	req, err := http.NewRequestWithContext(ctx, method, g.baseURL+path, reqBody)
+	return diff, nil
+}
+
+func (g *gitlabProvider) GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*ChangedFile, error) {
+	diff, err := g.GetCRDiff(ctx, owner, repo, number)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	req.Header.Set("PRIVATE-TOKEN", g.token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := g.client.Do(req)
+	return diff.Files, nil
+}
+
+func (g *gitlabProvider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
+	pid := owner + "/" + repo
+	note, _, err := g.client.Notes.CreateMergeRequestNote(pid, int64(number), &gitlab.CreateMergeRequestNoteOptions{Body: gitlab.Ptr(body)}, gitlab.WithContext(ctx))
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("GitLab API %s %s returned %d: %s", method, path, resp.StatusCode, string(respBody))
+	return strconv.FormatInt(note.ID, 10), nil
+}
+
+func (g *gitlabProvider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
+	pid := owner + "/" + repo
+	nid, err := strconv.ParseInt(noteID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid note ID: %w", err)
 	}
-	if result != nil && resp.StatusCode != http.StatusNoContent {
-		return json.Unmarshal(respBody, result)
+	_, err = g.client.Notes.DeleteMergeRequestNote(pid, int64(number), nid, gitlab.WithContext(ctx))
+	return err
+}
+
+func (g *gitlabProvider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error) {
+	pid := owner + "/" + repo
+	discOpts := &gitlab.CreateMergeRequestDiscussionOptions{Body: gitlab.Ptr(opts.Body)}
+	if opts.FilePath != "" {
+		discOpts.Position = &gitlab.PositionOptions{
+			BaseSHA:      gitlab.Ptr("head"),
+			StartSHA:     gitlab.Ptr("head"),
+			HeadSHA:      gitlab.Ptr("head"),
+			PositionType: gitlab.Ptr("text"),
+			NewPath:      gitlab.Ptr(opts.FilePath),
+			NewLine:      gitlab.Ptr(int64(opts.NewLine)),
+		}
+		if opts.OldLine > 0 {
+			discOpts.Position.OldPath = gitlab.Ptr(opts.FilePath)
+			discOpts.Position.OldLine = gitlab.Ptr(int64(opts.OldLine))
+		}
+	}
+	disc, _, err := g.client.Discussions.CreateMergeRequestDiscussion(pid, int64(number), discOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+	return disc.ID, nil
+}
+
+func (g *gitlabProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
+	pid := owner + "/" + repo
+	statusOpts := &gitlab.SetCommitStatusOptions{
+		State:       mapCommitStateToGitlab(opts.State),
+		Context:     gitlab.Ptr(opts.Context),
+		Description: gitlab.Ptr(opts.Description),
+		TargetURL:   gitlab.Ptr(opts.TargetURL),
+	}
+	_, _, err := g.client.Commits.SetCommitStatus(pid, sha, statusOpts, gitlab.WithContext(ctx))
+	return err
+}
+
+func (g *gitlabProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
+	pid := owner + "/" + repo
+	content, _, err := g.client.RepositoryFiles.GetRawFile(pid, path, &gitlab.GetRawFileOptions{Ref: gitlab.Ptr(ref)}, gitlab.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+func (g *gitlabProvider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
+	pid := owner + "/" + repo
+	l := gitlab.LabelOptions(labels)
+	_, _, err := g.client.MergeRequests.UpdateMergeRequest(pid, int64(number), &gitlab.UpdateMergeRequestOptions{Labels: &l}, gitlab.WithContext(ctx))
+	return err
+}
+
+func (g *gitlabProvider) ParseWebhookEvent(r *http.Request, secret string) (*NormalizedEvent, error) {
+	if err := g.ValidateWebhookSignature(r, secret); err != nil {
+		return nil, err
+	}
+	body, _ := io.ReadAll(r.Body)
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	var pl struct {
+		ObjectKind string `json:"object_kind"`
+		User       struct {
+			ID       int64  `json:"id"`
+			Username string `json:"username"`
+			Name     string `json:"name"`
+		} `json:"user"`
+		Project struct {
+			PathWithNS string `json:"path_with_namespace"`
+		} `json:"project"`
+		ObjectAttributes struct {
+			IID          int64     `json:"iid"`
+			Title        string    `json:"title"`
+			Description  string    `json:"description"`
+			State        string    `json:"state"`
+			SourceBranch string    `json:"source_branch"`
+			TargetBranch string    `json:"target_branch"`
+			Action       string    `json:"action"`
+			MergeStatus  string    `json:"merge_status"`
+			URL          string    `json:"url"`
+			LastCommit   struct {
+				ID string `json:"id"`
+			} `json:"last_commit"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+		} `json:"object_attributes"`
+		Ref   string `json:"ref"`
+		After string `json:"after"`
+	}
+	if err := json.Unmarshal(body, &pl); err != nil {
+		return nil, err
+	}
+
+	parts := strings.SplitN(pl.Project.PathWithNS, "/", 2)
+	er := &EventRepo{FullName: pl.Project.PathWithNS}
+	if len(parts) == 2 {
+		er.Owner = parts[0]
+		er.Name = parts[1]
+	}
+	actor := &CRUser{ID: pl.User.ID, Username: pl.User.Username, Name: pl.User.Name}
+
+	event := &NormalizedEvent{
+		ID:         fmt.Sprintf("gl-%d-%d", time.Now().UnixNano(), pl.ObjectAttributes.IID),
+		RawPayload: json.RawMessage(body),
+		Source:     g.Platform(), Timestamp: time.Now(), Actor: actor, Repo: er,
+	}
+
+	switch pl.ObjectKind {
+	case "merge_request":
+		state := mapGLState(pl.ObjectAttributes.State)
+		action := pl.ObjectAttributes.Action
+		if action == "merge" {
+			action = "merged"
+		}
+		event.Type = "cr." + action
+		event.Action = action
+		event.CommitSHA = pl.ObjectAttributes.LastCommit.ID
+		event.CR = &ChangeRequest{
+			ID: pl.ObjectAttributes.IID, Number: int(pl.ObjectAttributes.IID),
+			Title: pl.ObjectAttributes.Title, Description: pl.ObjectAttributes.Description,
+			State: state, SourceBranch: pl.ObjectAttributes.SourceBranch,
+			TargetBranch: pl.ObjectAttributes.TargetBranch, MergeStatus: pl.ObjectAttributes.MergeStatus,
+			WebURL: pl.ObjectAttributes.URL, Author: actor,
+			CreatedAt: pl.ObjectAttributes.CreatedAt, UpdatedAt: pl.ObjectAttributes.UpdatedAt,
+		}
+	case "push":
+		event.Type = "push"
+		event.Action = "push"
+		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
+		event.CommitSHA = pl.After
+	case "tag_push":
+		event.Type = "tag.created"
+		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
+	case "note":
+		if pl.ObjectAttributes.IID != 0 {
+			event.Type = "cr.note"
+			event.Action = "note"
+			event.CR = &ChangeRequest{
+				ID: pl.ObjectAttributes.IID, Number: int(pl.ObjectAttributes.IID),
+			}
+		}
+	}
+	return event, nil
+}
+
+func (g *gitlabProvider) ValidateWebhookSignature(r *http.Request, secret string) error {
+	token := r.Header.Get("X-Gitlab-Token")
+	if token == "" || token != secret {
+		return fmt.Errorf("invalid GitLab webhook token")
 	}
 	return nil
 }
 
-type gitlabMR struct {
-	IID          int    `json:"iid"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
-	State        string `json:"state"`
-	SourceBranch string `json:"source_branch"`
-	TargetBranch string `json:"target_branch"`
-	Author       struct {
-		ID       int    `json:"id"`
-		Username string `json:"username"`
-		Name     string `json:"name"`
-	} `json:"author"`
-	Labels      []string  `json:"labels"`
-	MergeStatus string    `json:"merge_status"`
-	WebURL      string    `json:"web_url"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+func convertGitlabProject(p *gitlab.Project) *PlatformRepo {
+	parts := strings.SplitN(p.PathWithNamespace, "/", 2)
+	owner := ""
+	if len(parts) == 2 {
+		owner = parts[0]
+	}
+	return &PlatformRepo{
+		ID: p.ID, FullName: p.PathWithNamespace, Name: p.Name, Owner: owner,
+		Description: p.Description, CloneURL: p.HTTPURLToRepo, SSHURL: p.SSHURLToRepo,
+		DefaultBranch: p.DefaultBranch, Private: p.Visibility != "public", Platform: PlatformGitLab,
+	}
 }
 
-func (mr *gitlabMR) toCR() *ChangeRequest {
+func convertGitlabMR(mr *gitlab.MergeRequest) *ChangeRequest {
+	var author *CRUser
+	if mr.Author != nil {
+		author = &CRUser{ID: mr.Author.ID, Username: mr.Author.Username, Name: mr.Author.Name, AvatarURL: mr.Author.AvatarURL}
+	}
+	var reviewers []*CRUser
+	for _, r := range mr.Reviewers {
+		reviewers = append(reviewers, &CRUser{ID: r.ID, Username: r.Username, Name: r.Name, AvatarURL: r.AvatarURL})
+	}
+	createdAt := time.Time{}
+	if mr.CreatedAt != nil {
+		createdAt = *mr.CreatedAt
+	}
+	updatedAt := time.Time{}
+	if mr.UpdatedAt != nil {
+		updatedAt = *mr.UpdatedAt
+	}
 	return &ChangeRequest{
-		ID: int64(mr.IID), Number: mr.IID, Title: mr.Title, Description: mr.Description,
+		ID: mr.IID, Number: int(mr.IID), Title: mr.Title, Description: mr.Description,
 		State: mapGLState(mr.State), SourceBranch: mr.SourceBranch, TargetBranch: mr.TargetBranch,
-		Author: &CRUser{ID: int64(mr.Author.ID), Username: mr.Author.Username, Name: mr.Author.Name},
-		Labels: mr.Labels, MergeStatus: mr.MergeStatus, WebURL: mr.WebURL,
-		CreatedAt: mr.CreatedAt, UpdatedAt: mr.UpdatedAt,
+		Author: author, Reviewers: reviewers, Labels: mr.Labels,
+		MergeStatus: mr.DetailedMergeStatus, WebURL: mr.WebURL,
+		CreatedAt: createdAt, UpdatedAt: updatedAt,
+	}
+}
+
+func convertGitlabBasicMR(mr *gitlab.BasicMergeRequest) *ChangeRequest {
+	var author *CRUser
+	if mr.Author != nil {
+		author = &CRUser{ID: mr.Author.ID, Username: mr.Author.Username, Name: mr.Author.Name, AvatarURL: mr.Author.AvatarURL}
+	}
+	var reviewers []*CRUser
+	for _, r := range mr.Reviewers {
+		reviewers = append(reviewers, &CRUser{ID: r.ID, Username: r.Username, Name: r.Name, AvatarURL: r.AvatarURL})
+	}
+	createdAt := time.Time{}
+	if mr.CreatedAt != nil {
+		createdAt = *mr.CreatedAt
+	}
+	updatedAt := time.Time{}
+	if mr.UpdatedAt != nil {
+		updatedAt = *mr.UpdatedAt
+	}
+	return &ChangeRequest{
+		ID: mr.IID, Number: int(mr.IID), Title: mr.Title, Description: mr.Description,
+		State: mapGLState(mr.State), SourceBranch: mr.SourceBranch, TargetBranch: mr.TargetBranch,
+		Author: author, Reviewers: reviewers, Labels: mr.Labels,
+		MergeStatus: mr.DetailedMergeStatus, WebURL: mr.WebURL,
+		CreatedAt: createdAt, UpdatedAt: updatedAt,
+	}
+}
+
+func convertGitlabBranch(b *gitlab.Branch) *PlatformBranch {
+	return &PlatformBranch{Name: b.Name}
+}
+
+func convertGitlabHook(h *gitlab.ProjectHook) *PlatformWebhook {
+	events := []string{}
+	if h.PushEvents {
+		events = append(events, "push")
+	}
+	if h.MergeRequestsEvents {
+		events = append(events, "merge_request")
+	}
+	if h.TagPushEvents {
+		events = append(events, "tag_push")
+	}
+	if h.NoteEvents {
+		events = append(events, "note")
+	}
+	return &PlatformWebhook{ID: h.ID, URL: h.URL, Events: events}
+}
+
+func mapCommitStateToGitlab(state string) gitlab.BuildStateValue {
+	switch state {
+	case "success":
+		return gitlab.Success
+	case "failed":
+		return gitlab.Failed
+	case "pending":
+		return gitlab.Pending
+	case "running":
+		return gitlab.Running
+	default:
+		return gitlab.Pending
 	}
 }
 
