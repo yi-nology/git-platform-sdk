@@ -152,9 +152,11 @@ func (g *githubProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*Ch
 	for _, pr := range prs {
 		crs = append(crs, convertGithubPR(pr))
 	}
-	total := len(crs)
+	var total int
 	if resp != nil && resp.LastPage > 0 {
-		total = len(crs) * resp.LastPage
+		total = resp.LastPage * listOpts.PerPage
+	} else {
+		total = len(crs)
 	}
 	return crs, total, nil
 }
@@ -516,6 +518,20 @@ func convertGithubPR(pr *github.PullRequest) *ChangeRequest {
 			AvatarURL: pr.GetUser().GetAvatarURL(),
 		}
 	}
+	var reviewers []*CRUser
+	for _, r := range pr.RequestedReviewers {
+		reviewers = append(reviewers, &CRUser{
+			ID:        r.GetID(),
+			Username:  r.GetLogin(),
+			AvatarURL: r.GetAvatarURL(),
+		})
+	}
+	var labels []string
+	for _, l := range pr.Labels {
+		if l != nil {
+			labels = append(labels, l.GetName())
+		}
+	}
 	return &ChangeRequest{
 		ID:           int64(pr.GetNumber()),
 		Number:       pr.GetNumber(),
@@ -525,6 +541,8 @@ func convertGithubPR(pr *github.PullRequest) *ChangeRequest {
 		SourceBranch: pr.GetHead().GetRef(),
 		TargetBranch: pr.GetBase().GetRef(),
 		Author:       author,
+		Reviewers:    reviewers,
+		Labels:       labels,
 		MergeStatus:  mergeStatus,
 		WebURL:       pr.GetHTMLURL(),
 		CreatedAt:    pr.GetCreatedAt().Time,
@@ -577,5 +595,344 @@ func mapCRStateToGithub(state CRState) string {
 		return "closed"
 	default:
 		return "all"
+	}
+}
+
+func (g *githubProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {
+	pr := &github.PullRequest{}
+	if opts.Title != "" {
+		pr.Title = github.String(opts.Title)
+	}
+	if opts.Description != "" {
+		pr.Body = github.String(opts.Description)
+	}
+	if opts.TargetBranch != "" {
+		pr.Base = &github.PullRequestBranch{Ref: github.String(opts.TargetBranch)}
+	}
+	result, _, err := g.client.PullRequests.Edit(ctx, owner, repo, number, pr)
+	if err != nil {
+		return nil, err
+	}
+	return convertGithubPR(result), nil
+}
+
+func (g *githubProvider) ReopenCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
+	result, _, err := g.client.PullRequests.Edit(ctx, owner, repo, number, &github.PullRequest{
+		State: github.String("open"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertGithubPR(result), nil
+}
+
+func (g *githubProvider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*CRComment, error) {
+	comments, _, err := g.client.PullRequests.ListComments(ctx, owner, repo, number, nil)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CRComment, 0, len(comments))
+	for _, c := range comments {
+		cc := &CRComment{
+			ID:        c.GetID(),
+			Body:      c.GetBody(),
+			CreatedAt: c.GetCreatedAt().Time,
+			UpdatedAt: c.GetUpdatedAt().Time,
+		}
+		if c.GetUser() != nil {
+			cc.Author = &CRUser{ID: c.GetUser().GetID(), Username: c.GetUser().GetLogin(), AvatarURL: c.GetUser().GetAvatarURL()}
+		}
+		result = append(result, cc)
+	}
+	return result, nil
+}
+
+func (g *githubProvider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*CRCommit, error) {
+	commits, _, err := g.client.PullRequests.ListCommits(ctx, owner, repo, number, nil)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CRCommit, 0, len(commits))
+	for _, c := range commits {
+		cc := &CRCommit{SHA: c.GetSHA(), Message: c.GetCommit().GetMessage(), CreatedAt: c.GetCommit().GetAuthor().GetDate().Time}
+		if c.GetAuthor() != nil {
+			cc.Author = &CRUser{ID: c.GetAuthor().GetID(), Username: c.GetAuthor().GetLogin(), AvatarURL: c.GetAuthor().GetAvatarURL()}
+		}
+		result = append(result, cc)
+	}
+	return result, nil
+}
+
+func (g *githubProvider) ForkRepo(ctx context.Context, owner, repo string, opts ForkRepoOptions) (*PlatformRepo, error) {
+	forkOpts := &github.RepositoryCreateForkOptions{}
+	if opts.Organization != "" {
+		forkOpts.Organization = opts.Organization
+	}
+	if opts.Name != "" {
+		forkOpts.Name = opts.Name
+	}
+	r, _, err := g.client.Repositories.CreateFork(ctx, owner, repo, forkOpts)
+	if err != nil {
+		return nil, err
+	}
+	return convertGithubRepo(r), nil
+}
+
+func (g *githubProvider) DeleteRepo(ctx context.Context, owner, repo string) error {
+	_, err := g.client.Repositories.Delete(ctx, owner, repo)
+	return err
+}
+
+func (g *githubProvider) UpdateRepo(ctx context.Context, owner, repo string, opts UpdateRepoOptions) (*PlatformRepo, error) {
+	r := &github.Repository{}
+	if opts.Name != "" {
+		r.Name = github.String(opts.Name)
+	}
+	if opts.Description != "" {
+		r.Description = github.String(opts.Description)
+	}
+	if opts.DefaultBranch != "" {
+		r.DefaultBranch = github.String(opts.DefaultBranch)
+	}
+	if opts.Private != nil {
+		r.Private = opts.Private
+	}
+	result, _, err := g.client.Repositories.Edit(ctx, owner, repo, r)
+	if err != nil {
+		return nil, err
+	}
+	return convertGithubRepo(result), nil
+}
+
+func (g *githubProvider) GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error) {
+	c, _, err := g.client.Repositories.GetCommit(ctx, owner, repo, sha, nil)
+	if err != nil {
+		return nil, err
+	}
+	return convertGithubCommit(c), nil
+}
+
+func (g *githubProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
+	listOpts := &github.CommitsListOptions{
+		ListOptions: github.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
+	}
+	if listOpts.Page == 0 {
+		listOpts.Page = 1
+	}
+	if listOpts.PerPage == 0 {
+		listOpts.PerPage = 20
+	}
+	if opts.Branch != "" {
+		listOpts.SHA = opts.Branch
+	}
+	if opts.Since != "" {
+		if t, err := time.Parse(time.RFC3339, opts.Since); err == nil {
+			listOpts.Since = t
+		}
+	}
+	if opts.Until != "" {
+		if t, err := time.Parse(time.RFC3339, opts.Until); err == nil {
+			listOpts.Until = t
+		}
+	}
+	commits, _, err := g.client.Repositories.ListCommits(ctx, owner, repo, listOpts)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CommitInfo, 0, len(commits))
+	for _, c := range commits {
+		result = append(result, convertGithubCommit(c))
+	}
+	return result, nil
+}
+
+func (g *githubProvider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error) {
+	cmp, _, err := g.client.Repositories.CompareCommits(ctx, owner, repo, base, head, nil)
+	if err != nil {
+		return nil, err
+	}
+	result := &CompareResult{
+		TotalCommits: cmp.GetTotalCommits(),
+		AheadBy:      cmp.GetAheadBy(),
+		BehindBy:     cmp.GetBehindBy(),
+	}
+	for _, c := range cmp.Commits {
+		result.Commits = append(result.Commits, convertGithubCommit(c))
+	}
+	for _, f := range cmp.Files {
+		result.Files = append(result.Files, &ChangedFile{
+			OldPath:   f.GetPreviousFilename(),
+			NewPath:   f.GetFilename(),
+			Additions: f.GetAdditions(),
+			Deletions: f.GetDeletions(),
+			IsNew:     f.GetStatus() == "added",
+			IsDeleted: f.GetStatus() == "removed",
+			IsRenamed: f.GetStatus() == "renamed",
+		})
+	}
+	return result, nil
+}
+
+func (g *githubProvider) CreateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	optsReq := &github.RepositoryContentFileOptions{
+		Message: github.String(opts.Message),
+		Content: []byte(opts.Content),
+	}
+	if opts.Branch != "" {
+		optsReq.Branch = github.String(opts.Branch)
+	}
+	if opts.Author != "" || opts.Email != "" {
+		optsReq.Author = &github.CommitAuthor{Name: github.String(opts.Author), Email: github.String(opts.Email)}
+	}
+	resp, _, err := g.client.Repositories.CreateFile(ctx, owner, repo, opts.Path, optsReq)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp.SHA != nil {
+		sha = *resp.SHA
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *githubProvider) UpdateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	optsReq := &github.RepositoryContentFileOptions{
+		Message: github.String(opts.Message),
+		Content: []byte(opts.Content),
+	}
+	if opts.SHA != "" {
+		optsReq.SHA = github.String(opts.SHA)
+	}
+	if opts.Branch != "" {
+		optsReq.Branch = github.String(opts.Branch)
+	}
+	if opts.Author != "" || opts.Email != "" {
+		optsReq.Author = &github.CommitAuthor{Name: github.String(opts.Author), Email: github.String(opts.Email)}
+	}
+	resp, _, err := g.client.Repositories.UpdateFile(ctx, owner, repo, opts.Path, optsReq)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp.SHA != nil {
+		sha = *resp.SHA
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *githubProvider) DeleteFile(ctx context.Context, owner, repo string, opts FileDeleteOptions) (*FileResult, error) {
+	optsReq := &github.RepositoryContentFileOptions{
+		Message: github.String(opts.Message),
+	}
+	if opts.SHA != "" {
+		optsReq.SHA = github.String(opts.SHA)
+	}
+	if opts.Branch != "" {
+		optsReq.Branch = github.String(opts.Branch)
+	}
+	if opts.Author != "" || opts.Email != "" {
+		optsReq.Author = &github.CommitAuthor{Name: github.String(opts.Author), Email: github.String(opts.Email)}
+	}
+	resp, _, err := g.client.Repositories.DeleteFile(ctx, owner, repo, opts.Path, optsReq)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp.SHA != nil {
+		sha = *resp.SHA
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *githubProvider) ListTags(ctx context.Context, owner, repo string) ([]*TagInfo, error) {
+	tags, _, err := g.client.Repositories.ListTags(ctx, owner, repo, nil)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*TagInfo, 0, len(tags))
+	for _, t := range tags {
+		result = append(result, &TagInfo{Name: t.GetName(), Commit: t.GetCommit().GetSHA()})
+	}
+	return result, nil
+}
+
+func (g *githubProvider) ListReleases(ctx context.Context, owner, repo string) ([]*ReleaseInfo, error) {
+	releases, _, err := g.client.Repositories.ListReleases(ctx, owner, repo, nil)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*ReleaseInfo, 0, len(releases))
+	for _, r := range releases {
+		result = append(result, convertGithubRelease(r))
+	}
+	return result, nil
+}
+
+func (g *githubProvider) CreateRelease(ctx context.Context, owner, repo string, opts CreateReleaseOptions) (*ReleaseInfo, error) {
+	r, _, err := g.client.Repositories.CreateRelease(ctx, owner, repo, &github.RepositoryRelease{
+		TagName:         github.String(opts.TagName),
+		TargetCommitish: github.String(opts.Target),
+		Name:            github.String(opts.Title),
+		Body:            github.String(opts.Body),
+		Draft:           github.Bool(opts.Draft),
+		Prerelease:      github.Bool(opts.Prerelease),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertGithubRelease(r), nil
+}
+
+func (g *githubProvider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
+	url, _, err := g.client.Repositories.GetArchiveLink(ctx, owner, repo, github.ArchiveFormat(format), &github.RepositoryContentGetOptions{Ref: ref}, 1)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := g.client.Client().Get(url.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func convertGithubCommit(c *github.RepositoryCommit) *CommitInfo {
+	if c == nil {
+		return nil
+	}
+	ci := &CommitInfo{
+		SHA:     c.GetSHA(),
+		Message: c.GetCommit().GetMessage(),
+	}
+	if c.GetCommit() != nil && c.GetCommit().GetAuthor() != nil {
+		ci.CreatedAt = c.GetCommit().GetAuthor().GetDate().Time
+	}
+	if c.GetAuthor() != nil {
+		ci.Author = &CRUser{ID: c.GetAuthor().GetID(), Username: c.GetAuthor().GetLogin(), AvatarURL: c.GetAuthor().GetAvatarURL()}
+	}
+	if c.GetCommitter() != nil {
+		ci.Committer = &CRUser{ID: c.GetCommitter().GetID(), Username: c.GetCommitter().GetLogin()}
+	}
+	return ci
+}
+
+func convertGithubRelease(r *github.RepositoryRelease) *ReleaseInfo {
+	if r == nil {
+		return nil
+	}
+	return &ReleaseInfo{
+		ID:          r.GetID(),
+		TagName:     r.GetTagName(),
+		Title:       r.GetName(),
+		Body:        r.GetBody(),
+		URL:         r.GetHTMLURL(),
+		Draft:       r.GetDraft(),
+		Prerelease:  r.GetPrerelease(),
+		CreatedAt:   r.GetCreatedAt().Time,
+		PublishedAt: r.GetPublishedAt().Time,
 	}
 }

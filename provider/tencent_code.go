@@ -597,3 +597,364 @@ func mapTCState(state string) CRState {
 		return CRStateOpened
 	}
 }
+
+func (t *tencentCodeProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{}
+	if opts.Title != "" {
+		body["title"] = opts.Title
+	}
+	if opts.Description != "" {
+		body["description"] = opts.Description
+	}
+	if opts.TargetBranch != "" {
+		body["target_branch"] = opts.TargetBranch
+	}
+	var mr tcMR
+	if err := t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), body, &mr); err != nil {
+		return nil, err
+	}
+	return mr.toCR(), nil
+}
+
+func (t *tencentCodeProvider) ReopenCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{"state_event": "reopen"}
+	var mr tcMR
+	if err := t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), body, &mr); err != nil {
+		return nil, err
+	}
+	return mr.toCR(), nil
+}
+
+func (t *tencentCodeProvider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*CRComment, error) {
+	encoded := encodeProjectPath(owner, repo)
+	var notes []struct {
+		ID        int    `json:"id"`
+		Body      string `json:"body"`
+		Author    struct {
+			ID       int    `json:"id"`
+			Username string `json:"username"`
+			Name     string `json:"name"`
+		} `json:"author"`
+		CreatedAt tcTime `json:"created_at"`
+		UpdatedAt tcTime `json:"updated_at"`
+	}
+	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_requests/%d/notes", encoded, number), nil, &notes); err != nil {
+		return nil, err
+	}
+	result := make([]*CRComment, 0, len(notes))
+	for _, n := range notes {
+		result = append(result, &CRComment{
+			ID: int64(n.ID), Body: n.Body,
+			Author:    &CRUser{ID: int64(n.Author.ID), Username: n.Author.Username, Name: n.Author.Name},
+			CreatedAt: n.CreatedAt.Time, UpdatedAt: n.UpdatedAt.Time,
+		})
+	}
+	return result, nil
+}
+
+func (t *tencentCodeProvider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*CRCommit, error) {
+	encoded := encodeProjectPath(owner, repo)
+	var commits []struct {
+		ID      string `json:"id"`
+		Message string `json:"message"`
+		Author  struct {
+			Name string `json:"name"`
+		} `json:"author"`
+	}
+	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_requests/%d/commits", encoded, number), nil, &commits); err != nil {
+		return nil, err
+	}
+	result := make([]*CRCommit, 0, len(commits))
+	for _, c := range commits {
+		result = append(result, &CRCommit{SHA: c.ID, Message: c.Message, Author: &CRUser{Name: c.Author.Name}})
+	}
+	return result, nil
+}
+
+func (t *tencentCodeProvider) ForkRepo(ctx context.Context, owner, repo string, opts ForkRepoOptions) (*PlatformRepo, error) {
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{}
+	if opts.Organization != "" {
+		body["namespace"] = opts.Organization
+	}
+	if opts.Name != "" {
+		body["name"] = opts.Name
+	}
+	var p struct {
+		ID            int    `json:"id"`
+		Name          string `json:"name"`
+		PathWithNS    string `json:"path_with_namespace"`
+		Description   string `json:"description"`
+		HTTPURL       string `json:"http_url_to_repo"`
+		SSHURL        string `json:"ssh_url_to_repo"`
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := t.doRequest(ctx, "POST", "/projects/"+encoded+"/fork", body, &p); err != nil {
+		return nil, err
+	}
+	parts := strings.SplitN(p.PathWithNS, "/", 2)
+	ownerR := ""
+	if len(parts) == 2 {
+		ownerR = parts[0]
+	}
+	return &PlatformRepo{
+		ID: int64(p.ID), FullName: p.PathWithNS, Name: p.Name, Owner: ownerR,
+		Description: p.Description, CloneURL: p.HTTPURL, SSHURL: p.SSHURL,
+		DefaultBranch: p.DefaultBranch, Platform: t.Platform(),
+	}, nil
+}
+
+func (t *tencentCodeProvider) DeleteRepo(ctx context.Context, owner, repo string) error {
+	encoded := encodeProjectPath(owner, repo)
+	return t.doRequest(ctx, "DELETE", "/projects/"+encoded, nil, nil)
+}
+
+func (t *tencentCodeProvider) UpdateRepo(ctx context.Context, owner, repo string, opts UpdateRepoOptions) (*PlatformRepo, error) {
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{}
+	if opts.Name != "" {
+		body["name"] = opts.Name
+	}
+	if opts.Description != "" {
+		body["description"] = opts.Description
+	}
+	if opts.DefaultBranch != "" {
+		body["default_branch"] = opts.DefaultBranch
+	}
+	if opts.Private != nil {
+		if *opts.Private {
+			body["visibility_level"] = 0
+		} else {
+			body["visibility_level"] = 20
+		}
+	}
+	var p struct {
+		ID            int    `json:"id"`
+		Name          string `json:"name"`
+		PathWithNS    string `json:"path_with_namespace"`
+		Description   string `json:"description"`
+		HTTPURL       string `json:"http_url_to_repo"`
+		SSHURL        string `json:"ssh_url_to_repo"`
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := t.doRequest(ctx, "PUT", "/projects/"+encoded, body, &p); err != nil {
+		return nil, err
+	}
+	parts := strings.SplitN(p.PathWithNS, "/", 2)
+	ownerR := ""
+	if len(parts) == 2 {
+		ownerR = parts[0]
+	}
+	return &PlatformRepo{
+		ID: int64(p.ID), FullName: p.PathWithNS, Name: p.Name, Owner: ownerR,
+		Description: p.Description, CloneURL: p.HTTPURL, SSHURL: p.SSHURL,
+		DefaultBranch: p.DefaultBranch, Platform: t.Platform(),
+	}, nil
+}
+
+func (t *tencentCodeProvider) GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error) {
+	encoded := encodeProjectPath(owner, repo)
+	var c struct {
+		ID      string `json:"id"`
+		Message string `json:"message"`
+		Author  struct {
+			Name string `json:"name"`
+		} `json:"author"`
+		CreatedAt tcTime `json:"created_at"`
+	}
+	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/commits/%s", encoded, sha), nil, &c); err != nil {
+		return nil, err
+	}
+	return &CommitInfo{SHA: c.ID, Message: c.Message, Author: &CRUser{Name: c.Author.Name}, CreatedAt: c.CreatedAt.Time}, nil
+}
+
+func (t *tencentCodeProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
+	encoded := encodeProjectPath(owner, repo)
+	path := fmt.Sprintf("/projects/%s/repository/commits", encoded)
+	if opts.Page > 0 || opts.PerPage > 0 {
+		page := opts.Page
+		perPage := opts.PerPage
+		if page == 0 {
+			page = 1
+		}
+		if perPage == 0 {
+			perPage = 20
+		}
+		path += fmt.Sprintf("?page=%d&per_page=%d", page, perPage)
+	}
+	var commits []struct {
+		ID      string `json:"id"`
+		Message string `json:"message"`
+		Author  struct {
+			Name string `json:"name"`
+		} `json:"author"`
+		CreatedAt tcTime `json:"created_at"`
+	}
+	if err := t.doRequest(ctx, "GET", path, nil, &commits); err != nil {
+		return nil, err
+	}
+	result := make([]*CommitInfo, 0, len(commits))
+	for _, c := range commits {
+		result = append(result, &CommitInfo{SHA: c.ID, Message: c.Message, Author: &CRUser{Name: c.Author.Name}, CreatedAt: c.CreatedAt.Time})
+	}
+	return result, nil
+}
+
+func (t *tencentCodeProvider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error) {
+	encoded := encodeProjectPath(owner, repo)
+	var cmp struct {
+		Commits []struct {
+			ID      string `json:"id"`
+			Message string `json:"message"`
+		} `json:"commits"`
+		Diffs []struct {
+			OldPath     string `json:"old_path"`
+			NewPath     string `json:"new_path"`
+			Diff        string `json:"diff"`
+			NewFile     bool   `json:"new_file"`
+			DeletedFile bool   `json:"deleted_file"`
+			RenamedFile bool   `json:"renamed_file"`
+		} `json:"diffs"`
+	}
+	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/compare?from=%s&to=%s", encoded, base, head), nil, &cmp); err != nil {
+		return nil, err
+	}
+	result := &CompareResult{TotalCommits: len(cmp.Commits)}
+	for _, c := range cmp.Commits {
+		result.Commits = append(result.Commits, &CommitInfo{SHA: c.ID, Message: c.Message})
+	}
+	for _, d := range cmp.Diffs {
+		add, del := countDiffLines(d.Diff)
+		result.Files = append(result.Files, &ChangedFile{
+			OldPath: d.OldPath, NewPath: d.NewPath, Diff: d.Diff,
+			Additions: add, Deletions: del, IsNew: d.NewFile, IsDeleted: d.DeletedFile, IsRenamed: d.RenamedFile,
+		})
+	}
+	return result, nil
+}
+
+func (t *tencentCodeProvider) CreateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{
+		"file_path": opts.Path, "content": opts.Content, "commit_message": opts.Message,
+	}
+	if opts.Branch != "" {
+		body["branch"] = opts.Branch
+	}
+	if opts.Author != "" || opts.Email != "" {
+		body["author_name"] = opts.Author
+		body["author_email"] = opts.Email
+	}
+	var resp struct {
+		CommitID string `json:"commit_id"`
+	}
+	if err := t.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/repository/files", encoded), body, &resp); err != nil {
+		return nil, err
+	}
+	return &FileResult{CommitSHA: resp.CommitID}, nil
+}
+
+func (t *tencentCodeProvider) UpdateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{
+		"file_path": opts.Path, "content": opts.Content, "commit_message": opts.Message,
+	}
+	if opts.Branch != "" {
+		body["branch"] = opts.Branch
+	}
+	if opts.Author != "" || opts.Email != "" {
+		body["author_name"] = opts.Author
+		body["author_email"] = opts.Email
+	}
+	var resp struct {
+		CommitID string `json:"commit_id"`
+	}
+	if err := t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/repository/files", encoded), body, &resp); err != nil {
+		return nil, err
+	}
+	return &FileResult{CommitSHA: resp.CommitID}, nil
+}
+
+func (t *tencentCodeProvider) DeleteFile(ctx context.Context, owner, repo string, opts FileDeleteOptions) (*FileResult, error) {
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{
+		"file_path": opts.Path, "commit_message": opts.Message,
+	}
+	if opts.Branch != "" {
+		body["branch"] = opts.Branch
+	}
+	var resp struct {
+		CommitID string `json:"commit_id"`
+	}
+	if err := t.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/repository/files", encoded), body, &resp); err != nil {
+		return nil, err
+	}
+	return &FileResult{CommitSHA: resp.CommitID}, nil
+}
+
+func (t *tencentCodeProvider) ListTags(ctx context.Context, owner, repo string) ([]*TagInfo, error) {
+	encoded := encodeProjectPath(owner, repo)
+	var tags []struct {
+		Name    string `json:"name"`
+		Commit  struct {
+			ID string `json:"id"`
+		} `json:"commit"`
+	}
+	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/tags", encoded), nil, &tags); err != nil {
+		return nil, err
+	}
+	result := make([]*TagInfo, 0, len(tags))
+	for _, tg := range tags {
+		result = append(result, &TagInfo{Name: tg.Name, Commit: tg.Commit.ID})
+	}
+	return result, nil
+}
+
+func (t *tencentCodeProvider) ListReleases(ctx context.Context, owner, repo string) ([]*ReleaseInfo, error) {
+	encoded := encodeProjectPath(owner, repo)
+	var releases []struct {
+		ID          int    `json:"id"`
+		TagName     string `json:"tag_name"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/releases", encoded), nil, &releases); err != nil {
+		return nil, err
+	}
+	result := make([]*ReleaseInfo, 0, len(releases))
+	for _, r := range releases {
+		result = append(result, &ReleaseInfo{ID: int64(r.ID), TagName: r.TagName, Title: r.Name, Body: r.Description})
+	}
+	return result, nil
+}
+
+func (t *tencentCodeProvider) CreateRelease(ctx context.Context, owner, repo string, opts CreateReleaseOptions) (*ReleaseInfo, error) {
+	encoded := encodeProjectPath(owner, repo)
+	body := map[string]interface{}{
+		"tag_name": opts.TagName, "name": opts.Title, "description": opts.Body,
+	}
+	if opts.Target != "" {
+		body["target_commitish"] = opts.Target
+	}
+	var r struct {
+		ID          int    `json:"id"`
+		TagName     string `json:"tag_name"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := t.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/releases", encoded), body, &r); err != nil {
+		return nil, err
+	}
+	return &ReleaseInfo{ID: int64(r.ID), TagName: r.TagName, Title: r.Name, Body: r.Description}, nil
+}
+
+func (t *tencentCodeProvider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
+	encoded := encodeProjectPath(owner, repo)
+	suffix := "tar.gz"
+	if format == "zip" {
+		suffix = "zip"
+	}
+	return t.doRawRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/archive.%s?sha=%s", encoded, suffix, ref))
+}

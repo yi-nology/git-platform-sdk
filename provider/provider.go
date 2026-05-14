@@ -44,6 +44,24 @@ type Provider interface {
 	CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error
 	GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error)
 	UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error
+
+	UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error)
+	ReopenCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error)
+	ListCRComments(ctx context.Context, owner, repo string, number int) ([]*CRComment, error)
+	ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*CRCommit, error)
+	ForkRepo(ctx context.Context, owner, repo string, opts ForkRepoOptions) (*PlatformRepo, error)
+	DeleteRepo(ctx context.Context, owner, repo string) error
+	UpdateRepo(ctx context.Context, owner, repo string, opts UpdateRepoOptions) (*PlatformRepo, error)
+	GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error)
+	ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error)
+	CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error)
+	CreateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error)
+	UpdateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error)
+	DeleteFile(ctx context.Context, owner, repo string, opts FileDeleteOptions) (*FileResult, error)
+	ListTags(ctx context.Context, owner, repo string) ([]*TagInfo, error)
+	ListReleases(ctx context.Context, owner, repo string) ([]*ReleaseInfo, error)
+	CreateRelease(ctx context.Context, owner, repo string, opts CreateReleaseOptions) (*ReleaseInfo, error)
+	GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error)
 }
 
 type PlatformBranch struct {
@@ -205,4 +223,113 @@ type CommitStatusOptions struct {
 	Context     string `json:"context"`
 	Description string `json:"description"`
 	TargetURL   string `json:"target_url,omitempty"`
+}
+
+type UpdateCROptions struct {
+	Title        string `json:"title,omitempty"`
+	Description  string `json:"description,omitempty"`
+	TargetBranch string `json:"target_branch,omitempty"`
+}
+
+type CRComment struct {
+	ID        int64     `json:"id"`
+	Body      string    `json:"body"`
+	Author    *CRUser   `json:"author"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type CRCommit struct {
+	SHA       string    `json:"sha"`
+	Message   string    `json:"message"`
+	Author    *CRUser   `json:"author"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ForkRepoOptions struct {
+	Organization string `json:"organization,omitempty"`
+	Name         string `json:"name,omitempty"`
+}
+
+type UpdateRepoOptions struct {
+	Name          string `json:"name,omitempty"`
+	Description   string `json:"description,omitempty"`
+	DefaultBranch string `json:"default_branch,omitempty"`
+	Private       *bool  `json:"private,omitempty"`
+}
+
+type CommitInfo struct {
+	SHA       string    `json:"sha"`
+	Message   string    `json:"message"`
+	Author    *CRUser   `json:"author"`
+	Committer *CRUser   `json:"committer"`
+	CreatedAt time.Time `json:"created_at"`
+	Additions int       `json:"additions"`
+	Deletions int       `json:"deletions"`
+}
+
+type ListCommitsOptions struct {
+	Page    int    `json:"page"`
+	PerPage int    `json:"per_page"`
+	Branch  string `json:"branch,omitempty"`
+	Since   string `json:"since,omitempty"`
+	Until   string `json:"until,omitempty"`
+}
+
+type CompareResult struct {
+	Commits      []*CommitInfo `json:"commits"`
+	Files        []*ChangedFile `json:"files"`
+	TotalCommits int           `json:"total_commits"`
+	AheadBy      int           `json:"ahead_by"`
+	BehindBy     int           `json:"behind_by"`
+}
+
+type FileOptions struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	Message string `json:"message"`
+	Branch  string `json:"branch,omitempty"`
+	SHA     string `json:"sha,omitempty"`
+	Author  string `json:"author,omitempty"`
+	Email   string `json:"email,omitempty"`
+}
+
+type FileDeleteOptions struct {
+	Path    string `json:"path"`
+	Message string `json:"message"`
+	Branch  string `json:"branch,omitempty"`
+	SHA     string `json:"sha,omitempty"`
+	Author  string `json:"author,omitempty"`
+	Email   string `json:"email,omitempty"`
+}
+
+type FileResult struct {
+	SHA     string `json:"sha"`
+	CommitSHA string `json:"commit_sha"`
+}
+
+type TagInfo struct {
+	Name   string `json:"name"`
+	Commit string `json:"commit"`
+}
+
+type ReleaseInfo struct {
+	ID          int64     `json:"id"`
+	TagName     string    `json:"tag_name"`
+	Title       string    `json:"title"`
+	Body        string    `json:"body"`
+	URL         string    `json:"url"`
+	Draft       bool      `json:"draft"`
+	Prerelease  bool      `json:"prerelease"`
+	CreatedAt   time.Time `json:"created_at"`
+	PublishedAt time.Time `json:"published_at"`
+}
+
+type CreateReleaseOptions struct {
+	TagName     string `json:"tag_name"`
+	Target      string `json:"target,omitempty"`
+	Title       string `json:"title"`
+	Body        string `json:"body,omitempty"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
 }

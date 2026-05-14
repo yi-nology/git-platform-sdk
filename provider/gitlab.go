@@ -603,3 +603,329 @@ func countDiffLines(diff string) (additions, deletions int) {
 	}
 	return
 }
+
+func (g *gitlabProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {
+	pid := owner + "/" + repo
+	updateOpts := &gitlab.UpdateMergeRequestOptions{}
+	if opts.Title != "" {
+		updateOpts.Title = gitlab.Ptr(opts.Title)
+	}
+	if opts.Description != "" {
+		updateOpts.Description = gitlab.Ptr(opts.Description)
+	}
+	if opts.TargetBranch != "" {
+		updateOpts.TargetBranch = gitlab.Ptr(opts.TargetBranch)
+	}
+	mr, _, err := g.client.MergeRequests.UpdateMergeRequest(pid, int64(number), updateOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return convertGitlabMR(mr), nil
+}
+
+func (g *gitlabProvider) ReopenCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
+	pid := owner + "/" + repo
+	mr, _, err := g.client.MergeRequests.UpdateMergeRequest(pid, int64(number), &gitlab.UpdateMergeRequestOptions{StateEvent: gitlab.Ptr("reopen")}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return convertGitlabMR(mr), nil
+}
+
+func (g *gitlabProvider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*CRComment, error) {
+	pid := owner + "/" + repo
+	notes, _, err := g.client.Notes.ListMergeRequestNotes(pid, int64(number), nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CRComment, 0, len(notes))
+	for _, n := range notes {
+		c := &CRComment{ID: n.ID, Body: n.Body, Author: &CRUser{ID: n.Author.ID, Username: n.Author.Username, Name: n.Author.Name, AvatarURL: n.Author.AvatarURL}}
+		if n.CreatedAt != nil {
+			c.CreatedAt = *n.CreatedAt
+		}
+		if n.UpdatedAt != nil {
+			c.UpdatedAt = *n.UpdatedAt
+		}
+		result = append(result, c)
+	}
+	return result, nil
+}
+
+func (g *gitlabProvider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*CRCommit, error) {
+	pid := owner + "/" + repo
+	commits, _, err := g.client.MergeRequests.GetMergeRequestCommits(pid, int64(number), nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CRCommit, 0, len(commits))
+	for _, c := range commits {
+		cc := &CRCommit{SHA: c.ShortID, Message: c.Title, CreatedAt: *c.CreatedAt}
+		if c.AuthorName != "" {
+			cc.Author = &CRUser{Name: c.AuthorName}
+		}
+		result = append(result, cc)
+	}
+	return result, nil
+}
+
+func (g *gitlabProvider) ForkRepo(ctx context.Context, owner, repo string, opts ForkRepoOptions) (*PlatformRepo, error) {
+	pid := owner + "/" + repo
+	forkOpts := &gitlab.ForkProjectOptions{}
+	if opts.Organization != "" {
+		forkOpts.Namespace = gitlab.Ptr(opts.Organization)
+	}
+	if opts.Name != "" {
+		forkOpts.Name = gitlab.Ptr(opts.Name)
+	}
+	p, _, err := g.client.Projects.ForkProject(pid, forkOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return convertGitlabProject(p), nil
+}
+
+func (g *gitlabProvider) DeleteRepo(ctx context.Context, owner, repo string) error {
+	_, err := g.client.Projects.DeleteProject(owner+"/"+repo, nil, gitlab.WithContext(ctx))
+	return err
+}
+
+func (g *gitlabProvider) UpdateRepo(ctx context.Context, owner, repo string, opts UpdateRepoOptions) (*PlatformRepo, error) {
+	pid := owner + "/" + repo
+	updateOpts := &gitlab.EditProjectOptions{}
+	if opts.Name != "" {
+		updateOpts.Name = gitlab.Ptr(opts.Name)
+	}
+	if opts.Description != "" {
+		updateOpts.Description = gitlab.Ptr(opts.Description)
+	}
+	if opts.DefaultBranch != "" {
+		updateOpts.DefaultBranch = gitlab.Ptr(opts.DefaultBranch)
+	}
+	if opts.Private != nil {
+		vis := "public"
+		if *opts.Private {
+			vis = "private"
+		}
+		updateOpts.Visibility = gitlab.Ptr(gitlab.VisibilityValue(vis))
+	}
+	p, _, err := g.client.Projects.EditProject(pid, updateOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return convertGitlabProject(p), nil
+}
+
+func (g *gitlabProvider) GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error) {
+	pid := owner + "/" + repo
+	c, _, err := g.client.Commits.GetCommit(pid, sha, nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return convertGitlabCommit(c), nil
+}
+
+func (g *gitlabProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
+	pid := owner + "/" + repo
+	listOpts := &gitlab.ListCommitsOptions{
+		ListOptions: gitlab.ListOptions{Page: int64(opts.Page), PerPage: int64(opts.PerPage)},
+	}
+	if listOpts.Page == 0 {
+		listOpts.Page = 1
+	}
+	if listOpts.PerPage == 0 {
+		listOpts.PerPage = 20
+	}
+	if opts.Branch != "" {
+		listOpts.RefName = gitlab.Ptr(opts.Branch)
+	}
+	if opts.Since != "" {
+		if t, err := time.Parse(time.RFC3339, opts.Since); err == nil {
+			listOpts.Since = gitlab.Ptr(t)
+		}
+	}
+	if opts.Until != "" {
+		if t, err := time.Parse(time.RFC3339, opts.Until); err == nil {
+			listOpts.Until = gitlab.Ptr(t)
+		}
+	}
+	commits, _, err := g.client.Commits.ListCommits(pid, listOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CommitInfo, 0, len(commits))
+	for _, c := range commits {
+		result = append(result, convertGitlabCommit(c))
+	}
+	return result, nil
+}
+
+func (g *gitlabProvider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error) {
+	pid := owner + "/" + repo
+	cmp, _, err := g.client.Repositories.Compare(pid, &gitlab.CompareOptions{From: gitlab.Ptr(base), To: gitlab.Ptr(head)}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	result := &CompareResult{}
+	for _, c := range cmp.Commits {
+		result.Commits = append(result.Commits, convertGitlabCommit(c))
+		result.TotalCommits++
+	}
+	for _, d := range cmp.Diffs {
+		add, del := countDiffLines(d.Diff)
+		result.Files = append(result.Files, &ChangedFile{
+			OldPath: d.OldPath, NewPath: d.NewPath, Diff: d.Diff,
+			Additions: add, Deletions: del,
+			IsNew: d.NewFile, IsDeleted: d.DeletedFile, IsRenamed: d.RenamedFile,
+		})
+	}
+	return result, nil
+}
+
+func (g *gitlabProvider) CreateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	pid := owner + "/" + repo
+	createOpts := &gitlab.CreateFileOptions{
+		Content:  gitlab.Ptr(opts.Content),
+		CommitMessage: gitlab.Ptr(opts.Message),
+	}
+	if opts.Branch != "" {
+		createOpts.Branch = gitlab.Ptr(opts.Branch)
+	}
+	if opts.Author != "" || opts.Email != "" {
+		createOpts.AuthorName = gitlab.Ptr(opts.Author)
+		createOpts.AuthorEmail = gitlab.Ptr(opts.Email)
+	}
+	_, resp, err := g.client.RepositoryFiles.CreateFile(pid, opts.Path, createOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	sha := resp.Header.Get("X-Gitlab-Commit-Id")
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *gitlabProvider) UpdateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	pid := owner + "/" + repo
+	updateOpts := &gitlab.UpdateFileOptions{
+		Content:  gitlab.Ptr(opts.Content),
+		CommitMessage: gitlab.Ptr(opts.Message),
+	}
+	if opts.Branch != "" {
+		updateOpts.Branch = gitlab.Ptr(opts.Branch)
+	}
+	if opts.Author != "" || opts.Email != "" {
+		updateOpts.AuthorName = gitlab.Ptr(opts.Author)
+		updateOpts.AuthorEmail = gitlab.Ptr(opts.Email)
+	}
+	_, resp, err := g.client.RepositoryFiles.UpdateFile(pid, opts.Path, updateOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	sha := resp.Header.Get("X-Gitlab-Commit-Id")
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *gitlabProvider) DeleteFile(ctx context.Context, owner, repo string, opts FileDeleteOptions) (*FileResult, error) {
+	pid := owner + "/" + repo
+	deleteOpts := &gitlab.DeleteFileOptions{
+		CommitMessage: gitlab.Ptr(opts.Message),
+	}
+	if opts.Branch != "" {
+		deleteOpts.Branch = gitlab.Ptr(opts.Branch)
+	}
+	if opts.Author != "" || opts.Email != "" {
+		deleteOpts.AuthorName = gitlab.Ptr(opts.Author)
+		deleteOpts.AuthorEmail = gitlab.Ptr(opts.Email)
+	}
+	resp, err := g.client.RepositoryFiles.DeleteFile(pid, opts.Path, deleteOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	sha := resp.Header.Get("X-Gitlab-Commit-Id")
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *gitlabProvider) ListTags(ctx context.Context, owner, repo string) ([]*TagInfo, error) {
+	pid := owner + "/" + repo
+	tags, _, err := g.client.Tags.ListTags(pid, nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*TagInfo, 0, len(tags))
+	for _, t := range tags {
+		ti := &TagInfo{Name: t.Name}
+		if t.Commit != nil {
+			ti.Commit = t.Commit.ID
+		}
+		result = append(result, ti)
+	}
+	return result, nil
+}
+
+func (g *gitlabProvider) ListReleases(ctx context.Context, owner, repo string) ([]*ReleaseInfo, error) {
+	pid := owner + "/" + repo
+	releases, _, err := g.client.Releases.ListReleases(pid, nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*ReleaseInfo, 0, len(releases))
+	for _, r := range releases {
+		ri := &ReleaseInfo{
+			TagName: r.TagName, Title: r.Name, Body: r.Description,
+			URL: r.Links.Self, CreatedAt: *r.CreatedAt,
+		}
+		if r.ReleasedAt != nil {
+			ri.PublishedAt = *r.ReleasedAt
+		}
+		result = append(result, ri)
+	}
+	return result, nil
+}
+
+func (g *gitlabProvider) CreateRelease(ctx context.Context, owner, repo string, opts CreateReleaseOptions) (*ReleaseInfo, error) {
+	pid := owner + "/" + repo
+	r, _, err := g.client.Releases.CreateRelease(pid, &gitlab.CreateReleaseOptions{
+		TagName:     gitlab.Ptr(opts.TagName),
+		Ref:         gitlab.Ptr(opts.Target),
+		Name:        gitlab.Ptr(opts.Title),
+		Description: gitlab.Ptr(opts.Body),
+	}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	ri := &ReleaseInfo{TagName: r.TagName, Title: r.Name, Body: r.Description, URL: r.Links.Self, CreatedAt: *r.CreatedAt}
+	if r.ReleasedAt != nil {
+		ri.PublishedAt = *r.ReleasedAt
+	}
+	return ri, nil
+}
+
+func (g *gitlabProvider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
+	pid := owner + "/" + repo
+	fmtVal := "tar.gz"
+	if format == "zip" {
+		fmtVal = "zip"
+	}
+	data, _, err := g.client.Repositories.Archive(pid, &gitlab.ArchiveOptions{Format: gitlab.Ptr(fmtVal), SHA: gitlab.Ptr(ref)}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func convertGitlabCommit(c *gitlab.Commit) *CommitInfo {
+	if c == nil {
+		return nil
+	}
+	ci := &CommitInfo{SHA: c.ID, Message: c.Message}
+	if c.Stats != nil {
+		ci.Additions = int(c.Stats.Additions)
+		ci.Deletions = int(c.Stats.Deletions)
+	}
+	if c.CreatedAt != nil {
+		ci.CreatedAt = *c.CreatedAt
+	}
+	if c.AuthorName != "" || c.AuthorEmail != "" {
+		ci.Author = &CRUser{Name: c.AuthorName}
+	}
+	return ci
+}

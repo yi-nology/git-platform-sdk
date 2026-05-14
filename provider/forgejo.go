@@ -592,3 +592,284 @@ func parseForgejoTotalCount(resp *forgejo.Response) int {
 	}
 	return n
 }
+
+func (f *forgejoProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {
+	editOpts := forgejo.EditPullRequestOption{}
+	if opts.Title != "" {
+		editOpts.Title = opts.Title
+	}
+	if opts.Description != "" {
+		editOpts.Body = &opts.Description
+	}
+	if opts.TargetBranch != "" {
+		editOpts.Base = opts.TargetBranch
+	}
+	pr, _, err := f.client.EditPullRequest(owner, repo, int64(number), editOpts)
+	if err != nil {
+		return nil, err
+	}
+	return convertForgejoPR(pr), nil
+}
+
+func (f *forgejoProvider) ReopenCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
+	state := forgejo.StateOpen
+	pr, _, err := f.client.EditPullRequest(owner, repo, int64(number), forgejo.EditPullRequestOption{State: &state})
+	if err != nil {
+		return nil, err
+	}
+	return convertForgejoPR(pr), nil
+}
+
+func (f *forgejoProvider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*CRComment, error) {
+	comments, _, err := f.client.ListIssueComments(owner, repo, int64(number), forgejo.ListIssueCommentOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CRComment, 0, len(comments))
+	for _, c := range comments {
+		cc := &CRComment{ID: c.ID, Body: c.Body, CreatedAt: c.Created, UpdatedAt: c.Updated}
+		if c.Poster != nil {
+			cc.Author = &CRUser{ID: c.Poster.ID, Username: c.Poster.UserName, AvatarURL: c.Poster.AvatarURL}
+		}
+		result = append(result, cc)
+	}
+	return result, nil
+}
+
+func (f *forgejoProvider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*CRCommit, error) {
+	commits, _, err := f.client.ListPullRequestCommits(owner, repo, int64(number), forgejo.ListPullRequestCommitsOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CRCommit, 0, len(commits))
+	for _, c := range commits {
+		sha := ""
+		if c.CommitMeta != nil {
+			sha = c.CommitMeta.SHA
+		}
+		cc := &CRCommit{SHA: sha}
+		if c.RepoCommit != nil {
+			cc.Message = c.RepoCommit.Message
+			if c.RepoCommit.Author != nil {
+				cc.Author = &CRUser{Name: c.RepoCommit.Author.Name}
+			}
+		}
+		result = append(result, cc)
+	}
+	return result, nil
+}
+
+func (f *forgejoProvider) ForkRepo(ctx context.Context, owner, repo string, opts ForkRepoOptions) (*PlatformRepo, error) {
+	forkOpts := forgejo.CreateForkOption{}
+	if opts.Organization != "" {
+		forkOpts.Organization = &opts.Organization
+	}
+	if opts.Name != "" {
+		forkOpts.Name = &opts.Name
+	}
+	r, _, err := f.client.CreateFork(owner, repo, forkOpts)
+	if err != nil {
+		return nil, err
+	}
+	return convertForgejoRepo(r), nil
+}
+
+func (f *forgejoProvider) DeleteRepo(ctx context.Context, owner, repo string) error {
+	_, err := f.client.DeleteRepo(owner, repo)
+	return err
+}
+
+func (f *forgejoProvider) UpdateRepo(ctx context.Context, owner, repo string, opts UpdateRepoOptions) (*PlatformRepo, error) {
+	editOpts := forgejo.EditRepoOption{}
+	if opts.Name != "" {
+		editOpts.Name = &opts.Name
+	}
+	if opts.Description != "" {
+		editOpts.Description = &opts.Description
+	}
+	if opts.DefaultBranch != "" {
+		editOpts.DefaultBranch = &opts.DefaultBranch
+	}
+	if opts.Private != nil {
+		editOpts.Private = opts.Private
+	}
+	r, _, err := f.client.EditRepo(owner, repo, editOpts)
+	if err != nil {
+		return nil, err
+	}
+	return convertForgejoRepo(r), nil
+}
+
+func (f *forgejoProvider) GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error) {
+	c, _, err := f.client.GetSingleCommit(owner, repo, sha)
+	if err != nil {
+		return nil, err
+	}
+	return convertForgejoCommit(c), nil
+}
+
+func (f *forgejoProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
+	listOpts := forgejo.ListCommitOptions{ListOptions: forgejo.ListOptions{Page: opts.Page, PageSize: opts.PerPage}}
+	if listOpts.Page == 0 {
+		listOpts.Page = 1
+	}
+	if listOpts.PageSize == 0 {
+		listOpts.PageSize = 20
+	}
+	commits, _, err := f.client.ListRepoCommits(owner, repo, listOpts)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CommitInfo, 0, len(commits))
+	for _, c := range commits {
+		result = append(result, convertForgejoCommit(c))
+	}
+	return result, nil
+}
+
+func (f *forgejoProvider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error) {
+	cmp, _, err := f.client.CompareCommits(owner, repo, base, head)
+	if err != nil {
+		return nil, err
+	}
+	result := &CompareResult{TotalCommits: cmp.TotalCommits}
+	for _, c := range cmp.Commits {
+		result.Commits = append(result.Commits, convertForgejoCommit(c))
+	}
+	return result, nil
+}
+
+func (f *forgejoProvider) CreateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	createOpts := forgejo.CreateFileOptions{
+		FileOptions: forgejo.FileOptions{Message: opts.Message, BranchName: opts.Branch},
+		Content:     opts.Content,
+	}
+	resp, _, err := f.client.CreateFile(owner, repo, opts.Path, createOpts)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp.Commit != nil {
+		sha = resp.Commit.SHA
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (f *forgejoProvider) UpdateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	updateOpts := forgejo.UpdateFileOptions{
+		FileOptions: forgejo.FileOptions{Message: opts.Message, BranchName: opts.Branch},
+		SHA:         opts.SHA,
+		Content:     opts.Content,
+	}
+	resp, _, err := f.client.UpdateFile(owner, repo, opts.Path, updateOpts)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp.Commit != nil {
+		sha = resp.Commit.SHA
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (f *forgejoProvider) DeleteFile(ctx context.Context, owner, repo string, opts FileDeleteOptions) (*FileResult, error) {
+	deleteOpts := forgejo.DeleteFileOptions{
+		FileOptions: forgejo.FileOptions{Message: opts.Message, BranchName: opts.Branch},
+		SHA:         opts.SHA,
+	}
+	resp, err := f.client.DeleteFile(owner, repo, opts.Path, deleteOpts)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp != nil {
+		sha = resp.Header.Get("X-Commit-Sha")
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (f *forgejoProvider) ListTags(ctx context.Context, owner, repo string) ([]*TagInfo, error) {
+	tags, _, err := f.client.ListRepoTags(owner, repo, forgejo.ListRepoTagsOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*TagInfo, 0, len(tags))
+	for _, t := range tags {
+		ti := &TagInfo{Name: t.Name}
+		if t.Commit != nil {
+			ti.Commit = t.Commit.SHA
+		}
+		result = append(result, ti)
+	}
+	return result, nil
+}
+
+func (f *forgejoProvider) ListReleases(ctx context.Context, owner, repo string) ([]*ReleaseInfo, error) {
+	releases, _, err := f.client.ListReleases(owner, repo, forgejo.ListReleasesOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*ReleaseInfo, 0, len(releases))
+	for _, r := range releases {
+		result = append(result, convertForgejoRelease(r))
+	}
+	return result, nil
+}
+
+func (f *forgejoProvider) CreateRelease(ctx context.Context, owner, repo string, opts CreateReleaseOptions) (*ReleaseInfo, error) {
+	r, _, err := f.client.CreateRelease(owner, repo, forgejo.CreateReleaseOption{
+		TagName:      opts.TagName,
+		Target:       opts.Target,
+		Title:        opts.Title,
+		Note:         opts.Body,
+		IsDraft:      opts.Draft,
+		IsPrerelease: opts.Prerelease,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertForgejoRelease(r), nil
+}
+
+func (f *forgejoProvider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
+	data, _, err := f.client.GetArchive(owner, repo, ref, forgejo.TarGZArchive)
+	if format == "zip" {
+		data, _, err = f.client.GetArchive(owner, repo, ref, forgejo.ZipArchive)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func convertForgejoCommit(c *forgejo.Commit) *CommitInfo {
+	if c == nil {
+		return nil
+	}
+	sha := ""
+	if c.CommitMeta != nil {
+		sha = c.CommitMeta.SHA
+	}
+	ci := &CommitInfo{SHA: sha}
+	if c.RepoCommit != nil {
+		ci.Message = c.RepoCommit.Message
+		if c.RepoCommit.Author != nil {
+			ci.Author = &CRUser{Name: c.RepoCommit.Author.Name}
+		}
+	}
+	if c.CommitMeta != nil {
+		ci.CreatedAt = c.CommitMeta.Created
+	}
+	return ci
+}
+
+func convertForgejoRelease(r *forgejo.Release) *ReleaseInfo {
+	if r == nil {
+		return nil
+	}
+	return &ReleaseInfo{
+		ID: r.ID, TagName: r.TagName, Title: r.Title, Body: r.Note,
+		URL: r.URL, Draft: r.IsDraft, Prerelease: r.IsPrerelease,
+		CreatedAt: r.CreatedAt, PublishedAt: r.PublishedAt,
+	}
+}

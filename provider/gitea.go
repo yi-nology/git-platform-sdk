@@ -522,6 +522,16 @@ func convertGiteaPR(pr *gitea.PullRequest) *ChangeRequest {
 			labels = append(labels, l.Name)
 		}
 	}
+	var reviewers []*CRUser
+	for _, r := range pr.RequestedReviewers {
+		if r != nil {
+			reviewers = append(reviewers, &CRUser{
+				ID:        r.ID,
+				Username:  r.UserName,
+				AvatarURL: r.AvatarURL,
+			})
+		}
+	}
 	var createdAt, updatedAt time.Time
 	if pr.Created != nil {
 		createdAt = *pr.Created
@@ -538,6 +548,7 @@ func convertGiteaPR(pr *gitea.PullRequest) *ChangeRequest {
 		SourceBranch: pr.Head.Ref,
 		TargetBranch: pr.Base.Ref,
 		Author:       author,
+		Reviewers:    reviewers,
 		Labels:       labels,
 		WebURL:       pr.HTMLURL,
 		CreatedAt:    createdAt,
@@ -586,4 +597,285 @@ func parseGiteaTotalCount(resp *gitea.Response) int {
 		return 0
 	}
 	return n
+}
+
+func (g *giteaProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {
+	editOpts := gitea.EditPullRequestOption{}
+	if opts.Title != "" {
+		editOpts.Title = opts.Title
+	}
+	if opts.Description != "" {
+		editOpts.Body = &opts.Description
+	}
+	if opts.TargetBranch != "" {
+		editOpts.Base = opts.TargetBranch
+	}
+	pr, _, err := g.client.EditPullRequest(owner, repo, int64(number), editOpts)
+	if err != nil {
+		return nil, err
+	}
+	return convertGiteaPR(pr), nil
+}
+
+func (g *giteaProvider) ReopenCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error) {
+	state := gitea.StateOpen
+	pr, _, err := g.client.EditPullRequest(owner, repo, int64(number), gitea.EditPullRequestOption{State: &state})
+	if err != nil {
+		return nil, err
+	}
+	return convertGiteaPR(pr), nil
+}
+
+func (g *giteaProvider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*CRComment, error) {
+	comments, _, err := g.client.ListIssueComments(owner, repo, int64(number), gitea.ListIssueCommentOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CRComment, 0, len(comments))
+	for _, c := range comments {
+		cc := &CRComment{ID: c.ID, Body: c.Body, CreatedAt: c.Created, UpdatedAt: c.Updated}
+		if c.Poster != nil {
+			cc.Author = &CRUser{ID: c.Poster.ID, Username: c.Poster.UserName, AvatarURL: c.Poster.AvatarURL}
+		}
+		result = append(result, cc)
+	}
+	return result, nil
+}
+
+func (g *giteaProvider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*CRCommit, error) {
+	commits, _, err := g.client.ListPullRequestCommits(owner, repo, int64(number), gitea.ListPullRequestCommitsOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CRCommit, 0, len(commits))
+	for _, c := range commits {
+		sha := ""
+		if c.CommitMeta != nil {
+			sha = c.CommitMeta.SHA
+		}
+		cc := &CRCommit{SHA: sha}
+		if c.RepoCommit != nil {
+			cc.Message = c.RepoCommit.Message
+			if c.RepoCommit.Author != nil {
+				cc.Author = &CRUser{Name: c.RepoCommit.Author.Name}
+			}
+		}
+		result = append(result, cc)
+	}
+	return result, nil
+}
+
+func (g *giteaProvider) ForkRepo(ctx context.Context, owner, repo string, opts ForkRepoOptions) (*PlatformRepo, error) {
+	forkOpts := gitea.CreateForkOption{}
+	if opts.Organization != "" {
+		forkOpts.Organization = &opts.Organization
+	}
+	if opts.Name != "" {
+		forkOpts.Name = &opts.Name
+	}
+	r, _, err := g.client.CreateFork(owner, repo, forkOpts)
+	if err != nil {
+		return nil, err
+	}
+	return convertGiteaRepo(r), nil
+}
+
+func (g *giteaProvider) DeleteRepo(ctx context.Context, owner, repo string) error {
+	_, err := g.client.DeleteRepo(owner, repo)
+	return err
+}
+
+func (g *giteaProvider) UpdateRepo(ctx context.Context, owner, repo string, opts UpdateRepoOptions) (*PlatformRepo, error) {
+	editOpts := gitea.EditRepoOption{}
+	if opts.Name != "" {
+		editOpts.Name = &opts.Name
+	}
+	if opts.Description != "" {
+		editOpts.Description = &opts.Description
+	}
+	if opts.DefaultBranch != "" {
+		editOpts.DefaultBranch = &opts.DefaultBranch
+	}
+	if opts.Private != nil {
+		editOpts.Private = opts.Private
+	}
+	r, _, err := g.client.EditRepo(owner, repo, editOpts)
+	if err != nil {
+		return nil, err
+	}
+	return convertGiteaRepo(r), nil
+}
+
+func (g *giteaProvider) GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error) {
+	c, _, err := g.client.GetSingleCommit(owner, repo, sha)
+	if err != nil {
+		return nil, err
+	}
+	return convertGiteaCommit(c), nil
+}
+
+func (g *giteaProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
+	listOpts := gitea.ListCommitOptions{ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage}}
+	if listOpts.Page == 0 {
+		listOpts.Page = 1
+	}
+	if listOpts.PageSize == 0 {
+		listOpts.PageSize = 20
+	}
+	commits, _, err := g.client.ListRepoCommits(owner, repo, listOpts)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*CommitInfo, 0, len(commits))
+	for _, c := range commits {
+		result = append(result, convertGiteaCommit(c))
+	}
+	return result, nil
+}
+
+func (g *giteaProvider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error) {
+	cmp, _, err := g.client.CompareCommits(owner, repo, base, head)
+	if err != nil {
+		return nil, err
+	}
+	result := &CompareResult{TotalCommits: cmp.TotalCommits}
+	for _, c := range cmp.Commits {
+		result.Commits = append(result.Commits, convertGiteaCommit(c))
+	}
+	return result, nil
+}
+
+func (g *giteaProvider) CreateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	createOpts := gitea.CreateFileOptions{
+		FileOptions: gitea.FileOptions{Message: opts.Message, BranchName: opts.Branch},
+		Content:     opts.Content,
+	}
+	resp, _, err := g.client.CreateFile(owner, repo, opts.Path, createOpts)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp.Commit != nil {
+		sha = resp.Commit.SHA
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *giteaProvider) UpdateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error) {
+	updateOpts := gitea.UpdateFileOptions{
+		FileOptions: gitea.FileOptions{Message: opts.Message, BranchName: opts.Branch},
+		SHA:         opts.SHA,
+		Content:     opts.Content,
+	}
+	resp, _, err := g.client.UpdateFile(owner, repo, opts.Path, updateOpts)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp.Commit != nil {
+		sha = resp.Commit.SHA
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *giteaProvider) DeleteFile(ctx context.Context, owner, repo string, opts FileDeleteOptions) (*FileResult, error) {
+	deleteOpts := gitea.DeleteFileOptions{
+		FileOptions: gitea.FileOptions{Message: opts.Message, BranchName: opts.Branch},
+		SHA:         opts.SHA,
+	}
+	resp, err := g.client.DeleteFile(owner, repo, opts.Path, deleteOpts)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if resp != nil {
+		sha = resp.Header.Get("X-Commit-Sha")
+	}
+	return &FileResult{CommitSHA: sha}, nil
+}
+
+func (g *giteaProvider) ListTags(ctx context.Context, owner, repo string) ([]*TagInfo, error) {
+	tags, _, err := g.client.ListRepoTags(owner, repo, gitea.ListRepoTagsOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*TagInfo, 0, len(tags))
+	for _, t := range tags {
+		ti := &TagInfo{Name: t.Name}
+		if t.Commit != nil {
+			ti.Commit = t.Commit.SHA
+		}
+		result = append(result, ti)
+	}
+	return result, nil
+}
+
+func (g *giteaProvider) ListReleases(ctx context.Context, owner, repo string) ([]*ReleaseInfo, error) {
+	releases, _, err := g.client.ListReleases(owner, repo, gitea.ListReleasesOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*ReleaseInfo, 0, len(releases))
+	for _, r := range releases {
+		result = append(result, convertGiteaRelease(r))
+	}
+	return result, nil
+}
+
+func (g *giteaProvider) CreateRelease(ctx context.Context, owner, repo string, opts CreateReleaseOptions) (*ReleaseInfo, error) {
+	r, _, err := g.client.CreateRelease(owner, repo, gitea.CreateReleaseOption{
+		TagName:      opts.TagName,
+		Target:       opts.Target,
+		Title:        opts.Title,
+		Note:         opts.Body,
+		IsDraft:      opts.Draft,
+		IsPrerelease: opts.Prerelease,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertGiteaRelease(r), nil
+}
+
+func (g *giteaProvider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
+	data, _, err := g.client.GetArchive(owner, repo, ref, gitea.TarGZArchive)
+	if format == "zip" {
+		data, _, err = g.client.GetArchive(owner, repo, ref, gitea.ZipArchive)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func convertGiteaCommit(c *gitea.Commit) *CommitInfo {
+	if c == nil {
+		return nil
+	}
+	sha := ""
+	if c.CommitMeta != nil {
+		sha = c.CommitMeta.SHA
+	}
+	ci := &CommitInfo{SHA: sha}
+	if c.RepoCommit != nil {
+		ci.Message = c.RepoCommit.Message
+		if c.RepoCommit.Author != nil {
+			ci.Author = &CRUser{Name: c.RepoCommit.Author.Name}
+		}
+	}
+	if c.CommitMeta != nil {
+		ci.CreatedAt = c.CommitMeta.Created
+	}
+	return ci
+}
+
+func convertGiteaRelease(r *gitea.Release) *ReleaseInfo {
+	if r == nil {
+		return nil
+	}
+	return &ReleaseInfo{
+		ID: r.ID, TagName: r.TagName, Title: r.Title, Body: r.Note,
+		URL: r.URL, Draft: r.IsDraft, Prerelease: r.IsPrerelease,
+		CreatedAt: r.CreatedAt, PublishedAt: r.PublishedAt,
+	}
 }
