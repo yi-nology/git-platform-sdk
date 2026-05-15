@@ -13,6 +13,7 @@ const (
 	PlatformGitLab      Platform = "gitlab"
 	PlatformGitHub      Platform = "github"
 	PlatformGitea       Platform = "gitea"
+	PlatformGitee       Platform = "gitee"
 	PlatformForgejo     Platform = "forgejo"
 	PlatformTencentCode Platform = "tencent_code"
 )

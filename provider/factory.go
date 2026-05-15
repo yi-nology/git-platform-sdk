@@ -21,6 +21,8 @@ func NewProvider(cfg Config) (Provider, error) {
 		return NewForgejoProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
 	case PlatformTencentCode:
 		return NewTencentCodeProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
+	case PlatformGitee:
+		return NewGiteeProvider(cfg.BaseURL, cfg.Token), nil
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", cfg.Platform)
 	}
