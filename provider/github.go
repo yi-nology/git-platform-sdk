@@ -317,10 +317,21 @@ func (g *githubProvider) ListBranches(ctx context.Context, owner, repo string) (
 }
 
 func (g *githubProvider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*PlatformBranch, error) {
+	sha := ref
+	if !isCommitSHA(ref) {
+		commits, err := g.ListCommits(ctx, owner, repo, ListCommitsOptions{Branch: ref, PerPage: 1})
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve ref %q to commit SHA: %w", ref, err)
+		}
+		if len(commits) == 0 {
+			return nil, fmt.Errorf("no commits found on ref %q", ref)
+		}
+		sha = commits[0].SHA
+	}
 	_, _, err := g.client.Git.CreateRef(ctx, owner, repo, &github.Reference{
 		Ref: github.String("refs/heads/" + branch),
 		Object: &github.GitObject{
-			SHA: github.String(ref),
+			SHA: github.String(sha),
 		},
 	})
 	if err != nil {

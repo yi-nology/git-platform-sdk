@@ -560,6 +560,12 @@ func TestGitHub_DeleteNote(t *testing.T) {
 func TestGitHub_CreateBranch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/commits") {
+			json.NewEncoder(w).Encode([]*github.RepositoryCommit{
+				{SHA: github.String("abc123def456abc123def456abc123def456abc1")},
+			})
+			return
+		}
 		json.NewEncoder(w).Encode(&github.Reference{Ref: github.String("refs/heads/new-branch"), Object: &github.GitObject{SHA: github.String("abc")}})
 	}))
 	defer srv.Close()
@@ -567,6 +573,24 @@ func TestGitHub_CreateBranch(t *testing.T) {
 	p := &githubProvider{client: client, baseURL: srv.URL}
 
 	b, err := p.CreateBranch(context.Background(), "owner", "repo", "new-branch", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Name != "new-branch" {
+		t.Errorf("expected new-branch, got %s", b.Name)
+	}
+}
+
+func TestGitHub_CreateBranch_WithSHA(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&github.Reference{Ref: github.String("refs/heads/new-branch"), Object: &github.GitObject{SHA: github.String("abc")}})
+	}))
+	defer srv.Close()
+	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
+	p := &githubProvider{client: client, baseURL: srv.URL}
+
+	b, err := p.CreateBranch(context.Background(), "owner", "repo", "new-branch", "abc123def456abc123def456abc123def456abc1")
 	if err != nil {
 		t.Fatal(err)
 	}
