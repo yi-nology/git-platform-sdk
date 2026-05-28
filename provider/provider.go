@@ -16,6 +16,7 @@ const (
 	PlatformGitee       Platform = "gitee"
 	PlatformForgejo     Platform = "forgejo"
 	PlatformTencentCode Platform = "tencent_code"
+	PlatformGitCode     Platform = "gitcode"
 )
 
 type Provider interface {

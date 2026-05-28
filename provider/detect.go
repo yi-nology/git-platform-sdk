@@ -106,6 +106,10 @@ func classifyHost(host string) (Platform, string) {
 		return PlatformGitLab, "https://gitlab.com/api/v4"
 	case strings.Contains(lower, "gitea.com"):
 		return PlatformGitea, "https://gitea.com/api/v1"
+	case strings.Contains(lower, "gitee.com"):
+		return PlatformGitee, "https://gitee.com/api/v5"
+	case strings.Contains(lower, "gitcode.com"):
+		return PlatformGitCode, "https://api.gitcode.com/api/v5"
 	default:
 		return PlatformGitLab, fmt.Sprintf("https://%s/api/v4", host)
 	}
