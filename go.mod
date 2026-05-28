@@ -7,12 +7,10 @@ require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
 	github.com/go-git/go-git/v6 v6.0.0-alpha.3
 	github.com/google/go-github/v69 v69.2.0
-	github.com/yi-nology/gitcode_api v0.0.0-00010101000000-000000000000
+	github.com/yi-nology/gitcode_api v0.1.0
 	gitlab.com/gitlab-org/api/client-go v1.46.0
 	golang.org/x/oauth2 v0.34.0
 )
-
-replace github.com/yi-nology/gitcode_api => ../gitcode_api
 
 require (
 	github.com/42wim/httpsig v1.2.4 // indirect
