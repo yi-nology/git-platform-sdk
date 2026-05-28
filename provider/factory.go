@@ -22,7 +22,9 @@ func NewProvider(cfg Config) (Provider, error) {
 	case PlatformTencentCode:
 		return NewTencentCodeProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
 	case PlatformGitee:
-		return NewGiteeProvider(cfg.BaseURL, cfg.Token), nil
+		return NewGiteeProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
+	case PlatformGitCode:
+		return NewGitCodeProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", cfg.Platform)
 	}
