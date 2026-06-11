@@ -325,6 +325,40 @@ func (f *forgejoProvider) CreateDiscussion(ctx context.Context, owner, repo stri
 	return strconv.FormatInt(comment.ID, 10), nil
 }
 
+func (f *forgejoProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
+	reviewOpts := forgejo.CreatePullReviewOptions{
+		CommitID: opts.CommitID,
+		Body:     opts.Body,
+	}
+	switch opts.Event {
+	case "APPROVE":
+		reviewOpts.State = forgejo.ReviewStateApproved
+	case "REQUEST_CHANGES":
+		reviewOpts.State = forgejo.ReviewStateRequestChanges
+	default:
+		reviewOpts.State = forgejo.ReviewStateComment
+	}
+	for _, c := range opts.Comments {
+		rc := forgejo.CreatePullReviewComment{
+			Path:       c.Path,
+			Body:       c.Body,
+			NewLineNum: int64(c.Line),
+		}
+		if c.Side == "LEFT" {
+			rc.OldLineNum = int64(c.Line)
+			rc.NewLineNum = 0
+		}
+		reviewOpts.Comments = append(reviewOpts.Comments, rc)
+	}
+	review, _, err := f.client.CreatePullReview(owner, repo, int64(number), reviewOpts)
+	if err != nil {
+		return nil, err
+	}
+	return &ReviewResult{
+		ID: strconv.FormatInt(review.ID, 10),
+	}, nil
+}
+
 func (f *forgejoProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
 	stateMap := map[string]forgejo.StatusState{
 		"success": forgejo.StatusSuccess,

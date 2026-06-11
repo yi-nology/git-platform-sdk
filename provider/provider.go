@@ -43,6 +43,7 @@ type Provider interface {
 	CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error)
 	DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error
 	CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error)
+	CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error)
 	CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error
 	GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error)
 	UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error
@@ -99,6 +100,8 @@ type ChangeRequest struct {
 	State        CRState   `json:"state"`
 	SourceBranch string    `json:"source_branch"`
 	TargetBranch string    `json:"target_branch"`
+	HeadSHA      string    `json:"head_sha,omitempty"`
+	BaseSHA      string    `json:"base_sha,omitempty"`
 	Author       *CRUser   `json:"author"`
 	Reviewers    []*CRUser `json:"reviewers"`
 	Labels       []string  `json:"labels"`
@@ -218,6 +221,29 @@ type DiscussionOptions struct {
 	FilePath string `json:"file_path,omitempty"`
 	NewLine  int    `json:"new_line,omitempty"`
 	OldLine  int    `json:"old_line,omitempty"`
+}
+
+type ReviewComment struct {
+	Path      string `json:"path"`
+	Body      string `json:"body"`
+	Line      int    `json:"line,omitempty"`
+	StartLine int    `json:"start_line,omitempty"`
+	EndLine   int    `json:"end_line,omitempty"`
+	Side      string `json:"side,omitempty"`
+}
+
+type CreateReviewOptions struct {
+	CommitID string          `json:"commit_id"`
+	Event    string          `json:"event"`
+	Body     string          `json:"body"`
+	Comments []ReviewComment `json:"comments,omitempty"`
+}
+
+type ReviewResult struct {
+	ID        string `json:"id"`
+	Body      string `json:"body,omitempty"`
+	HTMLURL   string `json:"html_url,omitempty"`
+	User      *CRUser `json:"user,omitempty"`
 }
 
 type CommitStatusOptions struct {

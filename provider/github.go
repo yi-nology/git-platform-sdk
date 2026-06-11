@@ -445,6 +445,58 @@ func (g *githubProvider) CreateDiscussion(ctx context.Context, owner, repo strin
 	return strconv.FormatInt(c.GetID(), 10), nil
 }
 
+func (g *githubProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
+	reviewRequest := &github.PullRequestReviewRequest{
+		CommitID: github.String(opts.CommitID),
+		Body:     github.String(opts.Body),
+		Event:    github.String(opts.Event),
+	}
+	for _, c := range opts.Comments {
+		rc := &github.DraftReviewComment{
+			Path: github.String(c.Path),
+			Body: github.String(c.Body),
+		}
+		if c.StartLine > 0 && c.EndLine > c.StartLine {
+			rc.StartLine = github.Int(c.StartLine)
+			rc.Line = github.Int(c.EndLine)
+			if c.Side != "" {
+				rc.Side = github.String(c.Side)
+			} else {
+				rc.Side = github.String("RIGHT")
+			}
+			if c.StartLine != c.EndLine {
+				rc.StartSide = github.String("RIGHT")
+			}
+		} else if c.Line > 0 {
+			rc.Line = github.Int(c.Line)
+			if c.Side != "" {
+				rc.Side = github.String(c.Side)
+			} else {
+				rc.Side = github.String("RIGHT")
+			}
+		}
+		reviewRequest.Comments = append(reviewRequest.Comments, rc)
+	}
+	review, _, err := g.client.PullRequests.CreateReview(ctx, owner, repo, number, reviewRequest)
+	if err != nil {
+		return nil, err
+	}
+	result := &ReviewResult{
+		ID: strconv.FormatInt(review.GetID(), 10),
+	}
+	if review.GetHTMLURL() != "" {
+		result.HTMLURL = review.GetHTMLURL()
+	}
+	if review.GetUser() != nil {
+		result.User = &CRUser{
+			ID:        review.GetUser().GetID(),
+			Username:  review.GetUser().GetLogin(),
+			AvatarURL: review.GetUser().GetAvatarURL(),
+		}
+	}
+	return result, nil
+}
+
 func (g *githubProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
 	status := &github.RepoStatus{
 		State:       github.String(opts.State),
@@ -551,6 +603,8 @@ func convertGithubPR(pr *github.PullRequest) *ChangeRequest {
 		State:        state,
 		SourceBranch: pr.GetHead().GetRef(),
 		TargetBranch: pr.GetBase().GetRef(),
+		HeadSHA:      pr.GetHead().GetSHA(),
+		BaseSHA:      pr.GetBase().GetSHA(),
 		Author:       author,
 		Reviewers:    reviewers,
 		Labels:       labels,

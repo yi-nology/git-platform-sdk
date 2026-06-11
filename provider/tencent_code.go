@@ -384,6 +384,14 @@ func (t *tencentCodeProvider) CreateDiscussion(ctx context.Context, owner, repo 
 	return t.CreateNote(ctx, owner, repo, number, opts.Body)
 }
 
+func (t *tencentCodeProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
+	noteID, err := t.CreateNote(ctx, owner, repo, number, opts.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &ReviewResult{ID: noteID}, nil
+}
+
 func (t *tencentCodeProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
 	encoded := encodeProjectPath(owner, repo)
 	payload := map[string]interface{}{

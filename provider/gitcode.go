@@ -310,6 +310,10 @@ func (g *gitcodeProvider) CreateDiscussion(ctx context.Context, owner, repo stri
 	return "", nil
 }
 
+func (g *gitcodeProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
+	return &ReviewResult{}, nil
+}
+
 func (g *gitcodeProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
 	return nil
 }
