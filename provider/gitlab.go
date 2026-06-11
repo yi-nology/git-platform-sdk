@@ -350,6 +350,59 @@ func (g *gitlabProvider) CreateDiscussion(ctx context.Context, owner, repo strin
 	return disc.ID, nil
 }
 
+func (g *gitlabProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
+	pid := owner + "/" + repo
+
+	var headSHA string
+	mr, _, err := g.client.MergeRequests.GetMergeRequest(pid, int64(number), nil, gitlab.WithContext(ctx))
+	if err == nil && mr != nil {
+		headSHA = gitlabMRHeadSHA(mr)
+	}
+
+	if opts.Body != "" {
+		noteID, err := g.CreateNote(ctx, owner, repo, number, opts.Body)
+		if err != nil {
+			return nil, fmt.Errorf("create summary note: %w", err)
+		}
+		_ = noteID
+	}
+
+	if opts.CommitID != "" {
+		state := "success"
+		if opts.Event == "REQUEST_CHANGES" {
+			state = "failed"
+		}
+		_ = g.CreateCommitStatus(ctx, owner, repo, opts.CommitID, CommitStatusOptions{
+			State:       state,
+			Context:     "review-service",
+			Description: opts.Body,
+		})
+	}
+
+	for _, c := range opts.Comments {
+		discOpts := DiscussionOptions{
+			Body:     c.Body,
+			FilePath: c.Path,
+		}
+		if c.Side == "LEFT" && c.Line > 0 {
+			discOpts.OldLine = c.Line
+		} else if c.Line > 0 {
+			discOpts.NewLine = c.Line
+		}
+		if c.StartLine > 0 && c.EndLine > c.StartLine {
+			discOpts.NewLine = c.EndLine
+		}
+
+		_, _ = g.CreateDiscussion(ctx, owner, repo, number, discOpts)
+	}
+
+	result := &ReviewResult{
+		ID: fmt.Sprintf("gl-review-%d-%d", number, time.Now().UnixNano()),
+	}
+	_ = headSHA
+	return result, nil
+}
+
 func (g *gitlabProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
 	pid := owner + "/" + repo
 	statusOpts := &gitlab.SetCommitStatusOptions{
@@ -513,8 +566,20 @@ func convertGitlabMR(mr *gitlab.MergeRequest) *ChangeRequest {
 		State: mapGLState(mr.State), SourceBranch: mr.SourceBranch, TargetBranch: mr.TargetBranch,
 		Author: author, Reviewers: reviewers, Labels: mr.Labels,
 		MergeStatus: mr.DetailedMergeStatus, WebURL: mr.WebURL,
+		HeadSHA: gitlabMRHeadSHA(mr), BaseSHA: gitlabMRBaseSHA(mr),
 		CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}
+}
+
+func gitlabMRHeadSHA(mr *gitlab.MergeRequest) string {
+	if mr.DiffRefs.HeadSha != "" {
+		return mr.DiffRefs.HeadSha
+	}
+	return mr.SHA
+}
+
+func gitlabMRBaseSHA(mr *gitlab.MergeRequest) string {
+	return mr.DiffRefs.BaseSha
 }
 
 func convertGitlabBasicMR(mr *gitlab.BasicMergeRequest) *ChangeRequest {

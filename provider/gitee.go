@@ -124,6 +124,9 @@ func (g *giteeProvider) DeleteNote(ctx context.Context, owner, repo string, numb
 func (g *giteeProvider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }
+func (g *giteeProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 func (g *giteeProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
 	return fmt.Errorf("not implemented")
 }

@@ -326,6 +326,60 @@ func (g *giteaProvider) CreateDiscussion(ctx context.Context, owner, repo string
 	return strconv.FormatInt(comment.ID, 10), nil
 }
 
+func (g *giteaProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
+	reviewOpts := gitea.CreatePullReviewOptions{
+		CommitID: opts.CommitID,
+		Body:     opts.Body,
+	}
+	switch opts.Event {
+	case "APPROVE":
+		reviewOpts.State = gitea.ReviewStateApproved
+	case "REQUEST_CHANGES":
+		reviewOpts.State = gitea.ReviewStateRequestChanges
+	default:
+		reviewOpts.State = gitea.ReviewStateComment
+	}
+
+	for _, c := range opts.Comments {
+		rc := gitea.CreatePullReviewComment{
+			Path: c.Path,
+			Body: c.Body,
+		}
+		if c.Side == "LEFT" {
+			rc.OldLineNum = int64(c.Line)
+		} else {
+			rc.NewLineNum = int64(c.Line)
+		}
+		if c.StartLine > 0 && c.EndLine > c.StartLine {
+			if c.Side == "LEFT" {
+				rc.OldLineNum = int64(c.StartLine)
+			} else {
+				rc.NewLineNum = int64(c.StartLine)
+			}
+		}
+		reviewOpts.Comments = append(reviewOpts.Comments, rc)
+	}
+
+	review, _, err := g.client.CreatePullReview(owner, repo, int64(number), reviewOpts)
+	if err != nil {
+		return nil, err
+	}
+	result := &ReviewResult{
+		ID: strconv.FormatInt(review.ID, 10),
+	}
+	if review.HTMLURL != "" {
+		result.HTMLURL = review.HTMLURL
+	}
+	if review.Reviewer != nil {
+		result.User = &CRUser{
+			ID:        review.Reviewer.ID,
+			Username:  review.Reviewer.UserName,
+			AvatarURL: review.Reviewer.AvatarURL,
+		}
+	}
+	return result, nil
+}
+
 func (g *giteaProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
 	stateMap := map[string]gitea.StatusState{
 		"success": gitea.StatusSuccess,
@@ -547,6 +601,8 @@ func convertGiteaPR(pr *gitea.PullRequest) *ChangeRequest {
 		State:        mapGiteaState(string(pr.State), pr.HasMerged),
 		SourceBranch: pr.Head.Ref,
 		TargetBranch: pr.Base.Ref,
+		HeadSHA:      pr.Head.Sha,
+		BaseSHA:      pr.Base.Sha,
 		Author:       author,
 		Reviewers:    reviewers,
 		Labels:       labels,
