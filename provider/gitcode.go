@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	gitcode "github.com/yi-nology/gitcode_api"
@@ -245,10 +247,14 @@ func (g *gitcodeProvider) GetCRDiff(ctx context.Context, owner, repo string, num
 	}
 	diff := &MergeDiff{}
 	for _, f := range files {
+		patch := ""
+		if f.Patch != nil {
+			patch = fmt.Sprint(f.Patch)
+		}
 		cf := &ChangedFile{
 			OldPath:   f.PreviousFilename,
 			NewPath:   f.Filename,
-			Diff:      f.Patch,
+			Diff:      patch,
 			Additions: f.Additions,
 			Deletions: f.Deletions,
 			IsNew:     f.Status == "added",
@@ -272,10 +278,14 @@ func (g *gitcodeProvider) GetCRFiles(ctx context.Context, owner, repo string, nu
 	}
 	result := make([]*ChangedFile, 0, len(files))
 	for _, f := range files {
+		patch := ""
+		if f.Patch != nil {
+			patch = fmt.Sprint(f.Patch)
+		}
 		cf := &ChangedFile{
 			OldPath:   f.PreviousFilename,
 			NewPath:   f.Filename,
-			Diff:      f.Patch,
+			Diff:      patch,
 			Additions: f.Additions,
 			Deletions: f.Deletions,
 			IsNew:     f.Status == "added",
@@ -362,8 +372,9 @@ func (g *gitcodeProvider) ListCRComments(ctx context.Context, owner, repo string
 			Body: c.Body,
 		}
 		if c.Author != nil {
+			authorID, _ := strconv.ParseInt(string(c.Author.ID), 10, 64)
 			cc.Author = &CRUser{
-				ID:        c.Author.ID,
+				ID:        authorID,
 				Username:  c.Author.Login,
 				AvatarURL: c.Author.AvatarURL,
 			}
@@ -387,8 +398,9 @@ func (g *gitcodeProvider) ListCRCommits(ctx context.Context, owner, repo string,
 			Message: c.Message,
 		}
 		if c.Author != nil {
+			authorID, _ := strconv.ParseInt(string(c.Author.ID), 10, 64)
 			cc.Author = &CRUser{
-				ID:        c.Author.ID,
+				ID:        authorID,
 				Username:  c.Author.Login,
 				AvatarURL: c.Author.AvatarURL,
 			}
@@ -464,8 +476,9 @@ func (g *gitcodeProvider) GetCommit(ctx context.Context, owner, repo, sha string
 		Message: c.Message,
 	}
 	if c.Author != nil {
+		authorID, _ := strconv.ParseInt(string(c.Author.ID), 10, 64)
 		ci.Author = &CRUser{
-			ID:        c.Author.ID,
+			ID:        authorID,
 			Username:  c.Author.Login,
 			AvatarURL: c.Author.AvatarURL,
 		}
@@ -489,8 +502,9 @@ func (g *gitcodeProvider) ListCommits(ctx context.Context, owner, repo string, o
 			Message: c.Message,
 		}
 		if c.Author != nil {
+			authorID, _ := strconv.ParseInt(string(c.Author.ID), 10, 64)
 			ci.Author = &CRUser{
-				ID:        c.Author.ID,
+				ID:        authorID,
 				Username:  c.Author.Login,
 				AvatarURL: c.Author.AvatarURL,
 			}
@@ -517,8 +531,9 @@ func (g *gitcodeProvider) CompareCommits(ctx context.Context, owner, repo, base,
 			Message: c.Message,
 		}
 		if c.Author != nil {
+			authorID, _ := strconv.ParseInt(string(c.Author.ID), 10, 64)
 			ci.Author = &CRUser{
-				ID:        c.Author.ID,
+				ID:        authorID,
 				Username:  c.Author.Login,
 				AvatarURL: c.Author.AvatarURL,
 			}
@@ -689,8 +704,9 @@ func convertGitCodePullRequest(pr *gitcode.PullRequest) *ChangeRequest {
 		cr.TargetBranch = pr.Base.Ref
 	}
 	if pr.Author != nil {
+		authorID, _ := strconv.ParseInt(string(pr.Author.ID), 10, 64)
 		cr.Author = &CRUser{
-			ID:        pr.Author.ID,
+			ID:        authorID,
 			Username:  pr.Author.Login,
 			AvatarURL: pr.Author.AvatarURL,
 		}
