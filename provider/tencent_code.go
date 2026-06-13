@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"git.enjoye.top/enjoydream/ekit/pkg/encoding"
+	"github.com/yi-nology/git-platform-sdk/pkg/encoding"
 )
 
 func encodeProjectPath(owner, repo string) string {
@@ -24,12 +24,20 @@ type tencentCodeProvider struct {
 	skipTLS bool
 }
 
-func NewTencentCodeProvider(baseURL, token string, skipTLS bool) *tencentCodeProvider {
+func init() {
+	Register(PlatformTencentCode, func(cfg Config) (Provider, error) {
+		return newTencentCodeProvider(cfg)
+	})
+}
+
+func newTencentCodeProvider(cfg Config) (*tencentCodeProvider, error) {
+	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://git.code.tencent.com/api/v3"
 	}
-	bp := newBaseProvider(baseURL, token, skipTLS, authHeaderPrivateToken, "Tencent Code")
-	if skipTLS {
+	opts := configBaseOptions(cfg)
+	bp := newBaseProvider(baseURL, cfg.Token, cfg.SkipTLS, authHeaderPrivateToken, "Tencent Code", opts...)
+	if cfg.SkipTLS {
 		bp.client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
@@ -52,7 +60,7 @@ func NewTencentCodeProvider(baseURL, token string, skipTLS bool) *tencentCodePro
 			},
 		}
 	}
-	return &tencentCodeProvider{baseProvider: bp, skipTLS: skipTLS}
+	return &tencentCodeProvider{baseProvider: bp, skipTLS: cfg.SkipTLS}, nil
 }
 
 func (t *tencentCodeProvider) Platform() Platform { return PlatformTencentCode }
@@ -202,7 +210,7 @@ func (t *tencentCodeProvider) ListCRs(ctx context.Context, opts ListCROptions) (
 	for i := range mrs {
 		crs = append(crs, mrs[i].toCR())
 	}
-	return crs, parseTotalCount(headers, len(crs)), nil
+	return crs, ParseTotalCountHeader(headers, len(crs)), nil
 }
 
 func (t *tencentCodeProvider) MergeCR(ctx context.Context, owner, repo string, number int, opts MergeCROptions) (*ChangeRequest, error) {
@@ -344,7 +352,7 @@ func (t *tencentCodeProvider) GetCRDiff(ctx context.Context, owner, repo string,
 	files := make([]*ChangedFile, 0, len(changes.Changes))
 	totalAdd, totalDel := 0, 0
 	for _, c := range changes.Changes {
-		add, del := countDiffLines(c.Diff)
+		add, del := CountDiffLines(c.Diff)
 		totalAdd += add
 		totalDel += del
 		files = append(files, &ChangedFile{
@@ -491,12 +499,7 @@ func (t *tencentCodeProvider) ParseWebhookEvent(r *http.Request, secret string) 
 	if repoName == "" {
 		repoName = pl.Repository.Name
 	}
-	parts := strings.SplitN(repoName, "/", 2)
-	er := &EventRepo{FullName: repoName}
-	if len(parts) == 2 {
-		er.Owner = parts[0]
-		er.Name = parts[1]
-	}
+	er := BuildEventRepo(repoName)
 	actor := &CRUser{ID: int64(pl.User.ID), Username: pl.User.Username, Name: pl.User.Name}
 
 	event := &NormalizedEvent{
@@ -597,14 +600,7 @@ func (mr *tcMR) toCR() *ChangeRequest {
 }
 
 func mapTCState(state string) CRState {
-	switch state {
-	case "merged":
-		return CRStateMerged
-	case "closed":
-		return CRStateClosed
-	default:
-		return CRStateOpened
-	}
+	return MapMRStateToCR(state)
 }
 
 func (t *tencentCodeProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {
@@ -835,7 +831,7 @@ func (t *tencentCodeProvider) CompareCommits(ctx context.Context, owner, repo, b
 		result.Commits = append(result.Commits, &CommitInfo{SHA: c.ID, Message: c.Message})
 	}
 	for _, d := range cmp.Diffs {
-		add, del := countDiffLines(d.Diff)
+		add, del := CountDiffLines(d.Diff)
 		result.Files = append(result.Files, &ChangedFile{
 			OldPath: d.OldPath, NewPath: d.NewPath, Diff: d.Diff,
 			Additions: add, Deletions: del, IsNew: d.NewFile, IsDeleted: d.DeletedFile, IsRenamed: d.RenamedFile,

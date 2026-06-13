@@ -16,34 +16,47 @@ import (
 )
 
 type githubProvider struct {
-	client   *github.Client
-	baseURL  string
+	client  *github.Client
+	baseURL string
+	logger  Logger
 }
 
-func NewGitHubProvider(baseURL, token string, skipTLS bool) *githubProvider {
+func init() {
+	Register(PlatformGitHub, func(cfg Config) (Provider, error) {
+		return newGitHubProvider(cfg), nil
+	})
+}
+
+func newGitHubProvider(cfg Config) *githubProvider {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = NewNoopLogger()
+	}
 	transport := &http.Transport{}
-	if skipTLS {
+	if cfg.SkipTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	src := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	src := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cfg.Token})
 	httpClient := &http.Client{
 		Transport: &oauth2.Transport{Source: src, Base: transport},
 		Timeout:   30 * time.Second,
 	}
-	if baseURL == "" {
+	if cfg.BaseURL == "" {
 		return &githubProvider{
 			client:  github.NewClient(httpClient),
 			baseURL: "https://api.github.com",
+			logger:  logger,
 		}
 	}
-	client, err := github.NewEnterpriseClient(baseURL, "", httpClient)
+	client, err := github.NewEnterpriseClient(cfg.BaseURL, "", httpClient)
 	if err != nil {
 		return &githubProvider{
 			client:  github.NewClient(httpClient),
 			baseURL: "https://api.github.com",
+			logger:  logger,
 		}
 	}
-	return &githubProvider{client: client, baseURL: baseURL}
+	return &githubProvider{client: client, baseURL: cfg.BaseURL, logger: logger}
 }
 
 func (g *githubProvider) Platform() Platform { return PlatformGitHub }
@@ -534,11 +547,7 @@ func convertGithubRepo(r *github.Repository) *PlatformRepo {
 	if r == nil {
 		return nil
 	}
-	parts := strings.SplitN(r.GetFullName(), "/", 2)
-	owner := ""
-	if len(parts) == 2 {
-		owner = parts[0]
-	}
+	owner, _ := SplitFullName(r.GetFullName())
 	return &PlatformRepo{
 		ID:            r.GetID(),
 		FullName:      r.GetFullName(),
@@ -634,13 +643,7 @@ func convertGithubHook(h *github.Hook) *PlatformWebhook {
 }
 
 func convertGithubEventRepo(fullName string) *EventRepo {
-	parts := strings.SplitN(fullName, "/", 2)
-	er := &EventRepo{FullName: fullName}
-	if len(parts) == 2 {
-		er.Owner = parts[0]
-		er.Name = parts[1]
-	}
-	return er
+	return BuildEventRepo(fullName)
 }
 
 func mapGithubAction(action string, merged bool) string {

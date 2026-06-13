@@ -17,23 +17,34 @@ import (
 
 type gitlabProvider struct {
 	client *gitlab.Client
+	logger Logger
 }
 
-func NewGitLabProvider(baseURL, token string, skipTLS bool) *gitlabProvider {
+func init() {
+	Register(PlatformGitLab, func(cfg Config) (Provider, error) {
+		return newGitLabProvider(cfg), nil
+	})
+}
+
+func newGitLabProvider(cfg Config) *gitlabProvider {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = NewNoopLogger()
+	}
 	transport := &http.Transport{}
-	if skipTLS {
+	if cfg.SkipTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
 	opts := []gitlab.ClientOptionFunc{gitlab.WithHTTPClient(httpClient)}
-	if baseURL != "" {
-		opts = append(opts, gitlab.WithBaseURL(baseURL))
+	if cfg.BaseURL != "" {
+		opts = append(opts, gitlab.WithBaseURL(cfg.BaseURL))
 	}
-	client, err := gitlab.NewClient(token, opts...)
+	client, err := gitlab.NewClient(cfg.Token, opts...)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create GitLab client: %v", err))
 	}
-	return &gitlabProvider{client: client}
+	return &gitlabProvider{client: client, logger: logger}
 }
 
 func (g *gitlabProvider) Platform() Platform { return PlatformGitLab }
@@ -269,7 +280,7 @@ func (g *gitlabProvider) GetCRDiff(ctx context.Context, owner, repo string, numb
 	}
 	diff := &MergeDiff{}
 	for _, c := range diffs {
-		additions, deletions := countDiffLines(c.Diff)
+		additions, deletions := CountDiffLines(c.Diff)
 		cf := &ChangedFile{
 			OldPath: c.OldPath, NewPath: c.NewPath, Diff: c.Diff,
 			Additions: additions, Deletions: deletions,
@@ -471,12 +482,7 @@ func (g *gitlabProvider) ParseWebhookEvent(r *http.Request, secret string) (*Nor
 		return nil, err
 	}
 
-	parts := strings.SplitN(pl.Project.PathWithNS, "/", 2)
-	er := &EventRepo{FullName: pl.Project.PathWithNS}
-	if len(parts) == 2 {
-		er.Owner = parts[0]
-		er.Name = parts[1]
-	}
+	er := BuildEventRepo(pl.Project.PathWithNS)
 	actor := &CRUser{ID: pl.User.ID, Username: pl.User.Username, Name: pl.User.Name}
 
 	event := &NormalizedEvent{
@@ -532,11 +538,7 @@ func (g *gitlabProvider) ValidateWebhookSignature(r *http.Request, secret string
 }
 
 func convertGitlabProject(p *gitlab.Project) *PlatformRepo {
-	parts := strings.SplitN(p.PathWithNamespace, "/", 2)
-	owner := ""
-	if len(parts) == 2 {
-		owner = parts[0]
-	}
+	owner, _ := SplitFullName(p.PathWithNamespace)
 	return &PlatformRepo{
 		ID: p.ID, FullName: p.PathWithNamespace, Name: p.Name, Owner: owner,
 		Description: p.Description, CloneURL: p.HTTPURLToRepo, SSHURL: p.SSHURLToRepo,
@@ -645,29 +647,9 @@ func mapCommitStateToGitlab(state string) gitlab.BuildStateValue {
 }
 
 func mapGLState(state string) CRState {
-	switch state {
-	case "merged":
-		return CRStateMerged
-	case "closed":
-		return CRStateClosed
-	default:
-		return CRStateOpened
-	}
+	return MapMRStateToCR(state)
 }
 
-func countDiffLines(diff string) (additions, deletions int) {
-	for _, line := range strings.Split(diff, "\n") {
-		if len(line) == 0 {
-			continue
-		}
-		if line[0] == '+' && !strings.HasPrefix(line, "+++") {
-			additions++
-		} else if line[0] == '-' && !strings.HasPrefix(line, "---") {
-			deletions++
-		}
-	}
-	return
-}
 
 func (g *gitlabProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {
 	pid := owner + "/" + repo
@@ -837,7 +819,7 @@ func (g *gitlabProvider) CompareCommits(ctx context.Context, owner, repo, base, 
 		result.TotalCommits++
 	}
 	for _, d := range cmp.Diffs {
-		add, del := countDiffLines(d.Diff)
+		add, del := CountDiffLines(d.Diff)
 		result.Files = append(result.Files, &ChangedFile{
 			OldPath: d.OldPath, NewPath: d.NewPath, Diff: d.Diff,
 			Additions: add, Deletions: del,
