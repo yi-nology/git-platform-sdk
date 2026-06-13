@@ -20,23 +20,35 @@ import (
 
 type forgejoProvider struct {
 	client *forgejo.Client
+	logger Logger
 }
 
-func NewForgejoProvider(baseURL, token string, skipTLS bool) *forgejoProvider {
+func init() {
+	Register(PlatformForgejo, func(cfg Config) (Provider, error) {
+		return newForgejoProvider(cfg), nil
+	})
+}
+
+func newForgejoProvider(cfg Config) *forgejoProvider {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = NewNoopLogger()
+	}
+	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://codeberg.org"
 	}
 	baseURL = strings.TrimSuffix(strings.TrimSuffix(baseURL, "/"), "/api/v1")
 	transport := &http.Transport{}
-	if skipTLS {
+	if cfg.SkipTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
-	client, err := forgejo.NewClient(baseURL, forgejo.SetToken(token), forgejo.SetHTTPClient(httpClient))
+	client, err := forgejo.NewClient(baseURL, forgejo.SetToken(cfg.Token), forgejo.SetHTTPClient(httpClient))
 	if err != nil {
-		return &forgejoProvider{}
+		return &forgejoProvider{logger: logger}
 	}
-	return &forgejoProvider{client: client}
+	return &forgejoProvider{client: client, logger: logger}
 }
 
 func (f *forgejoProvider) Platform() Platform { return PlatformForgejo }
@@ -450,12 +462,7 @@ func (f *forgejoProvider) ParseWebhookEvent(r *http.Request, secret string) (*No
 		return nil, err
 	}
 
-	parts := strings.SplitN(pl.Repository.FullName, "/", 2)
-	er := &EventRepo{FullName: pl.Repository.FullName}
-	if len(parts) == 2 {
-		er.Owner = parts[0]
-		er.Name = parts[1]
-	}
+	er := BuildEventRepo(pl.Repository.FullName)
 	actor := &CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
 	event := &NormalizedEvent{
@@ -603,28 +610,14 @@ func convertForgejoHook(h *forgejo.Hook) *PlatformWebhook {
 }
 
 func mapForgejoState(state string, merged bool) CRState {
-	if merged {
-		return CRStateMerged
-	}
-	if state == "closed" {
-		return CRStateClosed
-	}
-	return CRStateOpened
+	return MapBoolStateToCR(state, merged)
 }
 
 func parseForgejoTotalCount(resp *forgejo.Response) int {
 	if resp == nil {
 		return 0
 	}
-	totalStr := resp.Header.Get("X-Total-Count")
-	if totalStr == "" {
-		return 0
-	}
-	n, err := strconv.Atoi(totalStr)
-	if err != nil {
-		return 0
-	}
-	return n
+	return ParseTotalCountHeader(resp.Header, 0)
 }
 
 func (f *forgejoProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {

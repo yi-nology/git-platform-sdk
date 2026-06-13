@@ -5,11 +5,12 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
 
-	"git.enjoye.top/enjoydream/ekit/pkg/encoding"
+	"github.com/yi-nology/git-platform-sdk/pkg/encoding"
 )
 
 var (
@@ -17,15 +18,24 @@ var (
 	keyOnce sync.Once
 )
 
-func getKey() []byte {
+func getKey() ([]byte, error) {
+	var onceErr error
 	keyOnce.Do(func() {
 		k := os.Getenv("ENCRYPTION_KEY")
 		if k == "" {
-			k = "12345678901234567890123456789012"
+			onceErr = fmt.Errorf("ENCRYPTION_KEY environment variable is required for credential encryption")
+			return
+		}
+		if len(k) != 32 {
+			onceErr = fmt.Errorf("ENCRYPTION_KEY must be exactly 32 bytes, got %d", len(k))
+			return
 		}
 		key = []byte(k)
 	})
-	return key
+	if onceErr != nil {
+		return nil, onceErr
+	}
+	return key, nil
 }
 
 func EncryptGCM(plaintext string) (string, error) {
@@ -33,7 +43,12 @@ func EncryptGCM(plaintext string) (string, error) {
 		return "", nil
 	}
 
-	block, err := aes.NewCipher(getKey())
+	k, err := getKey()
+	if err != nil {
+		return "", err
+	}
+
+	block, err := aes.NewCipher(k)
 	if err != nil {
 		return "", err
 	}
@@ -57,13 +72,18 @@ func DecryptGCM(cryptoText string) (string, error) {
 		return "", nil
 	}
 
+	k, err := getKey()
+	if err != nil {
+		return "", err
+	}
+
 	dataStr, err := encoding.Base64URLDecode(cryptoText)
 	if err != nil {
 		return "", err
 	}
 	data := []byte(dataStr)
 
-	block, err := aes.NewCipher(getKey())
+	block, err := aes.NewCipher(k)
 	if err != nil {
 		return "", err
 	}

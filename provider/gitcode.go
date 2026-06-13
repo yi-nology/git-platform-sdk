@@ -1,10 +1,17 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	gitcode "github.com/yi-nology/gitcode_api"
@@ -12,16 +19,27 @@ import (
 
 type gitcodeProvider struct {
 	client *gitcode.Client
+	logger Logger
 }
 
-func NewGitCodeProvider(baseURL, token string, skipTLS bool) *gitcodeProvider {
-	var client *gitcode.Client
-	if baseURL == "" {
-		client = gitcode.NewClient(token)
-	} else {
-		client = gitcode.NewClientWithBaseURL(baseURL, token)
+func init() {
+	Register(PlatformGitCode, func(cfg Config) (Provider, error) {
+		return newGitCodeProvider(cfg), nil
+	})
+}
+
+func newGitCodeProvider(cfg Config) *gitcodeProvider {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = NewNoopLogger()
 	}
-	return &gitcodeProvider{client: client}
+	var client *gitcode.Client
+	if cfg.BaseURL == "" {
+		client = gitcode.NewClient(cfg.Token)
+	} else {
+		client = gitcode.NewClientWithBaseURL(cfg.BaseURL, cfg.Token)
+	}
+	return &gitcodeProvider{client: client, logger: logger}
 }
 
 func (g *gitcodeProvider) Platform() Platform { return PlatformGitCode }
@@ -202,14 +220,103 @@ func (g *gitcodeProvider) ListWebhooks(ctx context.Context, owner, repo string) 
 }
 
 func (g *gitcodeProvider) ParseWebhookEvent(r *http.Request, secret string) (*NormalizedEvent, error) {
-	ne := &NormalizedEvent{
-		Source:    g.Platform(),
-		Timestamp: time.Now(),
+	if err := g.ValidateWebhookSignature(r, secret); err != nil {
+		return nil, err
 	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	eventType := r.Header.Get("X-Gitea-Event")
+	if eventType == "" {
+		eventType = r.Header.Get("X-GitCode-Event")
+	}
+
+	ne := &NormalizedEvent{
+		Source:     g.Platform(),
+		Timestamp:  time.Now(),
+		RawPayload: json.RawMessage(body),
+	}
+
+	switch eventType {
+	case "pull_request":
+		prEvent, err := g.client.ParsePullRequestEvent(body)
+		if err != nil {
+			return nil, err
+		}
+		action := prEvent.Action
+		if action == "closed" && prEvent.PullRequest != nil && prEvent.PullRequest.Merged {
+			action = "merged"
+		}
+		ne.Type = "cr." + action
+		ne.Action = action
+		if prEvent.Sender != nil {
+			senderID, _ := strconv.ParseInt(string(prEvent.Sender.ID), 10, 64)
+			ne.Actor = &CRUser{
+				ID:        senderID,
+				Username:  prEvent.Sender.Login,
+				AvatarURL: prEvent.Sender.AvatarURL,
+			}
+		}
+		if prEvent.Repository != nil {
+			ne.Repo = BuildEventRepo(prEvent.Repository.FullName)
+		}
+		if prEvent.PullRequest != nil {
+			ne.CR = convertGitCodePullRequest(prEvent.PullRequest)
+			if prEvent.PullRequest.Head != nil {
+				ne.CommitSHA = prEvent.PullRequest.Head.SHA
+			}
+		}
+	case "push":
+		pushEvent, err := g.client.ParsePushEvent(body)
+		if err != nil {
+			return nil, err
+		}
+		ne.Type = "push"
+		ne.Branch = strings.TrimPrefix(pushEvent.Ref, "refs/heads/")
+		ne.CommitSHA = pushEvent.After
+		if pushEvent.Sender != nil {
+			senderID, _ := strconv.ParseInt(string(pushEvent.Sender.ID), 10, 64)
+			ne.Actor = &CRUser{
+				ID:        senderID,
+				Username:  pushEvent.Sender.Login,
+				AvatarURL: pushEvent.Sender.AvatarURL,
+			}
+		}
+		if pushEvent.Repository != nil {
+			ne.Repo = BuildEventRepo(pushEvent.Repository.FullName)
+		}
+	default:
+		ne.Type = eventType
+	}
+
 	return ne, nil
 }
 
 func (g *gitcodeProvider) ValidateWebhookSignature(r *http.Request, secret string) error {
+	if secret == "" {
+		return nil
+	}
+	sig := r.Header.Get("X-Gitea-Signature")
+	if sig == "" {
+		sig = r.Header.Get("X-GitCode-Signature")
+	}
+	if sig == "" {
+		return fmt.Errorf("%w: missing webhook signature header", ErrWebhookValidation)
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(sig), []byte(expected)) {
+		return fmt.Errorf("%w: invalid webhook signature", ErrWebhookValidation)
+	}
 	return nil
 }
 
@@ -317,15 +424,38 @@ func (g *gitcodeProvider) DeleteNote(ctx context.Context, owner, repo string, nu
 }
 
 func (g *gitcodeProvider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error) {
-	return "", nil
+	comment, err := g.client.CreateIssueComment(ctx, owner, repo, number, opts.Body)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%d", comment.ID), nil
 }
 
 func (g *gitcodeProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
-	return &ReviewResult{}, nil
+	review, err := g.client.CreatePullRequestReview(ctx, owner, repo, number, opts.Body, opts.Event)
+	if err != nil {
+		return nil, err
+	}
+	result := &ReviewResult{
+		ID: fmt.Sprintf("%d", review.ID),
+	}
+	user := review.User
+	if user == nil {
+		user = review.Author
+	}
+	if user != nil {
+		authorID, _ := strconv.ParseInt(string(user.ID), 10, 64)
+		result.User = &CRUser{
+			ID:        authorID,
+			Username:  user.Login,
+			AvatarURL: user.AvatarURL,
+		}
+	}
+	return result, nil
 }
 
 func (g *gitcodeProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
-	return nil
+	return fmt.Errorf("%w: CreateCommitStatus for GitCode", ErrNotImplemented)
 }
 
 func (g *gitcodeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
@@ -672,7 +802,7 @@ func (g *gitcodeProvider) CreateRelease(ctx context.Context, owner, repo string,
 }
 
 func (g *gitcodeProvider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	return nil, nil
+	return nil, fmt.Errorf("%w: GetArchive for GitCode", ErrNotImplemented)
 }
 
 func convertGitCodePullRequest(pr *gitcode.PullRequest) *ChangeRequest {
