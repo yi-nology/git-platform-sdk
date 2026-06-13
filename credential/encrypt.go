@@ -4,11 +4,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"io"
 	"os"
 	"sync"
+
+	"git.enjoye.top/enjoydream/ekit/pkg/encoding"
 )
 
 var (
@@ -48,7 +49,7 @@ func EncryptGCM(plaintext string) (string, error) {
 	}
 
 	ciphertext := aesGCM.Seal(nonce, nonce, []byte(plaintext), nil)
-	return base64.URLEncoding.EncodeToString(ciphertext), nil
+	return encoding.Base64URLEncode(string(ciphertext)), nil
 }
 
 func DecryptGCM(cryptoText string) (string, error) {
@@ -56,10 +57,11 @@ func DecryptGCM(cryptoText string) (string, error) {
 		return "", nil
 	}
 
-	data, err := base64.URLEncoding.DecodeString(cryptoText)
+	dataStr, err := encoding.Base64URLDecode(cryptoText)
 	if err != nil {
 		return "", err
 	}
+	data := []byte(dataStr)
 
 	block, err := aes.NewCipher(getKey())
 	if err != nil {
