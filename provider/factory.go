@@ -2,30 +2,30 @@ package provider
 
 import "fmt"
 
+// Config holds the configuration for creating a Provider.
 type Config struct {
 	Platform Platform
 	BaseURL  string
 	Token    string
 	SkipTLS  bool
+
+	// Logger for provider operations. Defaults to a no-op logger.
+	Logger Logger
+	// RetryConfig for automatic retry on transient failures. nil means no retry.
+	RetryConfig *RetryConfig
+	// Hooks for request/response lifecycle interception.
+	Hooks *Hooks
 }
 
+// NewProvider creates a Provider for the given platform using the registry.
+// Returns ErrPlatformNotSupported if the platform is not registered.
 func NewProvider(cfg Config) (Provider, error) {
-	switch cfg.Platform {
-	case PlatformGitLab:
-		return NewGitLabProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
-	case PlatformGitHub:
-		return NewGitHubProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
-	case PlatformGitea:
-		return NewGiteaProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
-	case PlatformForgejo:
-		return NewForgejoProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
-	case PlatformTencentCode:
-		return NewTencentCodeProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
-	case PlatformGitee:
-		return NewGiteeProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
-	case PlatformGitCode:
-		return NewGitCodeProvider(cfg.BaseURL, cfg.Token, cfg.SkipTLS), nil
-	default:
-		return nil, fmt.Errorf("unsupported platform: %s", cfg.Platform)
+	registryMu.RLock()
+	ctor, ok := registry[cfg.Platform]
+	registryMu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrPlatformNotSupported, cfg.Platform)
 	}
+	return ctor(cfg)
 }

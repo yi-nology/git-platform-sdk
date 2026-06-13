@@ -29,7 +29,7 @@ func tcMRResponse(iid int, state, title, source, target string) map[string]inter
 }
 
 func TestTC_Platform(t *testing.T) {
-	p := NewTencentCodeProvider("", "token", false)
+	p, _ := NewProvider(Config{Platform: PlatformTencentCode, Token: "token"})
 	if p.Platform() != PlatformTencentCode {
 		t.Errorf("expected tencent_code, got %s", p.Platform())
 	}

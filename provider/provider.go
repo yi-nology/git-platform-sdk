@@ -3,10 +3,10 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"time"
 )
 
+// Platform represents a Git hosting platform.
 type Platform string
 
 const (
@@ -19,58 +19,33 @@ const (
 	PlatformGitCode     Platform = "gitcode"
 )
 
+// Provider is the unified interface for all Git hosting platforms.
+// It composes 8 focused sub-interfaces for high cohesion and low coupling.
+//
+// Consumers can depend on smaller interfaces (e.g., WebhookManager)
+// when they don't need full Provider capabilities.
 type Provider interface {
+	// Platform returns the platform type.
 	Platform() Platform
-	ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error)
-	GetRepo(ctx context.Context, owner, repo string) (*PlatformRepo, error)
-	CreateCR(ctx context.Context, opts CreateCROptions) (*ChangeRequest, error)
-	GetCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error)
-	ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error)
-	MergeCR(ctx context.Context, owner, repo string, number int, opts MergeCROptions) (*ChangeRequest, error)
-	CloseCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error)
-	CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error)
-	DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error
-	ListWebhooks(ctx context.Context, owner, repo string) ([]*PlatformWebhook, error)
-	ParseWebhookEvent(r *http.Request, secret string) (*NormalizedEvent, error)
-	ValidateWebhookSignature(r *http.Request, secret string) error
+	// TestConnection verifies the connection and checks capabilities.
 	TestConnection(ctx context.Context) (*TestConnectionResult, error)
-	ListBranches(ctx context.Context, owner, repo string) ([]*PlatformBranch, error)
-	CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*PlatformBranch, error)
-	DeleteBranch(ctx context.Context, owner, repo, branch string) error
 
-	GetCRDiff(ctx context.Context, owner, repo string, number int) (*MergeDiff, error)
-	GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*ChangedFile, error)
-	CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error)
-	DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error
-	CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error)
-	CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error)
-	CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error
-	GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error)
-	UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error
-
-	UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error)
-	ReopenCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error)
-	ListCRComments(ctx context.Context, owner, repo string, number int) ([]*CRComment, error)
-	ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*CRCommit, error)
-	ForkRepo(ctx context.Context, owner, repo string, opts ForkRepoOptions) (*PlatformRepo, error)
-	DeleteRepo(ctx context.Context, owner, repo string) error
-	UpdateRepo(ctx context.Context, owner, repo string, opts UpdateRepoOptions) (*PlatformRepo, error)
-	GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error)
-	ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error)
-	CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error)
-	CreateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error)
-	UpdateFile(ctx context.Context, owner, repo string, opts FileOptions) (*FileResult, error)
-	DeleteFile(ctx context.Context, owner, repo string, opts FileDeleteOptions) (*FileResult, error)
-	ListTags(ctx context.Context, owner, repo string) ([]*TagInfo, error)
-	ListReleases(ctx context.Context, owner, repo string) ([]*ReleaseInfo, error)
-	CreateRelease(ctx context.Context, owner, repo string, opts CreateReleaseOptions) (*ReleaseInfo, error)
-	GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error)
+	RepoManager
+	ChangeRequestManager
+	WebhookManager
+	BranchManager
+	DiffManager
+	CommitManager
+	FileManager
+	ReleaseManager
 }
 
+// PlatformBranch represents a branch on a platform.
 type PlatformBranch struct {
 	Name string `json:"name"`
 }
 
+// PlatformRepo represents a repository on a platform.
 type PlatformRepo struct {
 	ID            int64    `json:"id"`
 	FullName      string   `json:"full_name"`
@@ -84,6 +59,7 @@ type PlatformRepo struct {
 	Platform      Platform `json:"platform"`
 }
 
+// CRState represents the state of a change request.
 type CRState string
 
 const (
@@ -92,6 +68,7 @@ const (
 	CRStateClosed CRState = "closed"
 )
 
+// ChangeRequest represents a pull request or merge request.
 type ChangeRequest struct {
 	ID           int64     `json:"id"`
 	Number       int       `json:"number"`
@@ -111,6 +88,7 @@ type ChangeRequest struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// CRUser represents a user on a platform.
 type CRUser struct {
 	ID        int64  `json:"id"`
 	Username  string `json:"username"`
@@ -118,12 +96,14 @@ type CRUser struct {
 	AvatarURL string `json:"avatar_url"`
 }
 
+// ListRepoOptions contains options for listing repositories.
 type ListRepoOptions struct {
 	Owner   string `json:"owner"`
 	Page    int    `json:"page"`
 	PerPage int    `json:"per_page"`
 }
 
+// CreateCROptions contains options for creating a change request.
 type CreateCROptions struct {
 	Owner              string   `json:"owner"`
 	Repo               string   `json:"repo"`
@@ -135,6 +115,7 @@ type CreateCROptions struct {
 	RemoveSourceBranch bool     `json:"remove_source_branch"`
 }
 
+// ListCROptions contains options for listing change requests.
 type ListCROptions struct {
 	Owner        string  `json:"owner"`
 	Repo         string  `json:"repo"`
@@ -145,12 +126,14 @@ type ListCROptions struct {
 	PerPage      int     `json:"per_page"`
 }
 
+// MergeCROptions contains options for merging a change request.
 type MergeCROptions struct {
 	MergeCommitMessage string `json:"merge_commit_message"`
 	Squash             bool   `json:"squash"`
 	RemoveSourceBranch bool   `json:"remove_source_branch"`
 }
 
+// CreateWebhookOptions contains options for creating a webhook.
 type CreateWebhookOptions struct {
 	Owner  string   `json:"owner"`
 	Repo   string   `json:"repo"`
@@ -159,12 +142,14 @@ type CreateWebhookOptions struct {
 	Events []string `json:"events"`
 }
 
+// PlatformWebhook represents a webhook on a platform.
 type PlatformWebhook struct {
 	ID     int64    `json:"id"`
 	URL    string   `json:"url"`
 	Events []string `json:"events"`
 }
 
+// NormalizedEvent represents a normalized webhook event from any platform.
 type NormalizedEvent struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"`
@@ -180,12 +165,14 @@ type NormalizedEvent struct {
 	RawPayload json.RawMessage `json:"raw_payload"`
 }
 
+// EventRepo represents the repository in a webhook event.
 type EventRepo struct {
 	FullName string `json:"full_name"`
 	Owner    string `json:"owner"`
 	Name     string `json:"name"`
 }
 
+// TestConnectionResult contains the result of a connection test.
 type TestConnectionResult struct {
 	Connected    bool   `json:"connected"`
 	Platform     string `json:"platform"`
@@ -197,6 +184,7 @@ type TestConnectionResult struct {
 	CanWebhook   bool   `json:"can_webhook"`
 }
 
+// MergeDiff represents the diff of a change request.
 type MergeDiff struct {
 	Files    []*ChangedFile
 	TotalAdd int
@@ -204,6 +192,7 @@ type MergeDiff struct {
 	RawDiff  string
 }
 
+// ChangedFile represents a file changed in a change request.
 type ChangedFile struct {
 	OldPath   string `json:"old_path"`
 	NewPath   string `json:"new_path"`
@@ -216,6 +205,7 @@ type ChangedFile struct {
 	IsBinary  bool   `json:"binary"`
 }
 
+// DiscussionOptions contains options for creating a discussion comment.
 type DiscussionOptions struct {
 	Body     string `json:"body"`
 	FilePath string `json:"file_path,omitempty"`
@@ -223,6 +213,7 @@ type DiscussionOptions struct {
 	OldLine  int    `json:"old_line,omitempty"`
 }
 
+// ReviewComment represents a comment in a code review.
 type ReviewComment struct {
 	Path      string `json:"path"`
 	Body      string `json:"body"`
@@ -232,6 +223,7 @@ type ReviewComment struct {
 	Side      string `json:"side,omitempty"`
 }
 
+// CreateReviewOptions contains options for creating a review.
 type CreateReviewOptions struct {
 	CommitID string          `json:"commit_id"`
 	Event    string          `json:"event"`
@@ -239,13 +231,15 @@ type CreateReviewOptions struct {
 	Comments []ReviewComment `json:"comments,omitempty"`
 }
 
+// ReviewResult represents the result of creating a review.
 type ReviewResult struct {
-	ID        string `json:"id"`
-	Body      string `json:"body,omitempty"`
-	HTMLURL   string `json:"html_url,omitempty"`
-	User      *CRUser `json:"user,omitempty"`
+	ID      string `json:"id"`
+	Body    string `json:"body,omitempty"`
+	HTMLURL string `json:"html_url,omitempty"`
+	User    *CRUser `json:"user,omitempty"`
 }
 
+// CommitStatusOptions contains options for creating a commit status.
 type CommitStatusOptions struct {
 	State       string `json:"state"`
 	Context     string `json:"context"`
@@ -253,12 +247,14 @@ type CommitStatusOptions struct {
 	TargetURL   string `json:"target_url,omitempty"`
 }
 
+// UpdateCROptions contains options for updating a change request.
 type UpdateCROptions struct {
 	Title        string `json:"title,omitempty"`
 	Description  string `json:"description,omitempty"`
 	TargetBranch string `json:"target_branch,omitempty"`
 }
 
+// CRComment represents a comment on a change request.
 type CRComment struct {
 	ID        int64     `json:"id"`
 	Body      string    `json:"body"`
@@ -267,6 +263,7 @@ type CRComment struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// CRCommit represents a commit in a change request.
 type CRCommit struct {
 	SHA       string    `json:"sha"`
 	Message   string    `json:"message"`
@@ -274,11 +271,13 @@ type CRCommit struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// ForkRepoOptions contains options for forking a repository.
 type ForkRepoOptions struct {
 	Organization string `json:"organization,omitempty"`
 	Name         string `json:"name,omitempty"`
 }
 
+// UpdateRepoOptions contains options for updating a repository.
 type UpdateRepoOptions struct {
 	Name          string `json:"name,omitempty"`
 	Description   string `json:"description,omitempty"`
@@ -286,6 +285,7 @@ type UpdateRepoOptions struct {
 	Private       *bool  `json:"private,omitempty"`
 }
 
+// CommitInfo represents a commit.
 type CommitInfo struct {
 	SHA       string    `json:"sha"`
 	Message   string    `json:"message"`
@@ -296,6 +296,7 @@ type CommitInfo struct {
 	Deletions int       `json:"deletions"`
 }
 
+// ListCommitsOptions contains options for listing commits.
 type ListCommitsOptions struct {
 	Page    int    `json:"page"`
 	PerPage int    `json:"per_page"`
@@ -304,14 +305,16 @@ type ListCommitsOptions struct {
 	Until   string `json:"until,omitempty"`
 }
 
+// CompareResult represents the result of comparing two commits.
 type CompareResult struct {
-	Commits      []*CommitInfo `json:"commits"`
+	Commits      []*CommitInfo  `json:"commits"`
 	Files        []*ChangedFile `json:"files"`
-	TotalCommits int           `json:"total_commits"`
-	AheadBy      int           `json:"ahead_by"`
-	BehindBy     int           `json:"behind_by"`
+	TotalCommits int            `json:"total_commits"`
+	AheadBy      int            `json:"ahead_by"`
+	BehindBy     int            `json:"behind_by"`
 }
 
+// FileOptions contains options for creating or updating a file.
 type FileOptions struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
@@ -322,6 +325,7 @@ type FileOptions struct {
 	Email   string `json:"email,omitempty"`
 }
 
+// FileDeleteOptions contains options for deleting a file.
 type FileDeleteOptions struct {
 	Path    string `json:"path"`
 	Message string `json:"message"`
@@ -331,16 +335,19 @@ type FileDeleteOptions struct {
 	Email   string `json:"email,omitempty"`
 }
 
+// FileResult represents the result of a file operation.
 type FileResult struct {
-	SHA     string `json:"sha"`
+	SHA       string `json:"sha"`
 	CommitSHA string `json:"commit_sha"`
 }
 
+// TagInfo represents a tag.
 type TagInfo struct {
 	Name   string `json:"name"`
 	Commit string `json:"commit"`
 }
 
+// ReleaseInfo represents a release.
 type ReleaseInfo struct {
 	ID          int64     `json:"id"`
 	TagName     string    `json:"tag_name"`
@@ -353,11 +360,12 @@ type ReleaseInfo struct {
 	PublishedAt time.Time `json:"published_at"`
 }
 
+// CreateReleaseOptions contains options for creating a release.
 type CreateReleaseOptions struct {
-	TagName     string `json:"tag_name"`
-	Target      string `json:"target,omitempty"`
-	Title       string `json:"title"`
-	Body        string `json:"body,omitempty"`
-	Draft       bool   `json:"draft"`
-	Prerelease  bool   `json:"prerelease"`
+	TagName    string `json:"tag_name"`
+	Target     string `json:"target,omitempty"`
+	Title      string `json:"title"`
+	Body       string `json:"body,omitempty"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
 }
