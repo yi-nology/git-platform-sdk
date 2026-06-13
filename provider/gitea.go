@@ -20,23 +20,35 @@ import (
 
 type giteaProvider struct {
 	client *gitea.Client
+	logger Logger
 }
 
-func NewGiteaProvider(baseURL, token string, skipTLS bool) *giteaProvider {
+func init() {
+	Register(PlatformGitea, func(cfg Config) (Provider, error) {
+		return newGiteaProvider(cfg), nil
+	})
+}
+
+func newGiteaProvider(cfg Config) *giteaProvider {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = NewNoopLogger()
+	}
+	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://gitea.com"
 	}
 	baseURL = strings.TrimSuffix(strings.TrimSuffix(baseURL, "/"), "/api/v1")
 	transport := &http.Transport{}
-	if skipTLS {
+	if cfg.SkipTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
-	client, err := gitea.NewClient(baseURL, gitea.SetToken(token), gitea.SetHTTPClient(httpClient))
+	client, err := gitea.NewClient(baseURL, gitea.SetToken(cfg.Token), gitea.SetHTTPClient(httpClient))
 	if err != nil {
-		return &giteaProvider{}
+		return &giteaProvider{logger: logger}
 	}
-	return &giteaProvider{client: client}
+	return &giteaProvider{client: client, logger: logger}
 }
 
 func (g *giteaProvider) Platform() Platform { return PlatformGitea }
@@ -468,12 +480,7 @@ func (g *giteaProvider) ParseWebhookEvent(r *http.Request, secret string) (*Norm
 		return nil, err
 	}
 
-	parts := strings.SplitN(pl.Repository.FullName, "/", 2)
-	er := &EventRepo{FullName: pl.Repository.FullName}
-	if len(parts) == 2 {
-		er.Owner = parts[0]
-		er.Name = parts[1]
-	}
+	er := BuildEventRepo(pl.Repository.FullName)
 	actor := &CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
 	event := &NormalizedEvent{
@@ -631,28 +638,14 @@ func convertGiteaHook(h *gitea.Hook) *PlatformWebhook {
 }
 
 func mapGiteaState(state string, merged bool) CRState {
-	if merged {
-		return CRStateMerged
-	}
-	if state == "closed" {
-		return CRStateClosed
-	}
-	return CRStateOpened
+	return MapBoolStateToCR(state, merged)
 }
 
 func parseGiteaTotalCount(resp *gitea.Response) int {
 	if resp == nil {
 		return 0
 	}
-	totalStr := resp.Header.Get("X-Total-Count")
-	if totalStr == "" {
-		return 0
-	}
-	n, err := strconv.Atoi(totalStr)
-	if err != nil {
-		return 0
-	}
-	return n
+	return ParseTotalCountHeader(resp.Header, 0)
 }
 
 func (g *giteaProvider) UpdateCR(ctx context.Context, owner, repo string, number int, opts UpdateCROptions) (*ChangeRequest, error) {
