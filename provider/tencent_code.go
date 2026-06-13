@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"git.enjoye.top/enjoydream/ekit/pkg/encoding"
 )
 
 func encodeProjectPath(owner, repo string) string {
@@ -420,11 +421,11 @@ func (t *tencentCodeProvider) GetFileContent(ctx context.Context, owner, repo, p
 	}
 	if resp.Encoding == "base64" {
 		content := strings.ReplaceAll(resp.Content, "\n", "")
-		decoded, err := base64.StdEncoding.DecodeString(content)
+		decoded, err := encoding.Base64Decode(content)
 		if err != nil {
 			return "", err
 		}
-		return string(decoded), nil
+		return decoded, nil
 	}
 	return resp.Content, nil
 }
