@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
-	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/client"
-	"github.com/go-git/go-git/v6/plumbing/object"
-	xhttp "github.com/go-git/go-git/v6/plumbing/transport/http"
-	xssh "github.com/go-git/go-git/v6/plumbing/transport/ssh"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	xhttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	xssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 )
 
 type GoGitBackend struct {
@@ -37,19 +37,14 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 		return nil, newGitError("Fetch", opts.RepoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	clientOpts := b.buildClientOptions(opts.Auth)
-	if opts.InsecureSkipTLS {
-		clientOpts = append(clientOpts, client.WithInsecureSkipTLS())
-	}
-
 	fetchOpts := &git.FetchOptions{
-		RemoteName:      opts.Remote,
-		RefSpecs:        buildFetchRefSpecs(opts),
-		ClientOptions:   clientOpts,
-		Progress:        opts.Progress,
-		Tags:            git.NoTags,
-		Prune:           opts.Prune,
-		Depth:           opts.Depth,
+		RemoteName: opts.Remote,
+		RefSpecs:   buildFetchRefSpecs(opts),
+		Auth:       b.buildTransportAuth(opts.Auth),
+		Progress:   opts.Progress,
+		Tags:       git.NoTags,
+		Prune:      opts.Prune,
+		Depth:      opts.Depth,
 	}
 	if opts.Tags {
 		fetchOpts.Tags = git.AllTags
@@ -68,11 +63,6 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 		return nil, newGitError("Push", opts.RepoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	clientOpts := b.buildClientOptions(opts.Auth)
-	if opts.InsecureSkipTLS {
-		clientOpts = append(clientOpts, client.WithInsecureSkipTLS())
-	}
-
 	refSpecs := opts.RefSpecs
 	if opts.Mirror {
 		refSpecs = []string{"+refs/*:refs/*"}
@@ -87,11 +77,11 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 	}
 
 	pushOpts := &git.PushOptions{
-		RemoteName:    opts.Remote,
-		RefSpecs:      rs,
-		ClientOptions: clientOpts,
-		Progress:      opts.Progress,
-		Force:         opts.Force,
+		RemoteName: opts.Remote,
+		RefSpecs:   rs,
+		Auth:       b.buildTransportAuth(opts.Auth),
+		Progress:   opts.Progress,
+		Force:      opts.Force,
 	}
 
 	err = repo.PushContext(ctx, pushOpts)
@@ -102,16 +92,11 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 }
 
 func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
-	clientOpts := b.buildClientOptions(opts.Auth)
-	if opts.InsecureSkipTLS {
-		clientOpts = append(clientOpts, client.WithInsecureSkipTLS())
-	}
-
 	cloneOpts := &git.CloneOptions{
 		URL:           opts.URL,
 		ReferenceName: plumbing.ReferenceName(opts.Branch),
 		Progress:      opts.Progress,
-		ClientOptions: clientOpts,
+		Auth:          b.buildTransportAuth(opts.Auth),
 		NoCheckout:    opts.NoCheckout,
 		SingleBranch:  opts.SingleBranch,
 	}
@@ -119,7 +104,7 @@ func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
 		cloneOpts.Depth = opts.Depth
 	}
 
-	_, err := git.PlainCloneContext(ctx, opts.Path, cloneOpts)
+	_, err := git.PlainCloneContext(ctx, opts.Path, false, cloneOpts)
 	if err != nil {
 		return newGitError("Clone", opts.Path, "", err)
 	}
@@ -177,7 +162,6 @@ func (b *GoGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref s
 		}
 		hash = head.Hash()
 	} else if !isCommitSHA(ref) {
-		// Try as branch name
 		headRef, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+ref), true)
 		if err == nil {
 			hash = headRef.Hash()
@@ -405,59 +389,32 @@ func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts 
 		return newGitError("Merge", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	// Get current HEAD
 	head, err := repo.Head()
 	if err != nil {
 		return newGitError("Merge", repoPath, "", err)
 	}
 
-	// Get target branch commit
 	ref, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+branch), true)
 	if err != nil {
 		return newGitError("Merge", repoPath, "", ErrBranchNotFound)
 	}
 
-	// Already up to date
 	if head.Hash() == ref.Hash() {
 		return nil
 	}
 
-	// Check if ancestor (fast-forward possible)
 	headCommit, _ := repo.CommitObject(head.Hash())
 	branchCommit, _ := repo.CommitObject(ref.Hash())
 
 	if headCommit != nil && branchCommit != nil {
 		isAncestor, _ := headCommit.IsAncestor(branchCommit)
 		if isAncestor {
-			// Fast-forward: just move HEAD
 			newRef := plumbing.NewHashReference(head.Name(), ref.Hash())
 			return repo.Storer.SetReference(newRef)
 		}
 	}
 
-	// Full merge using CherryPick
-	wt, err := repo.Worktree()
-	if err != nil {
-		return newGitError("Merge", repoPath, "", err)
-	}
-
-	commitOpts := &git.CommitOptions{
-		AllowEmptyCommits: true,
-	}
-
-	ortStrategy := git.TheirsMergeStrategy
-	if opts.Squash {
-		ortStrategy = git.OursMergeStrategy
-	}
-
-	err = wt.CherryPick(commitOpts, ortStrategy, branchCommit)
-	if err != nil {
-		if strings.Contains(err.Error(), "conflict") || strings.Contains(err.Error(), "CONFLICT") {
-			return newGitError("Merge", repoPath, "", ErrMergeConflict)
-		}
-		return newGitError("Merge", repoPath, "", err)
-	}
-	return nil
+	return newGitError("Merge", repoPath, "", fmt.Errorf("non-fast-forward merge not supported in go-git, use native backend"))
 }
 
 // --- Remote operations ---
@@ -523,7 +480,17 @@ func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, re
 		return nil, newGitError("GetFileAtRevision", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	hash := plumbing.NewHash(ref)
+	var hash plumbing.Hash
+	if ref == "" || ref == "HEAD" {
+		head, err := repo.Head()
+		if err != nil {
+			return nil, newGitError("GetFileAtRevision", repoPath, "", err)
+		}
+		hash = head.Hash()
+	} else {
+		hash = plumbing.NewHash(ref)
+	}
+
 	commit, err := repo.CommitObject(hash)
 	if err != nil {
 		return nil, newGitError("GetFileAtRevision", repoPath, "", err)
@@ -548,28 +515,23 @@ func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, re
 
 // --- Auth helpers ---
 
-// buildClientOptions creates client.Option slice from AuthConfig.
-func (b *GoGitBackend) buildClientOptions(auth AuthConfig) []client.Option {
+func (b *GoGitBackend) buildTransportAuth(auth AuthConfig) transport.AuthMethod {
 	switch auth.Type {
 	case AuthHTTPBasic:
-		return []client.Option{
-			client.WithHTTPAuth(&xhttp.BasicAuth{
-				Username: auth.Username,
-				Password: auth.Password,
-			}),
+		return &xhttp.BasicAuth{
+			Username: auth.Username,
+			Password: auth.Password,
 		}
 	case AuthHTTPToken:
-		return []client.Option{
-			client.WithHTTPAuth(&xhttp.TokenAuth{
-				Token: auth.Token,
-			}),
+		return &xhttp.TokenAuth{
+			Token: auth.Token,
 		}
 	case AuthSSH:
 		if auth.SSHKey != "" {
 			if _, err := os.Stat(auth.SSHKey); err == nil {
 				signer, err := xssh.NewPublicKeysFromFile("git", auth.SSHKey, "")
 				if err == nil {
-					return []client.Option{client.WithSSHAuth(signer)}
+					return signer
 				}
 			}
 		}
@@ -587,20 +549,16 @@ func buildFetchRefSpecs(opts FetchOptions) []config.RefSpec {
 	}
 	specs := make([]config.RefSpec, 0, len(opts.Branches))
 	for _, branch := range opts.Branches {
-		// Skip SHA hashes - refspecs require actual ref paths
 		if isCommitSHA(branch) {
 			continue
 		}
-		// Handle full ref prefix
 		if strings.HasPrefix(branch, "refs/") {
-			// Extract branch name from ref path for destination
 			branchName := strings.TrimPrefix(branch, "refs/heads/")
 			specs = append(specs, config.RefSpec(fmt.Sprintf("+%s:refs/remotes/%s/%s", branch, opts.Remote, branchName)))
 		} else {
 			specs = append(specs, config.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/remotes/%s/%s", branch, opts.Remote, branch)))
 		}
 	}
-	// If all were SHAs, fall back to fetching all branches
 	if len(specs) == 0 {
 		return []config.RefSpec{
 			config.RefSpec(fmt.Sprintf("+refs/heads/*:refs/remotes/%s/*", opts.Remote)),

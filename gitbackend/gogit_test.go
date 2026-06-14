@@ -128,7 +128,6 @@ func TestGoGit_CreateTag(t *testing.T) {
 }
 
 func TestGoGit_GetFileAtRevision(t *testing.T) {
-	t.Skip("go-git v6 alpha: CommitObject returns 'object not found' for HEAD hash")
 	b := newTestGoGitBackend(t)
 	repo := createTestRepo(t)
 
