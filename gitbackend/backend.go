@@ -152,4 +152,14 @@ type GitBackend interface {
 
 	// File operations
 	GetFileAtRevision(ctx context.Context, repoPath string, path string, ref string) ([]byte, error)
+
+	// Advanced operations
+	RevParse(ctx context.Context, repoPath string, ref string) (string, error)
+	MergeBase(ctx context.Context, repoPath string, a string, b string) (string, error)
+	DiffNames(ctx context.Context, repoPath string, from string, to string) ([]string, error)
+	DeletedFiles(ctx context.Context, repoPath string, from string, to string) ([]string, error)
+	CheckoutRef(ctx context.Context, repoPath string, ref string) error
+	CheckoutFiles(ctx context.Context, repoPath string, ref string, files []string) error
+	Add(ctx context.Context, repoPath string, files []string) error
+	CommitWithIdentity(ctx context.Context, repoPath string, name string, email string, message string) error
 }

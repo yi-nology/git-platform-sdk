@@ -439,3 +439,91 @@ func parsePushRefs(output string) []string {
 	}
 	return refs
 }
+
+// --- Advanced operations ---
+
+func (b *NativeGitBackend) RevParse(ctx context.Context, repoPath, ref string) (string, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"rev-parse", ref}, AuthConfig{})
+	if err != nil {
+		return "", newGitError("RevParse", repoPath, stderr, err)
+	}
+	return strings.TrimSpace(stdout), nil
+}
+
+func (b *NativeGitBackend) MergeBase(ctx context.Context, repoPath, a, other string) (string, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"merge-base", a, other}, AuthConfig{})
+	if err != nil {
+		return "", newGitError("MergeBase", repoPath, stderr, err)
+	}
+	return strings.TrimSpace(stdout), nil
+}
+
+func (b *NativeGitBackend) DiffNames(ctx context.Context, repoPath, from, to string) ([]string, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"diff", "--name-only", from, to}, AuthConfig{})
+	if err != nil {
+		return nil, newGitError("DiffNames", repoPath, stderr, err)
+	}
+	var result []string
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			result = append(result, line)
+		}
+	}
+	return result, nil
+}
+
+func (b *NativeGitBackend) DeletedFiles(ctx context.Context, repoPath, from, to string) ([]string, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"diff", "--name-only", "--diff-filter=D", from, to}, AuthConfig{})
+	if err != nil {
+		return nil, newGitError("DeletedFiles", repoPath, stderr, err)
+	}
+	var result []string
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			result = append(result, line)
+		}
+	}
+	return result, nil
+}
+
+func (b *NativeGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"checkout", "--force", ref}, AuthConfig{})
+	if err != nil {
+		return newGitError("CheckoutRef", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, files []string) error {
+	args := append([]string{"checkout", ref, "--"}, files...)
+	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	if err != nil {
+		return newGitError("CheckoutFiles", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) Add(ctx context.Context, repoPath string, files []string) error {
+	args := append([]string{"add"}, files...)
+	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	if err != nil {
+		return newGitError("Add", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) CommitWithIdentity(ctx context.Context, repoPath, name, email, message string) error {
+	args := []string{
+		"-c", fmt.Sprintf("user.name=%s", name),
+		"-c", fmt.Sprintf("user.email=%s", email),
+		"-c", "commit.gpgsign=false",
+		"commit", "--allow-empty", "-m", message,
+	}
+	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	if err != nil {
+		return newGitError("CommitWithIdentity", repoPath, stderr, err)
+	}
+	return nil
+}
