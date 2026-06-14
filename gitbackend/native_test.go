@@ -292,3 +292,76 @@ func TestFactory_UnknownType(t *testing.T) {
 		t.Fatal("expected error for unknown type")
 	}
 }
+
+func TestBuildFetchRefSpecs_Empty(t *testing.T) {
+	opts := FetchOptions{Remote: "origin"}
+	specs := buildFetchRefSpecs(opts)
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	expected := "+refs/heads/*:refs/remotes/origin/*"
+	if string(specs[0]) != expected {
+		t.Fatalf("expected %q, got %q", expected, string(specs[0]))
+	}
+}
+
+func TestBuildFetchRefSpecs_Branches(t *testing.T) {
+	opts := FetchOptions{Remote: "origin", Branches: []string{"main", "feature"}}
+	specs := buildFetchRefSpecs(opts)
+	if len(specs) != 2 {
+		t.Fatalf("expected 2 specs, got %d", len(specs))
+	}
+	expected := "+refs/heads/main:refs/remotes/origin/main"
+	if string(specs[0]) != expected {
+		t.Fatalf("expected %q, got %q", expected, string(specs[0]))
+	}
+	expected = "+refs/heads/feature:refs/remotes/origin/feature"
+	if string(specs[1]) != expected {
+		t.Fatalf("expected %q, got %q", expected, string(specs[1]))
+	}
+}
+
+func TestBuildFetchRefSpecs_SHA(t *testing.T) {
+	// SHA hashes should be skipped, fallback to all branches
+	opts := FetchOptions{
+		Remote:   "origin",
+		Branches: []string{"abc123def456789012345678901234567890abcd"},
+	}
+	specs := buildFetchRefSpecs(opts)
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec (fallback), got %d", len(specs))
+	}
+	expected := "+refs/heads/*:refs/remotes/origin/*"
+	if string(specs[0]) != expected {
+		t.Fatalf("expected %q, got %q", expected, string(specs[0]))
+	}
+}
+
+func TestBuildFetchRefSpecs_MixedBranchAndSHA(t *testing.T) {
+	// Mix of branch and SHA - should only include branch
+	opts := FetchOptions{
+		Remote:   "origin",
+		Branches: []string{"main", "abc123def456789012345678901234567890abcd"},
+	}
+	specs := buildFetchRefSpecs(opts)
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	expected := "+refs/heads/main:refs/remotes/origin/main"
+	if string(specs[0]) != expected {
+		t.Fatalf("expected %q, got %q", expected, string(specs[0]))
+	}
+}
+
+func TestBuildFetchRefSpecs_WithRefPrefix(t *testing.T) {
+	// Branch with full ref prefix
+	opts := FetchOptions{Remote: "origin", Branches: []string{"refs/heads/main"}}
+	specs := buildFetchRefSpecs(opts)
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	expected := "+refs/heads/main:refs/remotes/origin/main"
+	if string(specs[0]) != expected {
+		t.Fatalf("expected %q, got %q", expected, string(specs[0]))
+	}
+}

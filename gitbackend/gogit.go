@@ -591,12 +591,14 @@ func buildFetchRefSpecs(opts FetchOptions) []config.RefSpec {
 		if isCommitSHA(branch) {
 			continue
 		}
-		// Ensure branch has proper ref prefix
-		refName := branch
-		if !strings.HasPrefix(branch, "refs/") {
-			refName = "refs/heads/" + branch
+		// Handle full ref prefix
+		if strings.HasPrefix(branch, "refs/") {
+			// Extract branch name from ref path for destination
+			branchName := strings.TrimPrefix(branch, "refs/heads/")
+			specs = append(specs, config.RefSpec(fmt.Sprintf("+%s:refs/remotes/%s/%s", branch, opts.Remote, branchName)))
+		} else {
+			specs = append(specs, config.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/remotes/%s/%s", branch, opts.Remote, branch)))
 		}
-		specs = append(specs, config.RefSpec(fmt.Sprintf("+%s:refs/remotes/%s/%s", refName, opts.Remote, branch)))
 	}
 	// If all were SHAs, fall back to fetching all branches
 	if len(specs) == 0 {
