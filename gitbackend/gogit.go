@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	xhttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	xssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/go-git/go-git/v5/utils/merkletrie"
 )
 
 type GoGitBackend struct {
@@ -577,4 +579,215 @@ func isCommitSHA(s string) bool {
 		}
 	}
 	return true
+}
+
+// --- Advanced operations ---
+
+func (b *GoGitBackend) RevParse(ctx context.Context, repoPath, ref string) (string, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return "", newGitError("RevParse", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	if err != nil {
+		return "", newGitError("RevParse", repoPath, "", err)
+	}
+	return hash.String(), nil
+}
+
+func (b *GoGitBackend) MergeBase(ctx context.Context, repoPath, a, other string) (string, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return "", newGitError("MergeBase", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	commitA, err := repo.CommitObject(plumbing.NewHash(a))
+	if err != nil {
+		return "", newGitError("MergeBase", repoPath, "", err)
+	}
+	commitB, err := repo.CommitObject(plumbing.NewHash(other))
+	if err != nil {
+		return "", newGitError("MergeBase", repoPath, "", err)
+	}
+	bases, err := commitA.MergeBase(commitB)
+	if err != nil {
+		return "", newGitError("MergeBase", repoPath, "", err)
+	}
+	if len(bases) == 0 {
+		return "", nil
+	}
+	return bases[0].Hash.String(), nil
+}
+
+func (b *GoGitBackend) DiffNames(ctx context.Context, repoPath, from, to string) ([]string, error) {
+	changes, err := b.treeChanges(repoPath, from, to)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(changes))
+	for _, c := range changes {
+		result = append(result, changePath(c))
+	}
+	return result, nil
+}
+
+func (b *GoGitBackend) DeletedFiles(ctx context.Context, repoPath, from, to string) ([]string, error) {
+	changes, err := b.treeChanges(repoPath, from, to)
+	if err != nil {
+		return nil, err
+	}
+	var result []string
+	for _, c := range changes {
+		action, err := c.Action()
+		if err != nil {
+			continue
+		}
+		if action == merkletrie.Delete {
+			result = append(result, c.From.Name)
+		}
+	}
+	return result, nil
+}
+
+func (b *GoGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("CheckoutRef", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	if err != nil {
+		return newGitError("CheckoutRef", repoPath, "", err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("CheckoutRef", repoPath, "", err)
+	}
+	return wt.Checkout(&git.CheckoutOptions{Hash: *hash, Force: true})
+}
+
+func (b *GoGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, files []string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("CheckoutFiles", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	if err != nil {
+		return newGitError("CheckoutFiles", repoPath, "", err)
+	}
+	commitObj, err := repo.CommitObject(*hash)
+	if err != nil {
+		return newGitError("CheckoutFiles", repoPath, "", err)
+	}
+	tree, err := commitObj.Tree()
+	if err != nil {
+		return newGitError("CheckoutFiles", repoPath, "", err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("CheckoutFiles", repoPath, "", err)
+	}
+	var lastErr error
+	for _, file := range files {
+		treeFile, err := tree.File(file)
+		if err != nil {
+			lastErr = fmt.Errorf("file %s not found in tree: %w", file, err)
+			continue
+		}
+		reader, err := treeFile.Blob.Reader()
+		if err != nil {
+			lastErr = fmt.Errorf("read blob for %s: %w", file, err)
+			continue
+		}
+		fullPath := filepath.Join(repoPath, file)
+		_ = os.MkdirAll(filepath.Dir(fullPath), 0o755)
+		f, err := os.Create(fullPath)
+		if err != nil {
+			_ = reader.Close()
+			lastErr = fmt.Errorf("create file %s: %w", file, err)
+			continue
+		}
+		_, copyErr := io.Copy(f, reader)
+		_ = f.Close()
+		_ = reader.Close()
+		if copyErr != nil {
+			lastErr = fmt.Errorf("write file %s: %w", file, copyErr)
+			continue
+		}
+		if _, err := wt.Add(file); err != nil {
+			lastErr = fmt.Errorf("git add %s: %w", file, err)
+		}
+	}
+	return lastErr
+}
+
+func (b *GoGitBackend) Add(ctx context.Context, repoPath string, files []string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("Add", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("Add", repoPath, "", err)
+	}
+	for _, file := range files {
+		if _, err := wt.Add(file); err != nil {
+			return newGitError("Add", repoPath, "", fmt.Errorf("git add %s: %w", file, err))
+		}
+	}
+	return nil
+}
+
+func (b *GoGitBackend) CommitWithIdentity(ctx context.Context, repoPath, name, email, message string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("CommitWithIdentity", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("CommitWithIdentity", repoPath, "", err)
+	}
+	_, err = wt.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  name,
+			Email: email,
+			When:  time.Now(),
+		},
+		AllowEmptyCommits: true,
+	})
+	if err != nil {
+		return newGitError("CommitWithIdentity", repoPath, "", err)
+	}
+	return nil
+}
+
+// --- Internal helpers for advanced operations ---
+
+func (b *GoGitBackend) treeChanges(repoPath, from, to string) (object.Changes, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return nil, newGitError("treeChanges", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	commitFrom, err := repo.CommitObject(plumbing.NewHash(from))
+	if err != nil {
+		return nil, newGitError("treeChanges", repoPath, "", err)
+	}
+	commitTo, err := repo.CommitObject(plumbing.NewHash(to))
+	if err != nil {
+		return nil, newGitError("treeChanges", repoPath, "", err)
+	}
+	treeFrom, err := commitFrom.Tree()
+	if err != nil {
+		return nil, newGitError("treeChanges", repoPath, "", err)
+	}
+	treeTo, err := commitTo.Tree()
+	if err != nil {
+		return nil, newGitError("treeChanges", repoPath, "", err)
+	}
+	return object.DiffTree(treeFrom, treeTo)
+}
+
+func changePath(c *object.Change) string {
+	if c.To.Name != "" {
+		return c.To.Name
+	}
+	return c.From.Name
 }
