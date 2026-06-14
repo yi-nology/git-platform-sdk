@@ -44,7 +44,16 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 		args = append(args, "-c", "http.sslVerify=false")
 	}
 	if len(opts.Branches) > 0 {
-		args = append(args, opts.Branches...)
+		// Filter out SHA hashes - they can't be used directly as refspecs
+		branchArgs := make([]string, 0, len(opts.Branches))
+		for _, branch := range opts.Branches {
+			if !isCommitSHA(branch) {
+				branchArgs = append(branchArgs, branch)
+			}
+		}
+		if len(branchArgs) > 0 {
+			args = append(args, branchArgs...)
+		}
 	}
 
 	stdout, stderr, err := b.runGit(ctx, opts.RepoPath, args, opts.Auth)

@@ -587,7 +587,22 @@ func buildFetchRefSpecs(opts FetchOptions) []config.RefSpec {
 	}
 	specs := make([]config.RefSpec, 0, len(opts.Branches))
 	for _, branch := range opts.Branches {
-		specs = append(specs, config.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/remotes/%s/%s", branch, opts.Remote, branch)))
+		// Skip SHA hashes - refspecs require actual ref paths
+		if isCommitSHA(branch) {
+			continue
+		}
+		// Ensure branch has proper ref prefix
+		refName := branch
+		if !strings.HasPrefix(branch, "refs/") {
+			refName = "refs/heads/" + branch
+		}
+		specs = append(specs, config.RefSpec(fmt.Sprintf("+%s:refs/remotes/%s/%s", refName, opts.Remote, branch)))
+	}
+	// If all were SHAs, fall back to fetching all branches
+	if len(specs) == 0 {
+		return []config.RefSpec{
+			config.RefSpec(fmt.Sprintf("+refs/heads/*:refs/remotes/%s/*", opts.Remote)),
+		}
 	}
 	return specs
 }
