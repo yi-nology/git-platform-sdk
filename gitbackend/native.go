@@ -37,6 +37,12 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 	} else {
 		args = append(args, "--no-tags")
 	}
+	if opts.Depth > 0 {
+		args = append(args, "--depth", fmt.Sprintf("%d", opts.Depth))
+	}
+	if opts.InsecureSkipTLS {
+		args = append(args, "-c", "http.sslVerify=false")
+	}
 	if len(opts.Branches) > 0 {
 		args = append(args, opts.Branches...)
 	}
@@ -57,6 +63,9 @@ func (b *NativeGitBackend) Push(ctx context.Context, opts PushOptions) (*PushRes
 		args = []string{"push", "--mirror", opts.Remote}
 	} else {
 		args = append(args, opts.RefSpecs...)
+	}
+	if opts.InsecureSkipTLS {
+		args = append([]string{"-c", "http.sslVerify=false"}, args...)
 	}
 
 	stdout, stderr, err := b.runGit(ctx, opts.RepoPath, args, opts.Auth)

@@ -54,7 +54,6 @@ func TestGoGit_CreateAndDeleteBranch(t *testing.T) {
 }
 
 func TestGoGit_Checkout(t *testing.T) {
-	t.Skip("go-git v6 alpha: Checkout API limitations")
 	b := newTestGoGitBackend(t)
 	repo := createTestRepo(t)
 
@@ -114,7 +113,6 @@ func TestGoGit_IsAncestor(t *testing.T) {
 }
 
 func TestGoGit_CreateTag(t *testing.T) {
-	t.Skip("go-git v6 alpha: CreateTag API limitations")
 	b := newTestGoGitBackend(t)
 	repo := createTestRepo(t)
 
@@ -130,7 +128,7 @@ func TestGoGit_CreateTag(t *testing.T) {
 }
 
 func TestGoGit_GetFileAtRevision(t *testing.T) {
-	t.Skip("go-git v6 alpha: GetFileAtRevision API limitations")
+	t.Skip("go-git v6 alpha: CommitObject returns 'object not found' for HEAD hash")
 	b := newTestGoGitBackend(t)
 	repo := createTestRepo(t)
 
@@ -179,5 +177,53 @@ func TestGoGit_GetCommitsBetween(t *testing.T) {
 	}
 	if commits[0].Message != "second" {
 		t.Fatalf("expected 'second', got %q", commits[0].Message)
+	}
+}
+
+func TestGoGit_Merge(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+
+	// Create a feature branch and add a commit
+	b.CreateBranch(context.Background(), repo, "feature", "HEAD")
+	b.Checkout(context.Background(), repo, "feature")
+	os.WriteFile(filepath.Join(repo, "feature.txt"), []byte("feature"), 0644)
+	exec.Command("git", "-C", repo, "add", ".").Run()
+	exec.Command("git", "-C", repo, "commit", "-m", "feature commit").Run()
+
+	// Switch back to main and merge
+	b.Checkout(context.Background(), repo, "main")
+	err := b.Merge(context.Background(), repo, "feature", MergeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify the file exists
+	if _, err := os.Stat(filepath.Join(repo, "feature.txt")); err != nil {
+		t.Fatal("expected feature.txt to exist after merge")
+	}
+}
+
+func TestGoGit_Diff(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+
+	initHash := gitOutput(t, repo, "rev-parse", "HEAD")
+
+	os.WriteFile(filepath.Join(repo, "file2.txt"), []byte("hello"), 0644)
+	exec.Command("git", "-C", repo, "add", ".").Run()
+	exec.Command("git", "-C", repo, "commit", "-m", "second").Run()
+
+	secondHash := gitOutput(t, repo, "rev-parse", "HEAD")
+
+	diff, err := b.Diff(context.Background(), repo, DiffOptions{
+		From: initHash,
+		To:   secondHash,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff == "" {
+		t.Fatal("expected non-empty diff")
 	}
 }
