@@ -38,14 +38,18 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 	}
 
 	clientOpts := b.buildClientOptions(opts.Auth)
-	refSpecs := buildFetchRefSpecs(opts)
+	if opts.InsecureSkipTLS {
+		clientOpts = append(clientOpts, client.WithInsecureSkipTLS())
+	}
 
 	fetchOpts := &git.FetchOptions{
-		RemoteName:    opts.Remote,
-		RefSpecs:      refSpecs,
-		ClientOptions: clientOpts,
-		Progress:      opts.Progress,
-		Tags:          git.NoTags,
+		RemoteName:      opts.Remote,
+		RefSpecs:        buildFetchRefSpecs(opts),
+		ClientOptions:   clientOpts,
+		Progress:        opts.Progress,
+		Tags:            git.NoTags,
+		Prune:           opts.Prune,
+		Depth:           opts.Depth,
 	}
 	if opts.Tags {
 		fetchOpts.Tags = git.AllTags
@@ -65,6 +69,9 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 	}
 
 	clientOpts := b.buildClientOptions(opts.Auth)
+	if opts.InsecureSkipTLS {
+		clientOpts = append(clientOpts, client.WithInsecureSkipTLS())
+	}
 
 	refSpecs := opts.RefSpecs
 	if opts.Mirror {
@@ -95,11 +102,18 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 }
 
 func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
+	clientOpts := b.buildClientOptions(opts.Auth)
+	if opts.InsecureSkipTLS {
+		clientOpts = append(clientOpts, client.WithInsecureSkipTLS())
+	}
+
 	cloneOpts := &git.CloneOptions{
 		URL:           opts.URL,
 		ReferenceName: plumbing.ReferenceName(opts.Branch),
 		Progress:      opts.Progress,
-		ClientOptions: b.buildClientOptions(opts.Auth),
+		ClientOptions: clientOpts,
+		NoCheckout:    opts.NoCheckout,
+		SingleBranch:  opts.SingleBranch,
 	}
 	if opts.Depth > 0 {
 		cloneOpts.Depth = opts.Depth
@@ -155,13 +169,22 @@ func (b *GoGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref s
 		return newGitError("CreateBranch", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	headRef, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+ref), true)
-	if err != nil {
-		// Try as a commit hash
-		headRef = plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branch), plumbing.NewHash(ref))
+	hash := plumbing.NewHash(ref)
+	if hash.IsZero() {
+		head, err := repo.Head()
+		if err != nil {
+			return newGitError("CreateBranch", repoPath, "", err)
+		}
+		hash = head.Hash()
+	} else if !isCommitSHA(ref) {
+		// Try as branch name
+		headRef, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+ref), true)
+		if err == nil {
+			hash = headRef.Hash()
+		}
 	}
 
-	newRef := plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branch), headRef.Hash())
+	newRef := plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branch), hash)
 	err = repo.Storer.SetReference(newRef)
 	if err != nil {
 		return newGitError("CreateBranch", repoPath, "", err)
@@ -230,7 +253,6 @@ func (b *GoGitBackend) GetStatus(ctx context.Context, repoPath string) (*RepoSta
 
 	status := &RepoStatus{}
 
-	// Get current branch
 	branch, err := b.GetCurrentBranch(ctx, repoPath)
 	if err == nil {
 		status.Branch = branch
@@ -274,16 +296,54 @@ func (b *GoGitBackend) Diff(ctx context.Context, repoPath string, opts DiffOptio
 		return "", newGitError("Diff", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	wt, err := repo.Worktree()
+	// If no From/To specified, diff working tree against HEAD
+	if opts.From == "" && opts.To == "" {
+		wt, err := repo.Worktree()
+		if err != nil {
+			return "", newGitError("Diff", repoPath, "", err)
+		}
+		status, err := wt.Status()
+		if err != nil {
+			return "", newGitError("Diff", repoPath, "", err)
+		}
+		return status.String(), nil
+	}
+
+	// Diff between two commits
+	fromCommit, err := repo.CommitObject(plumbing.NewHash(opts.From))
 	if err != nil {
 		return "", newGitError("Diff", repoPath, "", err)
 	}
 
-	status, err := wt.Status()
+	toCommit, err := repo.CommitObject(plumbing.NewHash(opts.To))
 	if err != nil {
 		return "", newGitError("Diff", repoPath, "", err)
 	}
-	return status.String(), nil
+
+	fromTree, err := fromCommit.Tree()
+	if err != nil {
+		return "", newGitError("Diff", repoPath, "", err)
+	}
+
+	toTree, err := toCommit.Tree()
+	if err != nil {
+		return "", newGitError("Diff", repoPath, "", err)
+	}
+
+	changes, err := fromTree.Diff(toTree)
+	if err != nil {
+		return "", newGitError("Diff", repoPath, "", err)
+	}
+
+	var result strings.Builder
+	for _, change := range changes {
+		patch, err := change.Patch()
+		if err != nil {
+			continue
+		}
+		result.WriteString(patch.String())
+	}
+	return result.String(), nil
 }
 
 // --- Commit operations ---
@@ -345,26 +405,59 @@ func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts 
 		return newGitError("Merge", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	// Get the branch commit
-	ref, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+branch), true)
-	if err != nil {
-		return newGitError("Merge", repoPath, "", ErrBranchNotFound)
-	}
-
 	// Get current HEAD
 	head, err := repo.Head()
 	if err != nil {
 		return newGitError("Merge", repoPath, "", err)
 	}
 
-	// Check if already up to date
+	// Get target branch commit
+	ref, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+branch), true)
+	if err != nil {
+		return newGitError("Merge", repoPath, "", ErrBranchNotFound)
+	}
+
+	// Already up to date
 	if head.Hash() == ref.Hash() {
 		return nil
 	}
 
-	// For a full merge implementation, native backend should be used
-	// This is a simplified version that creates a merge commit
-	return newGitError("Merge", repoPath, "", fmt.Errorf("go-git merge not fully supported, use native backend"))
+	// Check if ancestor (fast-forward possible)
+	headCommit, _ := repo.CommitObject(head.Hash())
+	branchCommit, _ := repo.CommitObject(ref.Hash())
+
+	if headCommit != nil && branchCommit != nil {
+		isAncestor, _ := headCommit.IsAncestor(branchCommit)
+		if isAncestor {
+			// Fast-forward: just move HEAD
+			newRef := plumbing.NewHashReference(head.Name(), ref.Hash())
+			return repo.Storer.SetReference(newRef)
+		}
+	}
+
+	// Full merge using CherryPick
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("Merge", repoPath, "", err)
+	}
+
+	commitOpts := &git.CommitOptions{
+		AllowEmptyCommits: true,
+	}
+
+	ortStrategy := git.TheirsMergeStrategy
+	if opts.Squash {
+		ortStrategy = git.OursMergeStrategy
+	}
+
+	err = wt.CherryPick(commitOpts, ortStrategy, branchCommit)
+	if err != nil {
+		if strings.Contains(err.Error(), "conflict") || strings.Contains(err.Error(), "CONFLICT") {
+			return newGitError("Merge", repoPath, "", ErrMergeConflict)
+		}
+		return newGitError("Merge", repoPath, "", err)
+	}
+	return nil
 }
 
 // --- Remote operations ---
@@ -407,7 +500,7 @@ func (b *GoGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string
 	}
 
 	hash := plumbing.NewHash(ref)
-	if ref == "" {
+	if ref == "" || hash.IsZero() {
 		head, err := repo.Head()
 		if err != nil {
 			return newGitError("CreateTag", repoPath, "", err)
@@ -455,6 +548,7 @@ func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, re
 
 // --- Auth helpers ---
 
+// buildClientOptions creates client.Option slice from AuthConfig.
 func (b *GoGitBackend) buildClientOptions(auth AuthConfig) []client.Option {
 	switch auth.Type {
 	case AuthHTTPBasic:
@@ -483,6 +577,8 @@ func (b *GoGitBackend) buildClientOptions(auth AuthConfig) []client.Option {
 	return nil
 }
 
+// --- Utilities ---
+
 func buildFetchRefSpecs(opts FetchOptions) []config.RefSpec {
 	if len(opts.Branches) == 0 {
 		return []config.RefSpec{
@@ -494,4 +590,16 @@ func buildFetchRefSpecs(opts FetchOptions) []config.RefSpec {
 		specs = append(specs, config.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/remotes/%s/%s", branch, opts.Remote, branch)))
 	}
 	return specs
+}
+
+func isCommitSHA(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }

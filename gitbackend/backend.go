@@ -26,43 +26,48 @@ type AuthConfig struct {
 
 // FetchOptions contains options for fetching from a remote.
 type FetchOptions struct {
-	RepoPath string
-	Remote   string
-	Branches []string
-	Tags     bool
-	Prune    bool
-	Auth     AuthConfig
-	Progress io.Writer
+	RepoPath       string
+	Remote         string
+	Branches       []string
+	Tags           bool
+	Prune          bool
+	Depth          int
+	InsecureSkipTLS bool
+	Auth           AuthConfig
+	Progress       io.Writer
 }
 
 // PushOptions contains options for pushing to a remote.
 type PushOptions struct {
-	RepoPath string
-	Remote   string
-	RefSpecs []string
-	Force    bool
-	Mirror   bool
-	Auth     AuthConfig
-	Progress io.Writer
+	RepoPath       string
+	Remote         string
+	RefSpecs       []string
+	Force          bool
+	Mirror         bool
+	InsecureSkipTLS bool
+	Auth           AuthConfig
+	Progress       io.Writer
 }
 
 // CloneOptions contains options for cloning a repository.
 type CloneOptions struct {
-	URL        string
-	Path       string
-	Branch     string
-	Depth      int
-	Auth       AuthConfig
-	Progress   io.Writer
-	NoCheckout bool
+	URL            string
+	Path           string
+	Branch         string
+	Depth          int
+	Auth           AuthConfig
+	Progress       io.Writer
+	NoCheckout     bool
+	SingleBranch   bool
+	InsecureSkipTLS bool
 }
 
 // MergeOptions contains options for merging a branch.
 type MergeOptions struct {
-	Message      string
-	Squash       bool
-	NoCommit     bool
-	FFOnly       bool
+	Message        string
+	Squash         bool
+	NoCommit       bool
+	FFOnly         bool
 	AllowUnrelated bool
 }
 
@@ -75,13 +80,13 @@ type DiffOptions struct {
 
 // RepoStatus represents the working tree status.
 type RepoStatus struct {
-	Branch       string
-	IsClean      bool
-	Staged       []FileStatus
-	Unstaged     []FileStatus
-	Untracked    []string
-	Ahead        int
-	Behind       int
+	Branch    string
+	IsClean   bool
+	Staged    []FileStatus
+	Unstaged  []FileStatus
+	Untracked []string
+	Ahead     int
+	Behind    int
 }
 
 // FileStatus represents the status of a single file.
