@@ -80,10 +80,6 @@ result, _ := provider.DetectPlatform("https://github.com/owner/repo.git")
 result, _ = provider.DetectPlatform("git@gitlab.com:owner/repo.git")
 // result.Platform == provider.PlatformGitLab
 
-// GitCode URL
-result, _ = provider.DetectPlatform("https://gitcode.com/owner/repo.git")
-// result.Platform == provider.PlatformGitCode
-
 // 自托管实例
 result, _ = provider.DetectPlatform("https://my-gitea.example.com/owner/repo.git")
 // result.Platform == provider.PlatformGitea (默认)
@@ -93,38 +89,48 @@ result, _ = provider.DetectPlatform("https://my-gitea.example.com/owner/repo.git
 
 ### Provider 接口
 
-所有平台实现统一的 `Provider` 接口：
+Provider 接口由 8 个子接口组合而成，消费者可以只依赖需要的子接口：
 
 ```go
 type Provider interface {
     Platform() Platform
-    ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error)
-    GetRepo(ctx context.Context, owner, repo string) (*PlatformRepo, error)
-    CreateCR(ctx context.Context, opts CreateCROptions) (*ChangeRequest, error)
-    GetCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error)
-    ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error)
-    MergeCR(ctx context.Context, owner, repo string, number int, opts MergeCROptions) (*ChangeRequest, error)
-    CloseCR(ctx context.Context, owner, repo string, number int) (*ChangeRequest, error)
-    CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error)
-    DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error
-    ListWebhooks(ctx context.Context, owner, repo string) ([]*PlatformWebhook, error)
-    // ... 更多方法
+    TestConnection(ctx context.Context) (*TestConnectionResult, error)
+
+    RepoManager          // ListRepos, GetRepo, DeleteRepo, UpdateRepo, ForkRepo
+    ChangeRequestManager // CreateCR, GetCR, ListCRs, MergeCR, CloseCR, ReopenCR, UpdateCR, ...
+    WebhookManager       // CreateWebhook, DeleteWebhook, ListWebhooks, ParseWebhookEvent, ...
+    BranchManager        // ListBranches, CreateBranch, DeleteBranch
+    DiffManager          // GetCRDiff, GetCRFiles, CreateNote, DeleteNote, CreateDiscussion, CreateReview
+    CommitManager        // GetCommit, ListCommits, CompareCommits, CreateCommitStatus
+    FileManager          // GetFileContent, CreateFile, UpdateFile, DeleteFile
+    ReleaseManager       // ListTags, ListReleases, CreateRelease, GetArchive
+}
+```
+
+### 使用子接口
+
+```go
+// 只需要 Webhook 功能
+type WebhookHandler struct {
+    wh provider.WebhookManager
+}
+
+func (h *WebhookHandler) HandleEvent(r *http.Request) error {
+    event, err := h.wh.ParseWebhookEvent(r, secret)
+    // ...
 }
 ```
 
 ### GitCode 平台示例
 
 ```go
-// 创建 GitCode Provider
 p, err := provider.NewProvider(provider.Config{
     Platform: provider.PlatformGitCode,
     Token:    "your-gitcode-token",
 })
 
-// 列出仓库
 repos, _ := p.ListRepos(ctx, provider.ListRepoOptions{})
 
-// 创建 PR
 pr, _ := p.CreateCR(ctx, provider.CreateCROptions{
     Owner:        "owner",
     Repo:         "repo",
@@ -132,27 +138,17 @@ pr, _ := p.CreateCR(ctx, provider.CreateCROptions{
     SourceBranch: "feature",
     TargetBranch: "main",
 })
-
-// 创建 Webhook
-hook, _ := p.CreateWebhook(ctx, provider.CreateWebhookOptions{
-    Owner:  "owner",
-    Repo:   "repo",
-    URL:    "https://your-webhook.com",
-    Events: []string{"push", "pull_request"},
-})
 ```
 
 ### 多平台统一调用
 
 ```go
-// 根据不同平台创建 Provider
 configs := map[provider.Platform]provider.Config{
     provider.PlatformGitHub:  {Platform: provider.PlatformGitHub, Token: githubToken},
     provider.PlatformGitLab:  {Platform: provider.PlatformGitLab, Token: gitlabToken},
     provider.PlatformGitCode: {Platform: provider.PlatformGitCode, Token: gitcodeToken},
 }
 
-// 统一调用
 for platform, cfg := range configs {
     p, _ := provider.NewProvider(cfg)
     repos, _ := p.ListRepos(ctx, provider.ListRepoOptions{Page: 1, PerPage: 5})
@@ -160,25 +156,91 @@ for platform, cfg := range configs {
 }
 ```
 
+### Git 后端操作
+
+```go
+backend, _ := gitbackend.NewGitBackend(gitbackend.Options{Type: "native"})
+
+// Fetch
+backend.Fetch(ctx, gitbackend.FetchOptions{
+    RepoPath: "/path/to/repo",
+    Remote:   "origin",
+    Branches: []string{"main"},
+})
+
+// GetStatus
+status, _ := backend.GetStatus(ctx, "/path/to/repo")
+fmt.Printf("Branch: %s, Clean: %v\n", status.Branch, status.IsClean)
+
+// Diff between commits
+diff, _ := backend.Diff(ctx, "/path/to/repo", gitbackend.DiffOptions{
+    From: "abc123",
+    To:   "def456",
+})
+```
+
 ## 项目结构
 
 ```
 git-platform-sdk/
 ├── provider/
-│   ├── provider.go      # Provider 接口定义
-│   ├── factory.go       # Provider 工厂
-│   ├── detect.go        # 平台自动检测
-│   ├── base.go          # 基础 HTTP 客户端
-│   ├── github.go        # GitHub 实现
-│   ├── gitlab.go        # GitLab 实现
-│   ├── gitea.go         # Gitea 实现
-│   ├── forgejo.go       # Forgejo 实现
-│   ├── gitee.go         # Gitee 实现
-│   ├── gitcode.go       # GitCode 实现
-│   └── tencent_code.go  # Tencent Code 实现
-├── gitbackend/          # Git 操作
-├── credential/          # 凭证管理
-└── branchfilter/        # 分支过滤
+│   ├── provider.go          # Provider 接口定义 + 子接口组合
+│   ├── registry.go          # Provider 注册表
+│   ├── factory.go           # Provider 工厂
+│   ├── detect.go            # 平台自动检测
+│   ├── errors.go            # 结构化错误类型
+│   ├── logger.go            # Logger 接口
+│   ├── retry.go             # HTTP 重试/限流
+│   ├── middleware.go         # 请求/响应 Hook
+│   ├── base.go              # 基础 HTTP 客户端
+│   ├── pagination.go        # 分页工具
+│   ├── diffutil.go          # Diff 工具
+│   ├── stateutil.go         # 状态映射工具
+│   ├── convertutil.go       # 转换工具
+│   ├── util.go              # 通用工具
+│   ├── iface_*.go           # 8 个子接口定义
+│   ├── github.go            # GitHub 实现
+│   ├── gitlab.go            # GitLab 实现
+│   ├── gitea.go             # Gitea 实现
+│   ├── forgejo.go           # Forgejo 实现
+│   ├── gitee.go             # Gitee 实现
+│   ├── gitcode.go           # GitCode 实现
+│   └── tencent_code.go      # Tencent Code 实现
+├── gitbackend/
+│   ├── backend.go           # GitBackend 接口 (18 方法)
+│   ├── errors.go            # 结构化错误
+│   ├── logger.go            # Logger 复用
+│   ├── registry.go          # 注册表
+│   ├── gogit.go             # go-git v5 实现
+│   └── native.go            # 原生 git 实现
+├── pkg/
+│   ├── branchfilter/        # 分支过滤
+│   ├── credential/          # 凭证管理 + AES-GCM 加密
+│   └── encoding/            # Base64 工具
+└── go.mod
+```
+
+## 配置
+
+```go
+p, err := provider.NewProvider(provider.Config{
+    Platform: provider.PlatformGitHub,
+    BaseURL:  "https://github.example.com/api/v3", // 可选，用于自托管
+    Token:    "your-token",
+    SkipTLS:  true,                                 // 可选，跳过 TLS 验证
+    Logger:   myLogger,                             // 可选，注入日志
+    RetryConfig: &provider.RetryConfig{             // 可选，自动重试
+        MaxRetries: 3,
+        BaseDelay:  500 * time.Millisecond,
+    },
+    Hooks: &provider.Hooks{                         // 可选，请求/响应 Hook
+        Response: []provider.ResponseHook{
+            func(ctx context.Context, req *http.Request, resp *http.Response, d time.Duration, err error) {
+                log.Printf("%s %s %d %v", req.Method, req.URL.Path, resp.StatusCode, d)
+            },
+        },
+    },
+})
 ```
 
 ## 相关项目
@@ -192,5 +254,3 @@ MIT
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！
-
-// test code review at Sun Jun 14 07:09:10 CST 2026
