@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -22,11 +23,11 @@ type gitlabProvider struct {
 
 func init() {
 	Register(PlatformGitLab, func(cfg Config) (Provider, error) {
-		return newGitLabProvider(cfg), nil
+		return newGitLabProvider(cfg)
 	})
 }
 
-func newGitLabProvider(cfg Config) *gitlabProvider {
+func newGitLabProvider(cfg Config) (*gitlabProvider, error) {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = NewNoopLogger()
@@ -42,9 +43,9 @@ func newGitLabProvider(cfg Config) *gitlabProvider {
 	}
 	client, err := gitlab.NewClient(cfg.Token, opts...)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create GitLab client: %v", err))
+		return nil, fmt.Errorf("failed to create GitLab client: %w", err)
 	}
-	return &gitlabProvider{client: client, logger: logger}
+	return &gitlabProvider{client: client, logger: logger}, nil
 }
 
 func (g *gitlabProvider) Platform() Platform { return PlatformGitLab }
@@ -68,20 +69,14 @@ func (g *gitlabProvider) TestConnection(ctx context.Context) (*TestConnectionRes
 }
 
 func (g *gitlabProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error) {
-	page := int64(opts.Page)
-	perPage := int64(opts.PerPage)
-	if page == 0 {
-		page = 1
-	}
-	if perPage == 0 {
-		perPage = 20
-	}
+	page, perPage := NormalizePageOpts(opts.Page, opts.PerPage)
+	page64, perPage64 := int64(page), int64(perPage)
 	var projects []*gitlab.Project
 	var err error
 	if opts.Owner != "" {
-		projects, _, err = g.client.Groups.ListGroupProjects(opts.Owner, &gitlab.ListGroupProjectsOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: perPage}}, gitlab.WithContext(ctx))
+		projects, _, err = g.client.Groups.ListGroupProjects(opts.Owner, &gitlab.ListGroupProjectsOptions{ListOptions: gitlab.ListOptions{Page: page64, PerPage: perPage64}}, gitlab.WithContext(ctx))
 	} else {
-		projects, _, err = g.client.Projects.ListProjects(&gitlab.ListProjectsOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: perPage}}, gitlab.WithContext(ctx))
+		projects, _, err = g.client.Projects.ListProjects(&gitlab.ListProjectsOptions{ListOptions: gitlab.ListOptions{Page: page64, PerPage: perPage64}}, gitlab.WithContext(ctx))
 	}
 	if err != nil {
 		return nil, err
@@ -131,16 +126,10 @@ func (g *gitlabProvider) GetCR(ctx context.Context, owner, repo string, number i
 
 func (g *gitlabProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
 	pid := opts.Owner + "/" + opts.Repo
-	page := int64(opts.Page)
-	perPage := int64(opts.PerPage)
-	if page == 0 {
-		page = 1
-	}
-	if perPage == 0 {
-		perPage = 20
-	}
+	page, perPage := NormalizePageOpts(opts.Page, opts.PerPage)
+	page64, perPage64 := int64(page), int64(perPage)
 	listOpts := &gitlab.ListProjectMergeRequestsOptions{
-		ListOptions: gitlab.ListOptions{Page: page, PerPage: perPage},
+		ListOptions: gitlab.ListOptions{Page: page64, PerPage: perPage64},
 	}
 	if opts.State != "" {
 		listOpts.State = gitlab.Ptr(string(opts.State))
@@ -287,26 +276,9 @@ func (g *gitlabProvider) GetCRDiff(ctx context.Context, owner, repo string, numb
 			IsNew: c.NewFile, IsDeleted: c.DeletedFile, IsRenamed: c.RenamedFile,
 		}
 		diff.Files = append(diff.Files, cf)
-		diff.TotalAdd += additions
-		diff.TotalDel += deletions
-		diff.RawDiff += fmt.Sprintf("diff --git a/%s b/%s\n", c.OldPath, c.NewPath)
-		if c.NewFile {
-			diff.RawDiff += "new file mode 100644\n"
-		}
-		if c.DeletedFile {
-			diff.RawDiff += "deleted file mode 100644\n"
-		}
-		if c.RenamedFile {
-			diff.RawDiff += fmt.Sprintf("rename from %s\nrename to %s\n", c.OldPath, c.NewPath)
-		}
-		if !c.NewFile {
-			diff.RawDiff += fmt.Sprintf("--- a/%s\n", c.OldPath)
-		}
-		if !c.DeletedFile {
-			diff.RawDiff += fmt.Sprintf("+++ b/%s\n", c.NewPath)
-		}
-		diff.RawDiff += c.Diff + "\n"
 	}
+	diff.TotalAdd, diff.TotalDel = SumDiffStats(diff.Files)
+	diff.RawDiff = BuildRawDiff(diff.Files)
 	return diff, nil
 }
 
@@ -530,9 +502,15 @@ func (g *gitlabProvider) ParseWebhookEvent(r *http.Request, secret string) (*Nor
 }
 
 func (g *gitlabProvider) ValidateWebhookSignature(r *http.Request, secret string) error {
+	if secret == "" {
+		return nil
+	}
 	token := r.Header.Get("X-Gitlab-Token")
-	if token == "" || token != secret {
-		return fmt.Errorf("invalid GitLab webhook token")
+	if token == "" {
+		return fmt.Errorf("%w: missing X-Gitlab-Token header", ErrWebhookValidation)
+	}
+	if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
+		return fmt.Errorf("%w: invalid GitLab webhook token", ErrWebhookValidation)
 	}
 	return nil
 }
@@ -774,14 +752,9 @@ func (g *gitlabProvider) GetCommit(ctx context.Context, owner, repo, sha string)
 
 func (g *gitlabProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
 	pid := owner + "/" + repo
+	page, perPage := NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gitlab.ListCommitsOptions{
-		ListOptions: gitlab.ListOptions{Page: int64(opts.Page), PerPage: int64(opts.PerPage)},
-	}
-	if listOpts.Page == 0 {
-		listOpts.Page = 1
-	}
-	if listOpts.PerPage == 0 {
-		listOpts.PerPage = 20
+		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
 	}
 	if opts.Branch != "" {
 		listOpts.RefName = gitlab.Ptr(opts.Branch)

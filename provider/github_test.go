@@ -22,7 +22,7 @@ func TestGitHub_ListRepos(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	repos, err := p.ListRepos(context.Background(), ListRepoOptions{Page: 1, PerPage: 10})
 	if err != nil {
@@ -54,7 +54,7 @@ func TestGitHub_GetRepo(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	repo, err := p.GetRepo(context.Background(), "owner", "repo")
 	if err != nil {
@@ -86,7 +86,7 @@ func TestGitHub_CreateCR(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	cr, err := p.CreateCR(context.Background(), CreateCROptions{
 		Owner: "owner", Repo: "repo", Title: "test pr", Description: "desc",
@@ -126,7 +126,7 @@ func TestGitHub_GetCR(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	cr, err := p.GetCR(context.Background(), "owner", "repo", 5)
 	if err != nil {
@@ -157,7 +157,7 @@ func TestGitHub_ListCRs(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	crs, total, err := p.ListCRs(context.Background(), ListCROptions{Owner: "owner", Repo: "repo"})
 	if err != nil {
@@ -188,7 +188,7 @@ func TestGitHub_CloseCR(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	cr, err := p.CloseCR(context.Background(), "owner", "repo", 3)
 	if err != nil {
@@ -209,7 +209,7 @@ func TestGitHub_ListBranches(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	branches, err := p.ListBranches(context.Background(), "owner", "repo")
 	if err != nil {
@@ -234,7 +234,7 @@ func TestGitHub_CreateWebhook(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	hook, err := p.CreateWebhook(context.Background(), CreateWebhookOptions{
 		Owner: "owner", Repo: "repo", URL: "https://callback.example.com/hook", Secret: "s3cret",
@@ -315,7 +315,7 @@ func TestGitHub_GetFileContent(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	_, err := p.GetFileContent(context.Background(), "owner", "repo", "README.md", "main")
 	if err != nil {
@@ -336,7 +336,7 @@ func TestGitHub_UpdateCRLabels(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	err := p.UpdateCRLabels(context.Background(), "owner", "repo", 3, []string{"bug"})
 	if err != nil {
@@ -354,7 +354,7 @@ func TestGitHub_CreateNote(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	id, err := p.CreateNote(context.Background(), "owner", "repo", 5, "nice work")
 	if err != nil {
@@ -383,7 +383,7 @@ func TestGitHub_MergeCR(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	cr, err := p.MergeCR(context.Background(), "owner", "repo", 5, MergeCROptions{})
 	if err != nil {
@@ -404,7 +404,7 @@ func TestGitHub_DeleteBranch(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	err := p.DeleteBranch(context.Background(), "owner", "repo", "feature")
 	if err != nil {
@@ -422,7 +422,7 @@ func TestGitHub_CreateCommitStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	err := p.CreateCommitStatus(context.Background(), "owner", "repo", "sha123", CommitStatusOptions{
 		State: "success", Context: "ci", Description: "passed",
@@ -442,7 +442,7 @@ func TestGitHub_ListWebhooks(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	hooks, err := p.ListWebhooks(context.Background(), "owner", "repo")
 	if err != nil {
@@ -466,7 +466,7 @@ func TestGitHub_DeleteWebhook(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	err := p.DeleteWebhook(context.Background(), "owner", "repo", 42)
 	if err != nil {
@@ -492,7 +492,7 @@ func TestGitHub_TestConnection(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	result, err := p.TestConnection(context.Background())
 	if err != nil {
@@ -525,7 +525,7 @@ func TestGitHub_CreateDiscussion(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	id, err := p.CreateDiscussion(context.Background(), "owner", "repo", 3, DiscussionOptions{Body: "review comment", FilePath: "main.go", NewLine: 10})
 	if err != nil {
@@ -546,7 +546,7 @@ func TestGitHub_DeleteNote(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	err := p.DeleteNote(context.Background(), "owner", "repo", 5, "123")
 	if err != nil {
@@ -570,7 +570,7 @@ func TestGitHub_CreateBranch(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	b, err := p.CreateBranch(context.Background(), "owner", "repo", "new-branch", "main")
 	if err != nil {
@@ -588,7 +588,7 @@ func TestGitHub_CreateBranch_WithSHA(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	b, err := p.CreateBranch(context.Background(), "owner", "repo", "new-branch", "abc123def456abc123def456abc123def456abc1")
 	if err != nil {
@@ -608,7 +608,7 @@ func TestGitHub_GetCRDiff(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	diff, err := p.GetCRDiff(context.Background(), "owner", "repo", 1)
 	if err != nil {
@@ -638,7 +638,7 @@ func TestGitHub_UpdateCR(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	cr, err := p.UpdateCR(context.Background(), "owner", "repo", 7, UpdateCROptions{Title: "updated", Description: "new desc", TargetBranch: "develop"})
 	if err != nil {
@@ -660,7 +660,7 @@ func TestGitHub_ReopenCR(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	cr, err := p.ReopenCR(context.Background(), "owner", "repo", 3)
 	if err != nil {
@@ -680,7 +680,7 @@ func TestGitHub_ListCRComments(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	comments, err := p.ListCRComments(context.Background(), "owner", "repo", 5)
 	if err != nil {
@@ -703,7 +703,7 @@ func TestGitHub_ListCRCommits(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	commits, err := p.ListCRCommits(context.Background(), "owner", "repo", 5)
 	if err != nil {
@@ -728,7 +728,7 @@ func TestGitHub_ForkRepo(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	repo, err := p.ForkRepo(context.Background(), "owner", "repo", ForkRepoOptions{})
 	if err != nil {
@@ -749,7 +749,7 @@ func TestGitHub_DeleteRepo(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	err := p.DeleteRepo(context.Background(), "owner", "repo")
 	if err != nil {
@@ -770,7 +770,7 @@ func TestGitHub_UpdateRepo(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	repo, err := p.UpdateRepo(context.Background(), "owner", "repo", UpdateRepoOptions{Name: "new-name", DefaultBranch: "develop"})
 	if err != nil {
@@ -792,7 +792,7 @@ func TestGitHub_GetCommit(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	ci, err := p.GetCommit(context.Background(), "owner", "repo", "abc123")
 	if err != nil {
@@ -816,7 +816,7 @@ func TestGitHub_ListCommits(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	commits, err := p.ListCommits(context.Background(), "owner", "repo", ListCommitsOptions{})
 	if err != nil {
@@ -845,7 +845,7 @@ func TestGitHub_CompareCommits(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	result, err := p.CompareCommits(context.Background(), "owner", "repo", "base", "head")
 	if err != nil {
@@ -867,7 +867,7 @@ func TestGitHub_CreateFile(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	result, err := p.CreateFile(context.Background(), "owner", "repo", FileOptions{
 		Path: "path.txt", Message: "add", Content: "hello", Branch: "main",
@@ -888,7 +888,7 @@ func TestGitHub_UpdateFile(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	result, err := p.UpdateFile(context.Background(), "owner", "repo", FileOptions{
 		Path: "path.txt", Message: "update", Content: "updated", SHA: "oldsha",
@@ -909,7 +909,7 @@ func TestGitHub_DeleteFile(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	result, err := p.DeleteFile(context.Background(), "owner", "repo", FileDeleteOptions{
 		Path: "path.txt", Message: "delete", SHA: "oldsha",
@@ -932,7 +932,7 @@ func TestGitHub_ListTags(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	tags, err := p.ListTags(context.Background(), "owner", "repo")
 	if err != nil {
@@ -955,7 +955,7 @@ func TestGitHub_ListReleases(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	releases, err := p.ListReleases(context.Background(), "owner", "repo")
 	if err != nil {
@@ -978,7 +978,7 @@ func TestGitHub_CreateRelease(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	ri, err := p.CreateRelease(context.Background(), "owner", "repo", CreateReleaseOptions{
 		TagName: "v2.0", Title: "Release 2.0", Body: "body",
@@ -1006,7 +1006,7 @@ func TestGitHub_GetArchive(t *testing.T) {
 	}))
 	defer archiveSrv.Close()
 	client, _ := github.NewEnterpriseClient(archiveSrv.URL+"/api/v3", "", archiveSrv.Client())
-	p := &githubProvider{client: client, baseURL: archiveSrv.URL}
+	p := &githubProvider{client: client}
 
 	_, err := p.GetArchive(context.Background(), "owner", "repo", "main", "tar.gz")
 	if err != nil {
@@ -1026,7 +1026,7 @@ func TestGitHub_ListCRs_WithPagination(t *testing.T) {
 	}))
 	defer srv.Close()
 	client, _ := github.NewEnterpriseClient(srv.URL+"/api/v3", "", srv.Client())
-	p := &githubProvider{client: client, baseURL: srv.URL}
+	p := &githubProvider{client: client}
 
 	crs, total, err := p.ListCRs(context.Background(), ListCROptions{Owner: "o", Repo: "r"})
 	if err != nil {

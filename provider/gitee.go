@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -395,7 +396,7 @@ func (g *giteeProvider) ValidateWebhookSignature(r *http.Request, secret string)
 	if sig == "" {
 		return fmt.Errorf("%w: missing webhook token header", ErrWebhookValidation)
 	}
-	if sig != secret {
+	if subtle.ConstantTimeCompare([]byte(sig), []byte(secret)) != 1 {
 		return fmt.Errorf("%w: invalid webhook token", ErrWebhookValidation)
 	}
 	return nil

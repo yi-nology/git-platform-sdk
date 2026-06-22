@@ -146,12 +146,16 @@ func (b *baseProvider) doRequestWithHeaders(ctx context.Context, method, path st
 	b.hooks.executeResponseHooks(ctx, req, resp, duration, err)
 
 	if err != nil {
+		b.logger.Error("request failed", "method", method, "path", path, "duration", duration, "error", err)
 		return nil, err
 	}
 
 	if resp.StatusCode >= 400 {
+		b.logger.Warn("request error", "method", method, "path", path, "status", resp.StatusCode, "duration", duration)
 		return nil, NewProviderError(Platform(b.errPrefix), fmt.Sprintf("%s %s", method, path), resp.StatusCode, string(respBody))
 	}
+
+	b.logger.Debug("request ok", "method", method, "path", path, "status", resp.StatusCode, "duration", duration)
 	if result != nil && resp.StatusCode != http.StatusNoContent {
 		return resp.Header, json.Unmarshal(respBody, result)
 	}
@@ -188,10 +192,12 @@ func (b *baseProvider) doRawRequest(ctx context.Context, method, path string) ([
 	b.hooks.executeResponseHooks(ctx, req, resp, duration, err)
 
 	if err != nil {
+		b.logger.Error("raw request failed", "method", method, "path", path, "duration", duration, "error", err)
 		return nil, err
 	}
 
 	if resp.StatusCode >= 400 {
+		b.logger.Warn("raw request error", "method", method, "path", path, "status", resp.StatusCode, "duration", duration)
 		return nil, NewProviderError(Platform(b.errPrefix), fmt.Sprintf("%s %s", method, path), resp.StatusCode, string(body[:min(len(body), 200)]))
 	}
 	return body, nil
