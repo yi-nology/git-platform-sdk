@@ -16,18 +16,17 @@ import (
 )
 
 type githubProvider struct {
-	client  *github.Client
-	baseURL string
-	logger  Logger
+	client *github.Client
+	logger Logger
 }
 
 func init() {
 	Register(PlatformGitHub, func(cfg Config) (Provider, error) {
-		return newGitHubProvider(cfg), nil
+		return newGitHubProvider(cfg)
 	})
 }
 
-func newGitHubProvider(cfg Config) *githubProvider {
+func newGitHubProvider(cfg Config) (*githubProvider, error) {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = NewNoopLogger()
@@ -43,20 +42,15 @@ func newGitHubProvider(cfg Config) *githubProvider {
 	}
 	if cfg.BaseURL == "" {
 		return &githubProvider{
-			client:  github.NewClient(httpClient),
-			baseURL: "https://api.github.com",
-			logger:  logger,
-		}
+			client: github.NewClient(httpClient),
+			logger: logger,
+		}, nil
 	}
 	client, err := github.NewEnterpriseClient(cfg.BaseURL, "", httpClient)
 	if err != nil {
-		return &githubProvider{
-			client:  github.NewClient(httpClient),
-			baseURL: "https://api.github.com",
-			logger:  logger,
-		}
+		return nil, fmt.Errorf("failed to create GitHub Enterprise client for %s: %w", cfg.BaseURL, err)
 	}
-	return &githubProvider{client: client, baseURL: cfg.BaseURL, logger: logger}
+	return &githubProvider{client: client, logger: logger}, nil
 }
 
 func (g *githubProvider) Platform() Platform { return PlatformGitHub }
@@ -80,14 +74,9 @@ func (g *githubProvider) TestConnection(ctx context.Context) (*TestConnectionRes
 }
 
 func (g *githubProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error) {
+	page, perPage := NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.RepositoryListOptions{
-		ListOptions: github.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
-	}
-	if listOpts.Page == 0 {
-		listOpts.Page = 1
-	}
-	if listOpts.PerPage == 0 {
-		listOpts.PerPage = 20
+		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	}
 	var repos []*github.Repository
 	var err error
@@ -139,14 +128,9 @@ func (g *githubProvider) GetCR(ctx context.Context, owner, repo string, number i
 }
 
 func (g *githubProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
+	page, perPage := NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.PullRequestListOptions{
-		ListOptions: github.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
-	}
-	if listOpts.Page == 0 {
-		listOpts.Page = 1
-	}
-	if listOpts.PerPage == 0 {
-		listOpts.PerPage = 20
+		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	}
 	if opts.State != "" {
 		listOpts.State = mapCRStateToGithub(opts.State)
@@ -384,31 +368,14 @@ func (g *githubProvider) GetCRDiff(ctx context.Context, owner, repo string, numb
 				cf.OldPath = cf.NewPath
 			}
 			diff.Files = append(diff.Files, cf)
-			diff.TotalAdd += cf.Additions
-			diff.TotalDel += cf.Deletions
-			diff.RawDiff += fmt.Sprintf("diff --git a/%s b/%s\n", cf.OldPath, cf.NewPath)
-			if cf.IsNew {
-				diff.RawDiff += "new file mode 100644\n"
-			}
-			if cf.IsDeleted {
-				diff.RawDiff += "deleted file mode 100644\n"
-			}
-			if cf.IsRenamed {
-				diff.RawDiff += fmt.Sprintf("rename from %s\nrename to %s\n", cf.OldPath, cf.NewPath)
-			}
-			if !cf.IsNew {
-				diff.RawDiff += fmt.Sprintf("--- a/%s\n", cf.OldPath)
-			}
-			if !cf.IsDeleted {
-				diff.RawDiff += fmt.Sprintf("+++ b/%s\n", cf.NewPath)
-			}
-			diff.RawDiff += f.GetPatch() + "\n"
 		}
 		if len(files) < 100 {
 			break
 		}
 		page++
 	}
+	diff.TotalAdd, diff.TotalDel = SumDiffStats(diff.Files)
+	diff.RawDiff = BuildRawDiff(diff.Files)
 	return diff, nil
 }
 
@@ -781,14 +748,9 @@ func (g *githubProvider) GetCommit(ctx context.Context, owner, repo, sha string)
 }
 
 func (g *githubProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
+	page, perPage := NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.CommitsListOptions{
-		ListOptions: github.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
-	}
-	if listOpts.Page == 0 {
-		listOpts.Page = 1
-	}
-	if listOpts.PerPage == 0 {
-		listOpts.PerPage = 20
+		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	}
 	if opts.Branch != "" {
 		listOpts.SHA = opts.Branch

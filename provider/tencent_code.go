@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -21,7 +22,6 @@ func encodeProjectPath(owner, repo string) string {
 
 type tencentCodeProvider struct {
 	*baseProvider
-	skipTLS bool
 }
 
 func init() {
@@ -60,7 +60,7 @@ func newTencentCodeProvider(cfg Config) (*tencentCodeProvider, error) {
 			},
 		}
 	}
-	return &tencentCodeProvider{baseProvider: bp, skipTLS: cfg.SkipTLS}, nil
+	return &tencentCodeProvider{baseProvider: bp}, nil
 }
 
 func (t *tencentCodeProvider) Platform() Platform { return PlatformTencentCode }
@@ -93,12 +93,7 @@ func (t *tencentCodeProvider) ListRepos(ctx context.Context, opts ListRepoOption
 	if opts.Owner != "" {
 		path = fmt.Sprintf("/groups/%s/projects", opts.Owner)
 	}
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
-	}
+	opts.Page, opts.PerPage = NormalizePageOpts(opts.Page, opts.PerPage)
 	path = fmt.Sprintf("%s?page=%d&per_page=%d", path, opts.Page, opts.PerPage)
 
 	var projects []struct {
@@ -185,12 +180,7 @@ func (t *tencentCodeProvider) GetCR(ctx context.Context, owner, repo string, num
 
 func (t *tencentCodeProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
 	encoded := encodeProjectPath(opts.Owner, opts.Repo)
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
-	}
+	opts.Page, opts.PerPage = NormalizePageOpts(opts.Page, opts.PerPage)
 	path := fmt.Sprintf("/projects/%s/merge_requests?page=%d&per_page=%d", encoded, opts.Page, opts.PerPage)
 	if opts.State != "" {
 		path += "&state=" + string(opts.State)
@@ -540,9 +530,15 @@ func (t *tencentCodeProvider) ParseWebhookEvent(r *http.Request, secret string) 
 }
 
 func (t *tencentCodeProvider) ValidateWebhookSignature(r *http.Request, secret string) error {
+	if secret == "" {
+		return nil
+	}
 	token := r.Header.Get("X-Token")
-	if token == "" || token != secret {
-		return fmt.Errorf("invalid Tencent Code webhook token")
+	if token == "" {
+		return fmt.Errorf("%w: missing X-Token header", ErrWebhookValidation)
+	}
+	if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
+		return fmt.Errorf("%w: invalid Tencent Code webhook token", ErrWebhookValidation)
 	}
 	return nil
 }
@@ -779,14 +775,7 @@ func (t *tencentCodeProvider) ListCommits(ctx context.Context, owner, repo strin
 	encoded := encodeProjectPath(owner, repo)
 	path := fmt.Sprintf("/projects/%s/repository/commits", encoded)
 	if opts.Page > 0 || opts.PerPage > 0 {
-		page := opts.Page
-		perPage := opts.PerPage
-		if page == 0 {
-			page = 1
-		}
-		if perPage == 0 {
-			perPage = 20
-		}
+		page, perPage := NormalizePageOpts(opts.Page, opts.PerPage)
 		path += fmt.Sprintf("?page=%d&per_page=%d", page, perPage)
 	}
 	var commits []struct {

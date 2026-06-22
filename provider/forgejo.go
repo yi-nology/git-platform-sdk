@@ -25,11 +25,11 @@ type forgejoProvider struct {
 
 func init() {
 	Register(PlatformForgejo, func(cfg Config) (Provider, error) {
-		return newForgejoProvider(cfg), nil
+		return newForgejoProvider(cfg)
 	})
 }
 
-func newForgejoProvider(cfg Config) *forgejoProvider {
+func newForgejoProvider(cfg Config) (*forgejoProvider, error) {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = NewNoopLogger()
@@ -46,9 +46,9 @@ func newForgejoProvider(cfg Config) *forgejoProvider {
 	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
 	client, err := forgejo.NewClient(baseURL, forgejo.SetToken(cfg.Token), forgejo.SetHTTPClient(httpClient))
 	if err != nil {
-		return &forgejoProvider{logger: logger}
+		return nil, fmt.Errorf("failed to create Forgejo client: %w", err)
 	}
-	return &forgejoProvider{client: client, logger: logger}
+	return &forgejoProvider{client: client, logger: logger}, nil
 }
 
 func (f *forgejoProvider) Platform() Platform { return PlatformForgejo }
@@ -72,12 +72,7 @@ func (f *forgejoProvider) TestConnection(ctx context.Context) (*TestConnectionRe
 }
 
 func (f *forgejoProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error) {
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
-	}
+	opts.Page, opts.PerPage = NormalizePageOpts(opts.Page, opts.PerPage)
 	if opts.Owner != "" {
 		results, _, err := f.client.SearchRepos(forgejo.SearchRepoOptions{
 			ListOptions: forgejo.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
@@ -137,12 +132,7 @@ func (f *forgejoProvider) GetCR(ctx context.Context, owner, repo string, number 
 }
 
 func (f *forgejoProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
-	}
+	opts.Page, opts.PerPage = NormalizePageOpts(opts.Page, opts.PerPage)
 	prs, resp, err := f.client.ListRepoPullRequests(opts.Owner, opts.Repo, forgejo.ListPullRequestsOptions{
 		State:       forgejo.StateType(opts.State),
 		ListOptions: forgejo.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
@@ -737,12 +727,7 @@ func (f *forgejoProvider) GetCommit(ctx context.Context, owner, repo, sha string
 
 func (f *forgejoProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
 	listOpts := forgejo.ListCommitOptions{ListOptions: forgejo.ListOptions{Page: opts.Page, PageSize: opts.PerPage}}
-	if listOpts.Page == 0 {
-		listOpts.Page = 1
-	}
-	if listOpts.PageSize == 0 {
-		listOpts.PageSize = 20
-	}
+	listOpts.Page, listOpts.PageSize = NormalizePageOpts(listOpts.Page, listOpts.PageSize)
 	commits, _, err := f.client.ListRepoCommits(owner, repo, listOpts)
 	if err != nil {
 		return nil, err

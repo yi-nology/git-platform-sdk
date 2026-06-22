@@ -24,11 +24,6 @@ func Register(p Platform, ctor ProviderConstructor) {
 	registry[p] = ctor
 }
 
-// MustRegister is like Register but panics if the platform is already registered.
-func MustRegister(p Platform, ctor ProviderConstructor) {
-	Register(p, ctor)
-}
-
 // RegisteredPlatforms returns a list of all registered platforms.
 func RegisteredPlatforms() []Platform {
 	registryMu.RLock()

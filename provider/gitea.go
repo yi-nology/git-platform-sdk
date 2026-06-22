@@ -25,11 +25,11 @@ type giteaProvider struct {
 
 func init() {
 	Register(PlatformGitea, func(cfg Config) (Provider, error) {
-		return newGiteaProvider(cfg), nil
+		return newGiteaProvider(cfg)
 	})
 }
 
-func newGiteaProvider(cfg Config) *giteaProvider {
+func newGiteaProvider(cfg Config) (*giteaProvider, error) {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = NewNoopLogger()
@@ -46,9 +46,9 @@ func newGiteaProvider(cfg Config) *giteaProvider {
 	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
 	client, err := gitea.NewClient(baseURL, gitea.SetToken(cfg.Token), gitea.SetHTTPClient(httpClient))
 	if err != nil {
-		return &giteaProvider{logger: logger}
+		return nil, fmt.Errorf("failed to create Gitea client: %w", err)
 	}
-	return &giteaProvider{client: client, logger: logger}
+	return &giteaProvider{client: client, logger: logger}, nil
 }
 
 func (g *giteaProvider) Platform() Platform { return PlatformGitea }
@@ -72,12 +72,7 @@ func (g *giteaProvider) TestConnection(ctx context.Context) (*TestConnectionResu
 }
 
 func (g *giteaProvider) ListRepos(ctx context.Context, opts ListRepoOptions) ([]*PlatformRepo, error) {
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
-	}
+	opts.Page, opts.PerPage = NormalizePageOpts(opts.Page, opts.PerPage)
 	if opts.Owner != "" {
 		results, _, err := g.client.SearchRepos(gitea.SearchRepoOptions{
 			ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
@@ -137,12 +132,7 @@ func (g *giteaProvider) GetCR(ctx context.Context, owner, repo string, number in
 }
 
 func (g *giteaProvider) ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error) {
-	if opts.Page == 0 {
-		opts.Page = 1
-	}
-	if opts.PerPage == 0 {
-		opts.PerPage = 20
-	}
+	opts.Page, opts.PerPage = NormalizePageOpts(opts.Page, opts.PerPage)
 	prs, resp, err := g.client.ListRepoPullRequests(opts.Owner, opts.Repo, gitea.ListPullRequestsOptions{
 		State:       gitea.StateType(opts.State),
 		ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
@@ -765,12 +755,7 @@ func (g *giteaProvider) GetCommit(ctx context.Context, owner, repo, sha string) 
 
 func (g *giteaProvider) ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error) {
 	listOpts := gitea.ListCommitOptions{ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage}}
-	if listOpts.Page == 0 {
-		listOpts.Page = 1
-	}
-	if listOpts.PageSize == 0 {
-		listOpts.PageSize = 20
-	}
+	listOpts.Page, listOpts.PageSize = NormalizePageOpts(listOpts.Page, listOpts.PageSize)
 	commits, _, err := g.client.ListRepoCommits(owner, repo, listOpts)
 	if err != nil {
 		return nil, err
