@@ -412,7 +412,7 @@ func (g *gitcodeProvider) CreateNote(ctx context.Context, owner, repo string, nu
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%d", comment.ID), nil
+	return fmt.Sprintf("%s", comment.ID), nil
 }
 
 func (g *gitcodeProvider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
@@ -428,13 +428,13 @@ func (g *gitcodeProvider) CreateDiscussion(ctx context.Context, owner, repo stri
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%d", comment.ID), nil
+	return fmt.Sprintf("%s", comment.ID), nil
 }
 
 func (g *gitcodeProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
 	review, err := g.client.CreatePullRequestReview(ctx, owner, repo, number, opts.Body, opts.Event)
 	if err != nil {
-		return nil, err
+		return g.createReviewFallback(ctx, owner, repo, number, opts)
 	}
 	result := &ReviewResult{
 		ID: fmt.Sprintf("%d", review.ID),
@@ -451,7 +451,48 @@ func (g *gitcodeProvider) CreateReview(ctx context.Context, owner, repo string, 
 			AvatarURL: user.AvatarURL,
 		}
 	}
+	for _, c := range opts.Comments {
+		if cErr := g.createInlineComment(ctx, owner, repo, number, c, opts.CommitID); cErr != nil {
+			if g.logger != nil {
+				g.logger.Warn("inline comment failed", "path", c.Path, "line", c.Line, "error", cErr)
+			}
+		}
+	}
 	return result, nil
+}
+
+func (g *gitcodeProvider) createReviewFallback(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
+	var lastErr error
+	for _, c := range opts.Comments {
+		if err := g.createInlineComment(ctx, owner, repo, number, c, opts.CommitID); err != nil {
+			lastErr = err
+		}
+	}
+	if opts.Body != "" {
+		_, err := g.CreateNote(ctx, owner, repo, number, opts.Body)
+		if err != nil {
+			lastErr = err
+		}
+	}
+	if lastErr != nil && len(opts.Comments) == 0 {
+		return nil, lastErr
+	}
+	return &ReviewResult{}, nil
+}
+
+func (g *gitcodeProvider) createInlineComment(ctx context.Context, owner, repo string, number int, comment ReviewComment, commitID string) error {
+	side := comment.Side
+	if side == "" {
+		side = "RIGHT"
+	}
+	_, err := g.client.CreatePullRequestInlineComment(ctx, owner, repo, number, gitcode.CreatePullRequestInlineCommentOptions{
+		Body:     comment.Body,
+		Path:     comment.Path,
+		Line:     comment.Line,
+		Side:     side,
+		CommitID: commitID,
+	})
+	return err
 }
 
 func (g *gitcodeProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {

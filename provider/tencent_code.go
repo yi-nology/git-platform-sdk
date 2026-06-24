@@ -380,15 +380,87 @@ func (t *tencentCodeProvider) DeleteNote(ctx context.Context, owner, repo string
 }
 
 func (t *tencentCodeProvider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error) {
-	return t.CreateNote(ctx, owner, repo, number, opts.Body)
+	encoded := encodeProjectPath(owner, repo)
+	payload := map[string]interface{}{"body": opts.Body}
+	if opts.FilePath != "" {
+		position := map[string]interface{}{
+			"position_type": "text",
+			"new_path":      opts.FilePath,
+		}
+		if opts.BaseSHA != "" {
+			position["base_sha"] = opts.BaseSHA
+		}
+		if opts.StartSHA != "" {
+			position["start_sha"] = opts.StartSHA
+		}
+		if opts.HeadSHA != "" {
+			position["head_sha"] = opts.HeadSHA
+		}
+		if opts.OldLine > 0 {
+			position["old_path"] = opts.FilePath
+			position["old_line"] = opts.OldLine
+		}
+		if opts.NewLine > 0 {
+			position["new_line"] = opts.NewLine
+		}
+		payload["position"] = position
+	}
+	var resp struct {
+		ID int64 `json:"id"`
+	}
+	if err := t.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/merge_requests/%d/discussions", encoded, number), payload, &resp); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%d", resp.ID), nil
 }
 
 func (t *tencentCodeProvider) CreateReview(ctx context.Context, owner, repo string, number int, opts CreateReviewOptions) (*ReviewResult, error) {
-	noteID, err := t.CreateNote(ctx, owner, repo, number, opts.Body)
-	if err != nil {
-		return nil, err
+	encoded := encodeProjectPath(owner, repo)
+	var mr tcMR
+	_ = t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), nil, &mr)
+
+	var baseSHA, startSHA, headSHA string
+	if mr.DiffRefs.BaseSHA != "" {
+		baseSHA = mr.DiffRefs.BaseSHA
+		startSHA = mr.DiffRefs.StartSHA
+		headSHA = mr.DiffRefs.HeadSHA
 	}
-	return &ReviewResult{ID: noteID}, nil
+	if opts.CommitID != "" {
+		headSHA = opts.CommitID
+	}
+
+	var lastErr error
+	for _, c := range opts.Comments {
+		discOpts := DiscussionOptions{
+			Body:     c.Body,
+			FilePath: c.Path,
+			BaseSHA:  baseSHA,
+			StartSHA: startSHA,
+			HeadSHA:  headSHA,
+		}
+		if c.Side == "LEFT" && c.Line > 0 {
+			discOpts.OldLine = c.Line
+		} else if c.Line > 0 {
+			discOpts.NewLine = c.Line
+		}
+		if _, err := t.CreateDiscussion(ctx, owner, repo, number, discOpts); err != nil {
+			lastErr = err
+		}
+	}
+
+	if opts.Body != "" {
+		noteID, err := t.CreateNote(ctx, owner, repo, number, opts.Body)
+		if err != nil {
+			lastErr = err
+		} else {
+			return &ReviewResult{ID: noteID}, nil
+		}
+	}
+
+	if lastErr != nil && len(opts.Comments) == 0 {
+		return nil, lastErr
+	}
+	return &ReviewResult{}, nil
 }
 
 func (t *tencentCodeProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
@@ -560,6 +632,11 @@ type tcMR struct {
 	WebURL      string   `json:"web_url"`
 	CreatedAt   tcTime   `json:"created_at"`
 	UpdatedAt   tcTime   `json:"updated_at"`
+	DiffRefs    struct {
+		BaseSHA  string `json:"base_sha"`
+		StartSHA string `json:"start_sha"`
+		HeadSHA  string `json:"head_sha"`
+	} `json:"diff_refs"`
 }
 
 type tcTime struct {
@@ -592,6 +669,9 @@ func (mr *tcMR) toCR() *ChangeRequest {
 		Author: &CRUser{ID: int64(mr.Author.ID), Username: mr.Author.Username, Name: mr.Author.Name},
 		Labels: mr.Labels, MergeStatus: mr.MergeStatus, WebURL: mr.WebURL,
 		CreatedAt: mr.CreatedAt.Time, UpdatedAt: mr.UpdatedAt.Time,
+		BaseSHA:  mr.DiffRefs.BaseSHA,
+		StartSHA: mr.DiffRefs.StartSHA,
+		HeadSHA:  mr.DiffRefs.HeadSHA,
 	}
 }
 
