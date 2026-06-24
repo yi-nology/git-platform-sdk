@@ -408,11 +408,11 @@ func (g *gitcodeProvider) GetCRFiles(ctx context.Context, owner, repo string, nu
 }
 
 func (g *gitcodeProvider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
-	comment, err := g.client.CreateIssueComment(ctx, owner, repo, number, body)
+	comment, err := g.client.CreatePullRequestComment(ctx, owner, repo, number, body, "", "", "")
 	if err != nil {
 		return "", err
 	}
-	return string(rune(comment.ID)), nil
+	return fmt.Sprintf("%d", comment.ID), nil
 }
 
 func (g *gitcodeProvider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
@@ -424,7 +424,7 @@ func (g *gitcodeProvider) DeleteNote(ctx context.Context, owner, repo string, nu
 }
 
 func (g *gitcodeProvider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts DiscussionOptions) (string, error) {
-	comment, err := g.client.CreateIssueComment(ctx, owner, repo, number, opts.Body)
+	comment, err := g.client.CreatePullRequestComment(ctx, owner, repo, number, opts.Body, "", "", "")
 	if err != nil {
 		return "", err
 	}
