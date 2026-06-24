@@ -79,6 +79,7 @@ type ChangeRequest struct {
 	TargetBranch string    `json:"target_branch"`
 	HeadSHA      string    `json:"head_sha,omitempty"`
 	BaseSHA      string    `json:"base_sha,omitempty"`
+	StartSHA     string    `json:"start_sha,omitempty"`
 	Author       *CRUser   `json:"author"`
 	Reviewers    []*CRUser `json:"reviewers"`
 	Labels       []string  `json:"labels"`
@@ -207,10 +208,14 @@ type ChangedFile struct {
 
 // DiscussionOptions contains options for creating a discussion comment.
 type DiscussionOptions struct {
-	Body     string `json:"body"`
-	FilePath string `json:"file_path,omitempty"`
-	NewLine  int    `json:"new_line,omitempty"`
-	OldLine  int    `json:"old_line,omitempty"`
+	Body         string `json:"body"`
+	FilePath     string `json:"file_path,omitempty"`
+	NewLine      int    `json:"new_line,omitempty"`
+	OldLine      int    `json:"old_line,omitempty"`
+	StartNewLine int    `json:"start_new_line,omitempty"`
+	BaseSHA      string `json:"base_sha,omitempty"`
+	StartSHA     string `json:"start_sha,omitempty"`
+	HeadSHA      string `json:"head_sha,omitempty"`
 }
 
 // ReviewComment represents a comment in a code review.
@@ -233,10 +238,19 @@ type CreateReviewOptions struct {
 
 // ReviewResult represents the result of creating a review.
 type ReviewResult struct {
-	ID      string `json:"id"`
-	Body    string `json:"body,omitempty"`
-	HTMLURL string `json:"html_url,omitempty"`
-	User    *CRUser `json:"user,omitempty"`
+	ID       string                 `json:"id"`
+	Body     string                 `json:"body,omitempty"`
+	HTMLURL  string                 `json:"html_url,omitempty"`
+	User     *CRUser                `json:"user,omitempty"`
+	Comments []ReviewCommentResult  `json:"comments,omitempty"`
+}
+
+// ReviewCommentResult represents the result of posting a single inline comment.
+type ReviewCommentResult struct {
+	Path       string `json:"path,omitempty"`
+	Line       int    `json:"line,omitempty"`
+	ExternalID string `json:"external_id,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 // CommitStatusOptions contains options for creating a commit status.
