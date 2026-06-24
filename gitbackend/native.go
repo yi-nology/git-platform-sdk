@@ -41,7 +41,7 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 		args = append(args, "--depth", fmt.Sprintf("%d", opts.Depth))
 	}
 	if opts.InsecureSkipTLS {
-		args = append(args, "-c", "http.sslVerify=false")
+		args = append([]string{"-c", "http.sslVerify=false"}, args...)
 	}
 	if len(opts.Branches) > 0 {
 		// Filter out SHA hashes - they can't be used directly as refspecs
@@ -94,6 +94,9 @@ func (b *NativeGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
 	}
 	if opts.NoCheckout {
 		args = append(args, "--no-checkout")
+	}
+	if opts.InsecureSkipTLS {
+		args = append([]string{"-c", "http.sslVerify=false"}, args...)
 	}
 	args = append(args, opts.URL, opts.Path)
 
