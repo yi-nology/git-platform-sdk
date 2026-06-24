@@ -111,7 +111,7 @@ func TestGitCode_ValidateWebhookSignature(t *testing.T) {
 
 func TestGitCode_CreateDiscussion(t *testing.T) {
 	p := newTestGitCodeProvider(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && r.URL.Path == "/repos/owner/repo/issues/1/comments" {
+		if r.Method == "POST" && r.URL.Path == "/repos/owner/repo/pulls/1/comments" {
 			writeJSONGitCode(w, map[string]interface{}{"id": 100})
 			return
 		}
