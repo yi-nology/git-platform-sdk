@@ -119,6 +119,14 @@ type CommitInfo struct {
 	Date    string
 }
 
+// TagInfo represents a git tag.
+type TagInfo struct {
+	Name    string
+	Hash    string
+	Message string
+	Author  string
+}
+
 // StashEntry represents a stash entry.
 type StashEntry struct {
 	Index   int
@@ -163,6 +171,7 @@ type GitBackend interface {
 	CreateTag(ctx context.Context, repoPath string, name string, ref string) error
 	DeleteTag(ctx context.Context, repoPath string, name string) error
 	PushTag(ctx context.Context, repoPath string, remote string, name string, auth AuthConfig) error
+	GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error)
 
 	// File operations
 	GetFileAtRevision(ctx context.Context, repoPath string, path string, ref string) ([]byte, error)

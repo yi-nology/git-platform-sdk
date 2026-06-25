@@ -643,6 +643,48 @@ func (b *GoGitBackend) PushTag(ctx context.Context, repoPath, remote, name strin
 	return nil
 }
 
+func (b *GoGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return nil, newGitError("GetTagList", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	iter, err := repo.Tags()
+	if err != nil {
+		return nil, newGitError("GetTagList", repoPath, "", err)
+	}
+
+	var tags []TagInfo
+	err = iter.ForEach(func(ref *plumbing.Reference) error {
+		tagObj, tagErr := repo.TagObject(ref.Hash())
+		if tagErr == nil {
+			// Annotated Tag
+			tags = append(tags, TagInfo{
+				Name:    ref.Name().Short(),
+				Hash:    ref.Hash().String(),
+				Message: tagObj.Message,
+				Author:  tagObj.Tagger.Name,
+			})
+		} else {
+			// Lightweight Tag (commit)
+			commit, commitErr := repo.CommitObject(ref.Hash())
+			if commitErr == nil {
+				tags = append(tags, TagInfo{
+					Name:    ref.Name().Short(),
+					Hash:    ref.Hash().String(),
+					Message: commit.Message,
+					Author:  commit.Author.Name,
+				})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, newGitError("GetTagList", repoPath, "", err)
+	}
+	return tags, nil
+}
+
 // --- File operations ---
 
 func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, ref string) ([]byte, error) {
