@@ -108,3 +108,8 @@ func IsRateLimited(err error) bool {
 func IsNotImplemented(err error) bool {
 	return errors.Is(err, ErrNotImplemented)
 }
+
+// IsInvalidInput checks if an error is an invalid-input error.
+func IsInvalidInput(err error) bool {
+	return errors.Is(err, ErrInvalidInput)
+}
