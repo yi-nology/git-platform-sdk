@@ -15,7 +15,7 @@ type DetectResult struct {
 
 func DetectPlatform(remoteURL string) (*DetectResult, error) {
 	if remoteURL == "" {
-		return nil, fmt.Errorf("empty remote URL")
+		return nil, fmt.Errorf("%w: empty remote URL", ErrInvalidInput)
 	}
 
 	if strings.HasPrefix(remoteURL, "git@") {
@@ -27,7 +27,7 @@ func DetectPlatform(remoteURL string) (*DetectResult, error) {
 	if strings.HasPrefix(remoteURL, "ssh://") {
 		return detectSSHProtocol(remoteURL)
 	}
-	return nil, fmt.Errorf("unsupported URL format: %s", remoteURL)
+	return nil, fmt.Errorf("%w: unsupported URL format: %s", ErrInvalidInput, remoteURL)
 }
 
 func detectSSH(raw string) (*DetectResult, error) {
