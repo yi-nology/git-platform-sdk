@@ -429,6 +429,32 @@ func (b *NativeGitBackend) PushTag(ctx context.Context, repoPath, remote, name s
 	return nil
 }
 
+func (b *NativeGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"tag", "-l", "--format=%(refname:short)|%(objectname)|%(subject)|%(authorname)"}, AuthConfig{})
+	if err != nil {
+		return nil, newGitError("GetTagList", repoPath, stderr, err)
+	}
+
+	var tags []TagInfo
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		tags = append(tags, TagInfo{
+			Name:    parts[0],
+			Hash:    parts[1],
+			Message: parts[2],
+			Author:  parts[3],
+		})
+	}
+	return tags, nil
+}
+
 // --- File operations ---
 
 func (b *NativeGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, ref string) ([]byte, error) {
