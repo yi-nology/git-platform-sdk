@@ -191,6 +191,28 @@ func (b *GoGitBackend) DeleteBranch(ctx context.Context, repoPath, branch string
 	return nil
 }
 
+func (b *GoGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, newName string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("RenameBranch", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	oldRefName := plumbing.ReferenceName("refs/heads/" + oldName)
+	newRefName := plumbing.ReferenceName("refs/heads/" + newName)
+
+	ref, err := repo.Reference(oldRefName, true)
+	if err != nil {
+		return newGitError("RenameBranch", repoPath, "", ErrBranchNotFound)
+	}
+
+	err = repo.Storer.SetReference(plumbing.NewHashReference(newRefName, ref.Hash()))
+	if err != nil {
+		return newGitError("RenameBranch", repoPath, "", err)
+	}
+
+	return repo.Storer.RemoveReference(oldRefName)
+}
+
 func (b *GoGitBackend) Checkout(ctx context.Context, repoPath, branch string) error {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
@@ -419,6 +441,102 @@ func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts 
 	return newGitError("Merge", repoPath, "", fmt.Errorf("non-fast-forward merge not supported in go-git, use native backend"))
 }
 
+func (b *GoGitBackend) CherryPick(ctx context.Context, repoPath, commitHash string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("CherryPick", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	commit, err := repo.CommitObject(plumbing.NewHash(commitHash))
+	if err != nil {
+		return newGitError("CherryPick", repoPath, "", err)
+	}
+
+	commitTree, err := commit.Tree()
+	if err != nil {
+		return newGitError("CherryPick", repoPath, "", err)
+	}
+
+	parentCommit, err := commit.Parent(0)
+	if err != nil {
+		return newGitError("CherryPick", repoPath, "", err)
+	}
+
+	parentTree, err := parentCommit.Tree()
+	if err != nil {
+		return newGitError("CherryPick", repoPath, "", err)
+	}
+
+	changes, err := object.DiffTree(parentTree, commitTree)
+	if err != nil {
+		return newGitError("CherryPick", repoPath, "", err)
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("CherryPick", repoPath, "", err)
+	}
+
+	for _, change := range changes {
+		action, err := change.Action()
+		if err != nil {
+			continue
+		}
+
+		switch action {
+		case merkletrie.Insert, merkletrie.Modify:
+			file, err := commitTree.File(change.To.Name)
+			if err != nil {
+				continue
+			}
+			reader, err := file.Blob.Reader()
+			if err != nil {
+				continue
+			}
+			fullPath := filepath.Join(repoPath, change.To.Name)
+			_ = os.MkdirAll(filepath.Dir(fullPath), 0o755)
+			f, err := os.Create(fullPath)
+			if err != nil {
+				_ = reader.Close()
+				continue
+			}
+			_, _ = io.Copy(f, reader)
+			_ = f.Close()
+			_ = reader.Close()
+			_, _ = wt.Add(change.To.Name)
+
+		case merkletrie.Delete:
+			fullPath := filepath.Join(repoPath, change.From.Name)
+			_ = os.Remove(fullPath)
+			_, _ = wt.Remove(change.From.Name)
+		}
+	}
+
+	_, err = wt.Commit(commit.Message, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  commit.Author.Name,
+			Email: commit.Author.Email,
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		return newGitError("CherryPick", repoPath, "", err)
+	}
+	return nil
+}
+
+func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error {
+	return newGitError("Rebase", repoPath, "", fmt.Errorf("rebase not supported in go-git backend, use native backend"))
+}
+
+func (b *GoGitBackend) RebaseAbort(ctx context.Context, repoPath string) error {
+	return newGitError("RebaseAbort", repoPath, "", fmt.Errorf("rebase not supported in go-git backend, use native backend"))
+}
+
+func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) error {
+	return newGitError("RebaseContinue", repoPath, "", fmt.Errorf("rebase not supported in go-git backend, use native backend"))
+}
+
 // --- Remote operations ---
 
 func (b *GoGitBackend) AddRemote(ctx context.Context, repoPath, name, url string) error {
@@ -450,6 +568,24 @@ func (b *GoGitBackend) RemoveRemote(ctx context.Context, repoPath, name string) 
 	return nil
 }
 
+func (b *GoGitBackend) GetRemoteURL(ctx context.Context, repoPath, name string) (string, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return "", newGitError("GetRemoteURL", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	remote, err := repo.Remote(name)
+	if err != nil {
+		return "", newGitError("GetRemoteURL", repoPath, "", ErrRemoteNotFound)
+	}
+
+	urls := remote.Config().URLs
+	if len(urls) == 0 {
+		return "", newGitError("GetRemoteURL", repoPath, "", fmt.Errorf("no URLs for remote %s", name))
+	}
+	return urls[0], nil
+}
+
 // --- Tag operations ---
 
 func (b *GoGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string) error {
@@ -470,6 +606,39 @@ func (b *GoGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string
 	_, err = repo.CreateTag(name, hash, nil)
 	if err != nil {
 		return newGitError("CreateTag", repoPath, "", err)
+	}
+	return nil
+}
+
+func (b *GoGitBackend) DeleteTag(ctx context.Context, repoPath, name string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("DeleteTag", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	err = repo.DeleteTag(name)
+	if err != nil {
+		return newGitError("DeleteTag", repoPath, "", err)
+	}
+	return nil
+}
+
+func (b *GoGitBackend) PushTag(ctx context.Context, repoPath, remote, name string, auth AuthConfig) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("PushTag", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	refSpec := config.RefSpec(fmt.Sprintf("refs/tags/%s:refs/tags/%s", name, name))
+	pushOpts := &git.PushOptions{
+		RemoteName: remote,
+		RefSpecs:   []config.RefSpec{refSpec},
+		Auth:       b.buildTransportAuth(auth),
+	}
+
+	err = repo.PushContext(ctx, pushOpts)
+	if err != nil && err != git.NoErrAlreadyUpToDate {
+		return newGitError("PushTag", repoPath, "", err)
 	}
 	return nil
 }
@@ -515,7 +684,142 @@ func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, re
 	return []byte(content), nil
 }
 
-// --- Auth helpers ---
+func (b *GoGitBackend) GetFileHistory(ctx context.Context, repoPath, path string, limit int) ([]CommitInfo, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return nil, newGitError("GetFileHistory", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return nil, newGitError("GetFileHistory", repoPath, "", err)
+	}
+
+	commitIter, err := repo.Log(&git.LogOptions{
+		From:     head.Hash(),
+		FileName: &path,
+	})
+	if err != nil {
+		return nil, newGitError("GetFileHistory", repoPath, "", err)
+	}
+	defer commitIter.Close()
+
+	var commits []CommitInfo
+	count := 0
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		if limit > 0 && count >= limit {
+			return io.EOF
+		}
+		commits = append(commits, CommitInfo{
+			Hash:    c.Hash.String(),
+			Message: strings.TrimRight(c.Message, "\n"),
+			Author:  c.Author.Name,
+			Date:    c.Author.When.Format(time.RFC3339),
+		})
+		count++
+		return nil
+	})
+	if err != nil && err != io.EOF {
+		return nil, newGitError("GetFileHistory", repoPath, "", err)
+	}
+	return commits, nil
+}
+
+// --- Stash operations ---
+
+func (b *GoGitBackend) StashList(ctx context.Context, repoPath string) ([]StashEntry, error) {
+	return nil, newGitError("StashList", repoPath, "", fmt.Errorf("stash not supported in go-git backend, use native backend"))
+}
+
+func (b *GoGitBackend) StashSave(ctx context.Context, repoPath, message string) error {
+	return newGitError("StashSave", repoPath, "", fmt.Errorf("stash not supported in go-git backend, use native backend"))
+}
+
+func (b *GoGitBackend) StashApply(ctx context.Context, repoPath string, index int) error {
+	return newGitError("StashApply", repoPath, "", fmt.Errorf("stash not supported in go-git backend, use native backend"))
+}
+
+func (b *GoGitBackend) StashPop(ctx context.Context, repoPath string, index int) error {
+	return newGitError("StashPop", repoPath, "", fmt.Errorf("stash not supported in go-git backend, use native backend"))
+}
+
+func (b *GoGitBackend) StashDrop(ctx context.Context, repoPath string, index int) error {
+	return newGitError("StashDrop", repoPath, "", fmt.Errorf("stash not supported in go-git backend, use native backend"))
+}
+
+func (b *GoGitBackend) StashClear(ctx context.Context, repoPath string) error {
+	return newGitError("StashClear", repoPath, "", fmt.Errorf("stash not supported in go-git backend, use native backend"))
+}
+
+// --- Config operations ---
+
+func (b *GoGitBackend) GetConfig(ctx context.Context, repoPath, key string) (string, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return "", newGitError("GetConfig", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	cfg, err := repo.Config()
+	if err != nil {
+		return "", newGitError("GetConfig", repoPath, "", err)
+	}
+
+	parts := strings.SplitN(key, ".", 2)
+	if len(parts) != 2 {
+		return "", newGitError("GetConfig", repoPath, "", fmt.Errorf("invalid config key: %s", key))
+	}
+
+	section := parts[0]
+	subsection := parts[1]
+
+	switch section {
+	case "user":
+		switch subsection {
+		case "name":
+			return cfg.Author.Name, nil
+		case "email":
+			return cfg.Author.Email, nil
+		}
+	}
+
+	return "", newGitError("GetConfig", repoPath, "", fmt.Errorf("config key not found: %s", key))
+}
+
+func (b *GoGitBackend) SetConfig(ctx context.Context, repoPath, key, value string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("SetConfig", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	cfg, err := repo.Config()
+	if err != nil {
+		return newGitError("SetConfig", repoPath, "", err)
+	}
+
+	parts := strings.SplitN(key, ".", 2)
+	if len(parts) != 2 {
+		return newGitError("SetConfig", repoPath, "", fmt.Errorf("invalid config key: %s", key))
+	}
+
+	section := parts[0]
+	subsection := parts[1]
+
+	switch section {
+	case "user":
+		switch subsection {
+		case "name":
+			cfg.Author.Name = value
+		case "email":
+			cfg.Author.Email = value
+		default:
+			return newGitError("SetConfig", repoPath, "", fmt.Errorf("unsupported config key: %s", key))
+		}
+	default:
+		return newGitError("SetConfig", repoPath, "", fmt.Errorf("unsupported config section: %s", section))
+	}
+
+	return repo.Storer.SetConfig(cfg)
+}
 
 func (b *GoGitBackend) buildTransportAuth(auth AuthConfig) transport.AuthMethod {
 	switch auth.Type {

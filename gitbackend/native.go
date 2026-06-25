@@ -160,6 +160,14 @@ func (b *NativeGitBackend) DeleteBranch(ctx context.Context, repoPath, branch st
 	return nil
 }
 
+func (b *NativeGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, newName string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"branch", "-m", oldName, newName}, AuthConfig{})
+	if err != nil {
+		return newGitError("RenameBranch", repoPath, stderr, err)
+	}
+	return nil
+}
+
 func (b *NativeGitBackend) Checkout(ctx context.Context, repoPath, branch string) error {
 	_, stderr, err := b.runGit(ctx, repoPath, []string{"checkout", branch}, AuthConfig{})
 	if err != nil {
@@ -244,7 +252,7 @@ func (b *NativeGitBackend) Diff(ctx context.Context, repoPath string, opts DiffO
 	if opts.From != "" && opts.To != "" {
 		args = append(args, opts.From, opts.To)
 	}
-	args = append(args, "--", )
+	args = append(args, "--")
 	args = append(args, opts.Paths...)
 
 	stdout, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
@@ -321,6 +329,47 @@ func (b *NativeGitBackend) Merge(ctx context.Context, repoPath, branch string, o
 	return nil
 }
 
+func (b *NativeGitBackend) CherryPick(ctx context.Context, repoPath, commitHash string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"cherry-pick", commitHash}, AuthConfig{})
+	if err != nil {
+		if strings.Contains(stderr, "CONFLICT") || strings.Contains(stderr, "conflict") {
+			return newGitError("CherryPick", repoPath, stderr, ErrMergeConflict)
+		}
+		return newGitError("CherryPick", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) Rebase(ctx context.Context, repoPath, onto string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", onto}, AuthConfig{})
+	if err != nil {
+		if strings.Contains(stderr, "CONFLICT") || strings.Contains(stderr, "conflict") {
+			return newGitError("Rebase", repoPath, stderr, ErrMergeConflict)
+		}
+		return newGitError("Rebase", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) RebaseAbort(ctx context.Context, repoPath string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", "--abort"}, AuthConfig{})
+	if err != nil {
+		return newGitError("RebaseAbort", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) RebaseContinue(ctx context.Context, repoPath string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", "--continue"}, AuthConfig{})
+	if err != nil {
+		if strings.Contains(stderr, "CONFLICT") || strings.Contains(stderr, "conflict") {
+			return newGitError("RebaseContinue", repoPath, stderr, ErrMergeConflict)
+		}
+		return newGitError("RebaseContinue", repoPath, stderr, err)
+	}
+	return nil
+}
+
 // --- Remote operations ---
 
 func (b *NativeGitBackend) AddRemote(ctx context.Context, repoPath, name, url string) error {
@@ -337,6 +386,14 @@ func (b *NativeGitBackend) RemoveRemote(ctx context.Context, repoPath, name stri
 		return newGitError("RemoveRemote", repoPath, stderr, err)
 	}
 	return nil
+}
+
+func (b *NativeGitBackend) GetRemoteURL(ctx context.Context, repoPath, name string) (string, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"remote", "get-url", name}, AuthConfig{})
+	if err != nil {
+		return "", newGitError("GetRemoteURL", repoPath, stderr, err)
+	}
+	return strings.TrimSpace(stdout), nil
 }
 
 // --- Tag operations ---
@@ -356,6 +413,22 @@ func (b *NativeGitBackend) CreateTag(ctx context.Context, repoPath, name, ref st
 	return nil
 }
 
+func (b *NativeGitBackend) DeleteTag(ctx context.Context, repoPath, name string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"tag", "-d", name}, AuthConfig{})
+	if err != nil {
+		return newGitError("DeleteTag", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) PushTag(ctx context.Context, repoPath, remote, name string, auth AuthConfig) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"push", remote, "refs/tags/" + name}, auth)
+	if err != nil {
+		return newGitError("PushTag", repoPath, stderr, err)
+	}
+	return nil
+}
+
 // --- File operations ---
 
 func (b *NativeGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, ref string) ([]byte, error) {
@@ -368,6 +441,120 @@ func (b *NativeGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path
 		return nil, newGitError("GetFileAtRevision", repoPath, stderr, err)
 	}
 	return []byte(stdout), nil
+}
+
+func (b *NativeGitBackend) GetFileHistory(ctx context.Context, repoPath, path string, limit int) ([]CommitInfo, error) {
+	args := []string{"log", "--pretty=format:%H|%s|%an|%ai", "--follow", "--", path}
+	if limit > 0 {
+		args = append(args, fmt.Sprintf("-%d", limit))
+	}
+	stdout, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	if err != nil {
+		return nil, newGitError("GetFileHistory", repoPath, stderr, err)
+	}
+
+	var commits []CommitInfo
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		commits = append(commits, CommitInfo{
+			Hash: parts[0], Message: parts[1], Author: parts[2], Date: parts[3],
+		})
+	}
+	return commits, nil
+}
+
+// --- Stash operations ---
+
+func (b *NativeGitBackend) StashList(ctx context.Context, repoPath string) ([]StashEntry, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"stash", "list"}, AuthConfig{})
+	if err != nil {
+		return nil, newGitError("StashList", repoPath, stderr, err)
+	}
+
+	var entries []StashEntry
+	for i, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		entries = append(entries, StashEntry{Index: i, Message: line})
+	}
+	return entries, nil
+}
+
+func (b *NativeGitBackend) StashSave(ctx context.Context, repoPath, message string) error {
+	args := []string{"stash", "push"}
+	if message != "" {
+		args = append(args, "-m", message)
+	}
+	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	if err != nil {
+		return newGitError("StashSave", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) StashApply(ctx context.Context, repoPath string, index int) error {
+	args := []string{"stash", "apply", fmt.Sprintf("stash@{%d}", index)}
+	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	if err != nil {
+		return newGitError("StashApply", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) StashPop(ctx context.Context, repoPath string, index int) error {
+	args := []string{"stash", "pop", fmt.Sprintf("stash@{%d}", index)}
+	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	if err != nil {
+		return newGitError("StashPop", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) StashDrop(ctx context.Context, repoPath string, index int) error {
+	args := []string{"stash", "drop", fmt.Sprintf("stash@{%d}", index)}
+	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	if err != nil {
+		return newGitError("StashDrop", repoPath, stderr, err)
+	}
+	return nil
+}
+
+func (b *NativeGitBackend) StashClear(ctx context.Context, repoPath string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"stash", "clear"}, AuthConfig{})
+	if err != nil {
+		return newGitError("StashClear", repoPath, stderr, err)
+	}
+	return nil
+}
+
+// --- Config operations ---
+
+func (b *NativeGitBackend) GetConfig(ctx context.Context, repoPath, key string) (string, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"config", key}, AuthConfig{})
+	if err != nil {
+		if strings.Contains(stderr, "not found") || strings.Contains(stderr, "No such") {
+			return "", newGitError("GetConfig", repoPath, stderr, fmt.Errorf("config key not found: %s", key))
+		}
+		return "", newGitError("GetConfig", repoPath, stderr, err)
+	}
+	return strings.TrimSpace(stdout), nil
+}
+
+func (b *NativeGitBackend) SetConfig(ctx context.Context, repoPath, key, value string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"config", key, value}, AuthConfig{})
+	if err != nil {
+		return newGitError("SetConfig", repoPath, stderr, err)
+	}
+	return nil
 }
 
 // --- Internal helpers ---
