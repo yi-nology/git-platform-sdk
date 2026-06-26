@@ -13,20 +13,25 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
+          cache: true
+
+      - name: Show Go version
+        run: go version
 
       - name: Download dependencies
         run: go mod download
 
       - name: Run tests
-        run: go test -v ./...
+        run: go test -race ./...
 
       - name: Build
         run: go build ./...
