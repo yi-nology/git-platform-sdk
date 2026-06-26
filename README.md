@@ -3,6 +3,10 @@
 Go 语言的多平台 Git 统一 SDK，支持 GitHub、GitLab、Gitea、Forgejo、Gitee、GitCode 等平台。
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/yi-nology/git-platform-sdk.svg)](https://pkg.go.dev/github.com/yi-nology/git-platform-sdk)
+[![CI](https://github.com/yi-nology/git-platform-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/yi-nology/git-platform-sdk/actions/workflows/ci.yml)
+[![Release](https://github.com/yi-nology/git-platform-sdk/actions/workflows/release.yml/badge.svg)](https://github.com/yi-nology/git-platform-sdk/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/yi-nology/git-platform-sdk?include_prereleases)](https://github.com/yi-nology/git-platform-sdk/releases)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://go.dev/)
 
 ## 简介
 
@@ -86,6 +90,32 @@ result, _ = provider.DetectPlatform("https://my-gitea.example.com/owner/repo.git
 ```
 
 ## API 使用
+
+### Provider Manager（带缓存）
+
+Provider Manager 提供带 TTL 缓存的 Provider 管理，避免重复创建实例：
+
+```go
+import "github.com/yi-nology/git-platform-sdk/provider"
+
+// 创建管理器，缓存 30 分钟过期
+mgr := provider.NewManager(30 * time.Minute)
+
+// 通过 URL 自动检测平台并获取 Provider
+p, err := mgr.GetByURL("https://github.com/owner/repo.git", "your-token")
+
+// 通过 Config 获取
+p, err = mgr.Get(provider.Config{
+    Platform: provider.PlatformGitHub,
+    Token:    "your-token",
+})
+
+// 缓存管理
+mgr.Len()       // 当前缓存数量
+mgr.Remove(cfg) // 移除指定缓存
+mgr.Purge()     // 清空所有缓存
+mgr.Cleanup()   // 清除过期条目
+```
 
 ### Provider 接口
 
@@ -187,6 +217,7 @@ git-platform-sdk/
 │   ├── provider.go          # Provider 接口定义 + 子接口组合
 │   ├── registry.go          # Provider 注册表
 │   ├── factory.go           # Provider 工厂
+│   ├── manager.go           # Provider Manager（带缓存）
 │   ├── detect.go            # 平台自动检测
 │   ├── errors.go            # 结构化错误类型
 │   ├── logger.go            # Logger 接口
@@ -259,6 +290,42 @@ p, err := provider.NewProvider(provider.Config{
     },
 })
 ```
+
+## CI/CD
+
+本项目通过 GitHub Actions 实现自动化测试与发布，配置位于 `.github/workflows/`。
+
+### 单元测试 (CI)
+
+工作流文件：`.github/workflows/ci.yml`
+
+- **触发条件**：推送到 `main` 分支、针对 `main` 的 Pull Request
+- **运行矩阵**：`ubuntu-latest` + `macos-latest`（覆盖 Linux/macOS 两种环境，验证原生 git 后端）
+- **执行步骤**：
+  - `go mod download` 下载依赖
+  - `go vet ./...` 静态检查
+  - `go build ./...` 编译全部包
+  - `go test -race -coverprofile=coverage.out ./...` 运行竞态检测 + 覆盖率统计
+  - 打印覆盖率摘要，并将 `coverage.out` 作为 Artifact 上传（仅 ubuntu，保留 14 天）
+
+### 发布 Release
+
+工作流文件：`.github/workflows/release.yml`
+
+- **触发条件**：推送 `v*` 格式的 tag（如 `v0.28.0`）
+- **发布流程**：
+  1. 拉取完整历史（`fetch-depth: 0`，用于生成变更日志）
+  2. 运行 `go test ./...` 作为发布门禁 —— 测试失败则中止发布
+  3. 编译全部包
+  4. 自动识别预发布版本（tag 含 `rc`/`beta`/`alpha`/`pre` 时标记为 prerelease）
+  5. 通过 `gh release create --generate-notes` 创建 GitHub Release，自动从提交/PR 生成发布说明
+
+> 推送 tag 即可触发发布：
+> ```bash
+> git tag v0.28.0
+> git push origin v0.28.0
+> ```
+> Go module proxy 会在 tag 推送后自动索引该版本，无需额外操作。
 
 ## 相关项目
 
