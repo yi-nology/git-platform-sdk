@@ -207,12 +207,29 @@ git-platform-sdk/
 │   ├── gitcode.go           # GitCode 实现
 │   └── tencent_code.go      # Tencent Code 实现
 ├── gitbackend/
-│   ├── backend.go           # GitBackend 接口 (18 方法)
-│   ├── errors.go            # 结构化错误
-│   ├── logger.go            # Logger 复用
-│   ├── registry.go          # 注册表
-│   ├── gogit.go             # go-git v5 实现
-│   └── native.go            # 原生 git 实现
+│   ├── backend.go            # GitBackend 接口 (55 方法) + 类型定义
+│   ├── auth.go               # AuthConfig 构造工具
+│   ├── errors.go             # 结构化错误类型
+│   ├── factory.go            # 后端工厂 + 注册表 (native/gogit 自动选择)
+│   ├── logger.go             # Logger 复用 provider
+│   ├── repository.go         # Repository 状态化封装 (绑定路径+认证)
+│   ├── util.go               # 共享工具 (isCommitSHA)
+│   ├── gogit.go              # go-git v5 后端: 结构体 + 认证 + 工具
+│   ├── gogit_core.go         #   核心: Fetch/Push/Clone/Init/Pull/FetchAll/RunRaw/TestConnection
+│   ├── gogit_branch.go       #   分支: List*/Create/Delete/Rename/Checkout/GetBranchSyncInfo
+│   ├── gogit_status.go       #   状态/Diff/DiffNames/DeletedFiles/RevParse/MergeBase
+│   ├── gogit_commit.go       #   提交/合并/CherryPick/Rebase/Add/CommitWithIdentity
+│   ├── gogit_remote_tag.go   #   远程管理 + 标签
+│   ├── gogit_file.go         #   文件/Tree/Blob/Checkout + 内部 diff 工具
+│   ├── gogit_stash_config.go #   Stash (桩) + Config
+│   ├── native.go             # 原生 git 后端: 结构体 + 命令执行/认证/解析
+│   ├── native_core.go        #   核心操作
+│   ├── native_branch.go      #   分支操作
+│   ├── native_status.go      #   状态/Diff/RevParse/MergeBase
+│   ├── native_commit.go      #   提交/合并/Rebase
+│   ├── native_remote_tag.go  #   远程 + 标签
+│   ├── native_file.go        #   文件/Tree/Blob/Checkout
+│   └── native_stash_config.go#   Stash + Config
 ├── pkg/
 │   ├── branchfilter/        # 分支过滤
 │   ├── credential/          # 凭证管理 + AES-GCM 加密
