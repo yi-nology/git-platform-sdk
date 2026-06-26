@@ -3,6 +3,7 @@ package gitbackend
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -611,9 +612,19 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) {
 		if token == "" {
 			token = auth.Password
 		}
+		username := auth.Username
+		if username == "" {
+			username = "token"
+		}
 		if token != "" {
-			cmd.Env = append(cmd.Env, "GIT_ASKPASS=echo")
-			cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_PASSWORD=%s", token))
+			// Use http.extraheader with Basic auth — works for all git
+			// operations (clone, fetch, push) without modifying URLs.
+			cred := base64.StdEncoding.EncodeToString([]byte(username + ":" + token))
+			cmd.Env = append(cmd.Env,
+				"GIT_CONFIG_COUNT=1",
+				"GIT_CONFIG_KEY_0=http.extraheader",
+				fmt.Sprintf("GIT_CONFIG_VALUE_0=Authorization: Basic %s", cred),
+			)
 		}
 	case AuthSSH:
 		if auth.SSHKey != "" {
