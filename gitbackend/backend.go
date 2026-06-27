@@ -62,6 +62,13 @@ type AuthConfig struct {
 	// Passphrase is the passphrase for decrypting the SSH private key.
 	// Used together with SSHKey or SSHKeyContent.
 	Passphrase string
+
+	// InsecureSkipTLS disables TLS certificate verification for HTTPS
+	// operations (equivalent to http.sslVerify=false). It has no effect on
+	// SSH operations. Carried on AuthConfig so every network operation that
+	// takes auth (Fetch, Push, Clone, Pull, FetchAll, PushTag,
+	// TestConnection, ...) honors it uniformly.
+	InsecureSkipTLS bool
 }
 
 // ---------------------------------------------------------------------------

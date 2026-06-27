@@ -1,0 +1,15 @@
+# Test coverage output
+coverage.out
+coverage.html
+
+# Go build/test artifacts
+*.test
+*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/

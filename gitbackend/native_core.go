@@ -20,9 +20,6 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 	if opts.Depth > 0 {
 		args = append(args, "--depth", fmt.Sprintf("%d", opts.Depth))
 	}
-	if opts.InsecureSkipTLS {
-		args = append([]string{"-c", "http.sslVerify=false"}, args...)
-	}
 	if len(opts.Branches) > 0 {
 		// Filter out SHA hashes - they can't be used directly as refspecs
 		branchArgs := make([]string, 0, len(opts.Branches))
@@ -36,7 +33,8 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 		}
 	}
 
-	stdout, stderr, err := b.runGit(ctx, opts.RepoPath, args, opts.Auth)
+	auth := mergeInsecure(opts.Auth, opts.InsecureSkipTLS)
+	stdout, stderr, err := b.runGit(ctx, opts.RepoPath, args, auth)
 	if err != nil {
 		return nil, newGitError("Fetch", opts.RepoPath, stderr, err)
 	}
@@ -53,11 +51,9 @@ func (b *NativeGitBackend) Push(ctx context.Context, opts PushOptions) (*PushRes
 	} else {
 		args = append(args, opts.RefSpecs...)
 	}
-	if opts.InsecureSkipTLS {
-		args = append([]string{"-c", "http.sslVerify=false"}, args...)
-	}
 
-	stdout, stderr, err := b.runGit(ctx, opts.RepoPath, args, opts.Auth)
+	auth := mergeInsecure(opts.Auth, opts.InsecureSkipTLS)
+	stdout, stderr, err := b.runGit(ctx, opts.RepoPath, args, auth)
 	if err != nil {
 		return nil, newGitError("Push", opts.RepoPath, stderr, err)
 	}
@@ -75,12 +71,10 @@ func (b *NativeGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
 	if opts.NoCheckout {
 		args = append(args, "--no-checkout")
 	}
-	if opts.InsecureSkipTLS {
-		args = append([]string{"-c", "http.sslVerify=false"}, args...)
-	}
 	args = append(args, opts.URL, opts.Path)
 
-	_, stderr, err := b.runGit(ctx, "", args, opts.Auth)
+	auth := mergeInsecure(opts.Auth, opts.InsecureSkipTLS)
+	_, stderr, err := b.runGit(ctx, "", args, auth)
 	if err != nil {
 		return newGitError("Clone", opts.Path, stderr, err)
 	}
