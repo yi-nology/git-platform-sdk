@@ -8,7 +8,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/google/go-github/v69 v69.2.0
 	github.com/yi-nology/gitcode_api v0.3.0
-	gitlab.com/gitlab-org/api/client-go v1.46.0
+	gitlab.com/gitlab-org/api/client-go/v2 v2.43.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/oauth2 v0.36.0
 )
