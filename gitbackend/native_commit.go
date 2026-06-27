@@ -9,7 +9,12 @@ import (
 // --- Commit operations ---
 
 func (b *NativeGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to string) ([]CommitInfo, error) {
-	rangeArg := fmt.Sprintf("%s..%s", from, to)
+	var rangeArg string
+	if from == "" {
+		rangeArg = to
+	} else {
+		rangeArg = fmt.Sprintf("%s..%s", from, to)
+	}
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
 		"log", rangeArg, "--pretty=format:%H|%s|%an|%ai",
 	}, AuthConfig{})

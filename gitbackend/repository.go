@@ -21,6 +21,11 @@ type Repository struct {
 // OpenRepository wraps an existing working tree located at dir with the given
 // auth and TLS settings. The backend must already be created by the caller.
 func OpenRepository(b GitBackend, dir string, auth AuthConfig, insecure bool) *Repository {
+	// Carry the TLS setting on auth so EVERY backend call that takes an
+	// AuthConfig (not just Fetch/Push/Clone) honors insecure mode.
+	if insecure {
+		auth.InsecureSkipTLS = true
+	}
 	return &Repository{backend: b, dir: dir, auth: auth, insecure: insecure}
 }
 

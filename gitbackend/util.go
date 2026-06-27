@@ -13,3 +13,14 @@ func isCommitSHA(s string) bool {
 	}
 	return true
 }
+
+// mergeInsecure returns a copy of auth with InsecureSkipTLS set when either the
+// AuthConfig itself or the explicit per-call flag requests skipping TLS
+// verification. Lets Fetch/Push/Clone honor both opt paths (opts.InsecureSkipTLS
+// and opts.Auth.InsecureSkipTLS) in one place.
+func mergeInsecure(auth AuthConfig, insecure bool) AuthConfig {
+	if insecure {
+		auth.InsecureSkipTLS = true
+	}
+	return auth
+}

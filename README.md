@@ -14,15 +14,15 @@ Go 语言的多平台 Git 统一 SDK，支持 GitHub、GitLab、Gitea、Forgejo�
 
 ## 支持的平台
 
-| 平台 | 状态 | 默认 API |
-|------|------|----------|
-| GitHub | ✅ 完整支持 | `https://api.github.com` |
-| GitLab | ✅ 完整支持 | `https://gitlab.com/api/v4` |
-| Gitea | ✅ 完整支持 | `https://gitea.com/api/v1` |
-| Forgejo | ✅ 完整支持 | `https://codeberg.org` |
-| Gitee | ✅ 完整支持 | `https://gitee.com/api/v5` |
-| GitCode / AtomGit | ✅ 完整支持 | `https://api.gitcode.com/api/v5` |
-| Tencent Code | ✅ 完整支持 | `https://git.code.tencent.com/api/v3` |
+| 平台 | 状态 | API 覆盖 | 默认 API |
+|------|------|----------|----------|
+| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://api.github.com` |
+| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release | `https://gitlab.com/api/v4` |
+| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://gitea.com/api/v1` |
+| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://codeberg.org` |
+| Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件 | `https://gitee.com/api/v5` |
+| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://api.gitcode.com/api/v5` |
+| Tencent Code | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://git.code.tencent.com/api/v3` |
 
 ## 安装
 
@@ -188,14 +188,51 @@ for platform, cfg := range configs {
 
 ### Git 后端操作
 
-```go
-backend, _ := gitbackend.NewGitBackend(gitbackend.Options{Type: "native"})
+`gitbackend` 提供本地 Git 仓库的底层操作（Fetch/Push/Clone/状态/Diff/分支/标签/文件…），有两个后端实现，通过工厂自动选择：
 
+| 后端 | Type | 说明 |
+|------|------|------|
+| 原生 git | `"native"` | 调用本地 `git` 命令，功能最全（支持 Rebase/Stash/RunRaw）|
+| go-git | `"gogit"` | 纯 Go 实现（基于 go-git/v5），无需 git 二进制，部分高级操作为桩 |
+
+```go
+import "github.com/yi-nology/git-platform-sdk/gitbackend"
+
+// 显式指定后端
+backend, _ := gitbackend.NewGitBackend(gitbackend.Options{Type: "native"})
+// 留空则自动选择（优先 native，回退 gogit）
+backend, _ = gitbackend.NewGitBackend(gitbackend.Options{})
+```
+
+#### 认证方式（SSH / HTTPS / 跳过 SSL）
+
+`AuthConfig` 统一描述认证与 TLS 设置，所有网络操作（Fetch/Push/Clone/Pull/FetchAll/PushTag/TestConnection）一致支持：
+
+```go
+// 1) HTTPS Token（GitHub/GitLab/Gitea 等最常用）
+auth := gitbackend.NewTokenAuth("your-access-token")
+
+// 2) HTTP Basic（用户名 + 密码）
+auth := gitbackend.NewHTTPBasicAuth("user", "pass")
+
+// 3) SSH 私钥文件
+auth := gitbackend.NewSSHKeyFileAuth("/home/user/.ssh/id_ed25519", "passphrase")
+
+// 4) SSH 私钥内容（来自数据库/配置，后端自动写临时文件）
+auth := gitbackend.NewSSHKeyContentAuth(pemContent, "passphrase")
+
+// 自托管 / 内网 HTTPS 使用自签证书时，跳过 TLS 校验
+auth.InsecureSkipTLS = true
+```
+
+```go
 // Fetch
 backend.Fetch(ctx, gitbackend.FetchOptions{
-    RepoPath: "/path/to/repo",
-    Remote:   "origin",
-    Branches: []string{"main"},
+    RepoPath:        "/path/to/repo",
+    Remote:          "origin",
+    Branches:        []string{"main"},
+    Auth:            auth,
+    InsecureSkipTLS: true, // 也可在 AuthConfig 上设置，二者取并集
 })
 
 // GetStatus
@@ -208,6 +245,22 @@ diff, _ := backend.Diff(ctx, "/path/to/repo", gitbackend.DiffOptions{
     To:   "def456",
 })
 ```
+
+#### Repository 封装
+
+`Repository` 把仓库路径 + 认证 + TLS 设置绑定到一起，免去每次重复传参，认证与跳过 SSL 对所有操作统一生效：
+
+```go
+// 克隆并绑定（insecure 会对后续所有网络操作生效）
+repo, err := gitbackend.CloneRepository(ctx, backend,
+    "https://git.example.com/owner/repo.git", "/path/to/repo", auth, true)
+defer repo.Close()
+
+repo.Fetch(ctx, "main")          // 已带认证 + 跳过 SSL
+repo.RevParse(ctx, "HEAD")
+repo.Diff(ctx, baseSHA, headSHA)
+```
+
 
 ## 项目结构
 
@@ -244,7 +297,7 @@ git-platform-sdk/
 │   ├── factory.go            # 后端工厂 + 注册表 (native/gogit 自动选择)
 │   ├── logger.go             # Logger 复用 provider
 │   ├── repository.go         # Repository 状态化封装 (绑定路径+认证)
-│   ├── util.go               # 共享工具 (isCommitSHA)
+│   ├── util.go               # 共享工具 (isCommitSHA, mergeInsecure, skip-SSL 参数)
 │   ├── gogit.go              # go-git v5 后端: 结构体 + 认证 + 工具
 │   ├── gogit_core.go         #   核心: Fetch/Push/Clone/Init/Pull/FetchAll/RunRaw/TestConnection
 │   ├── gogit_branch.go       #   分支: List*/Create/Delete/Rename/Checkout/GetBranchSyncInfo

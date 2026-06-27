@@ -31,6 +31,8 @@ func NewNativeGitBackend(opts Options) (*NativeGitBackend, error) {
 // --- Internal helpers ---
 
 func (b *NativeGitBackend) runGit(ctx context.Context, repoPath string, args []string, auth AuthConfig) (string, string, error) {
+	args = withInsecureArgs(auth, args)
+
 	cmd := exec.CommandContext(ctx, b.gitPath, args...)
 	if repoPath != "" {
 		cmd.Dir = repoPath
@@ -48,6 +50,16 @@ func (b *NativeGitBackend) runGit(ctx context.Context, repoPath string, args []s
 
 	err := cmd.Run()
 	return stdout.String(), stderr.String(), err
+}
+
+// withInsecureArgs prepends `git -c http.sslVerify=false` to args when the
+// auth requests skipping TLS verification. This keeps skip-SSL handling in one
+// place so every command (fetch/push/clone/pull/ls-remote/...) honors it.
+func withInsecureArgs(auth AuthConfig, args []string) []string {
+	if auth.InsecureSkipTLS {
+		return append([]string{"-c", "http.sslVerify=false"}, args...)
+	}
+	return args
 }
 
 // resolveAuth handles SSHKeyContent by writing it to a temp file so that

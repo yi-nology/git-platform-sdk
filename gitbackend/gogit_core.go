@@ -18,13 +18,14 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 	}
 
 	fetchOpts := &git.FetchOptions{
-		RemoteName: opts.Remote,
-		RefSpecs:   buildFetchRefSpecs(opts),
-		Auth:       b.buildTransportAuth(opts.Auth),
-		Progress:   opts.Progress,
-		Tags:       git.NoTags,
-		Prune:      opts.Prune,
-		Depth:      opts.Depth,
+		RemoteName:      opts.Remote,
+		RefSpecs:        buildFetchRefSpecs(opts),
+		Auth:            b.buildTransportAuth(opts.Auth),
+		Progress:        opts.Progress,
+		Tags:            git.NoTags,
+		Prune:           opts.Prune,
+		Depth:           opts.Depth,
+		InsecureSkipTLS: opts.InsecureSkipTLS || opts.Auth.InsecureSkipTLS,
 	}
 	if opts.Tags {
 		fetchOpts.Tags = git.AllTags
@@ -57,11 +58,12 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 	}
 
 	pushOpts := &git.PushOptions{
-		RemoteName: opts.Remote,
-		RefSpecs:   rs,
-		Auth:       b.buildTransportAuth(opts.Auth),
-		Progress:   opts.Progress,
-		Force:      opts.Force,
+		RemoteName:      opts.Remote,
+		RefSpecs:        rs,
+		Auth:            b.buildTransportAuth(opts.Auth),
+		Progress:        opts.Progress,
+		Force:           opts.Force,
+		InsecureSkipTLS: opts.InsecureSkipTLS || opts.Auth.InsecureSkipTLS,
 	}
 
 	err = repo.PushContext(ctx, pushOpts)
@@ -73,12 +75,13 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 
 func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
 	cloneOpts := &git.CloneOptions{
-		URL:           opts.URL,
-		ReferenceName: plumbing.ReferenceName(opts.Branch),
-		Progress:      opts.Progress,
-		Auth:          b.buildTransportAuth(opts.Auth),
-		NoCheckout:    opts.NoCheckout,
-		SingleBranch:  opts.SingleBranch,
+		URL:             opts.URL,
+		ReferenceName:   plumbing.ReferenceName(opts.Branch),
+		Progress:        opts.Progress,
+		Auth:            b.buildTransportAuth(opts.Auth),
+		NoCheckout:      opts.NoCheckout,
+		SingleBranch:    opts.SingleBranch,
+		InsecureSkipTLS: opts.InsecureSkipTLS || opts.Auth.InsecureSkipTLS,
 	}
 	if opts.Depth > 0 {
 		cloneOpts.Depth = opts.Depth
@@ -112,9 +115,10 @@ func (b *GoGitBackend) FetchAll(ctx context.Context, repoPath string, auth AuthC
 	}
 	for _, r := range remotes {
 		err = repo.FetchContext(ctx, &git.FetchOptions{
-			RemoteName: r.Config().Name,
-			Auth:       b.buildTransportAuth(auth),
-			Tags:       git.AllTags,
+			RemoteName:      r.Config().Name,
+			Auth:            b.buildTransportAuth(auth),
+			Tags:            git.AllTags,
+			InsecureSkipTLS: auth.InsecureSkipTLS,
 		})
 		if err != nil && err != git.NoErrAlreadyUpToDate {
 			return newGitError("FetchAll", repoPath, "", err)
@@ -133,9 +137,10 @@ func (b *GoGitBackend) Pull(ctx context.Context, repoPath, remote, branch string
 		return newGitError("Pull", repoPath, "", err)
 	}
 	err = wt.PullContext(ctx, &git.PullOptions{
-		RemoteName:    remote,
-		ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
-		Auth:          b.buildTransportAuth(auth),
+		RemoteName:      remote,
+		ReferenceName:   plumbing.ReferenceName("refs/heads/" + branch),
+		Auth:            b.buildTransportAuth(auth),
+		InsecureSkipTLS: auth.InsecureSkipTLS,
 	})
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return newGitError("Pull", repoPath, "", err)
@@ -160,7 +165,8 @@ func (b *GoGitBackend) TestConnection(ctx context.Context, url string, auth Auth
 		URLs: []string{url},
 	})
 	_, err := remote.List(&git.ListOptions{
-		Auth: b.buildTransportAuth(auth),
+		Auth:            b.buildTransportAuth(auth),
+		InsecureSkipTLS: auth.InsecureSkipTLS,
 	})
 	if err != nil {
 		return newGitError("TestConnection", "", "", err)
