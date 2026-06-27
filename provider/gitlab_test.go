@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 )
 
 func newTestGitLabProvider(srv *httptest.Server) *gitlabProvider {
