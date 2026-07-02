@@ -59,7 +59,7 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number in
 // CreateNote implements provider.DiffManager.
 func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
 	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, number, &github.IssueComment{
-		Body: github.String(body),
+		Body: github.Ptr(body),
 	})
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitHub, "CreateNote", err)
@@ -83,15 +83,15 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number in
 // CreateDiscussion implements provider.DiffManager.
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts provider.DiscussionOptions) (string, error) {
 	comment := &github.PullRequestComment{
-		Body: github.String(opts.Body),
-		Path: github.String(opts.FilePath),
+		Body: github.Ptr(opts.Body),
+		Path: github.Ptr(opts.FilePath),
 	}
 	if opts.NewLine > 0 {
-		comment.Line = github.Int(opts.NewLine)
-		comment.Side = github.String("RIGHT")
+		comment.Line = github.Ptr(opts.NewLine)
+		comment.Side = github.Ptr("RIGHT")
 	} else if opts.OldLine > 0 {
-		comment.Line = github.Int(opts.OldLine)
-		comment.Side = github.String("LEFT")
+		comment.Line = github.Ptr(opts.OldLine)
+		comment.Side = github.Ptr("LEFT")
 	}
 	c, _, err := p.client.PullRequests.CreateComment(ctx, owner, repo, number, comment)
 	if err != nil {
@@ -103,32 +103,32 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 // CreateReview implements provider.DiffManager.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo string, number int, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
 	reviewRequest := &github.PullRequestReviewRequest{
-		CommitID: github.String(opts.CommitID),
-		Body:     github.String(opts.Body),
-		Event:    github.String(opts.Event),
+		CommitID: github.Ptr(opts.CommitID),
+		Body:     github.Ptr(opts.Body),
+		Event:    github.Ptr(opts.Event),
 	}
 	for _, c := range opts.Comments {
 		rc := &github.DraftReviewComment{
-			Path: github.String(c.Path),
-			Body: github.String(c.Body),
+			Path: github.Ptr(c.Path),
+			Body: github.Ptr(c.Body),
 		}
 		if c.StartLine > 0 && c.EndLine > c.StartLine {
-			rc.StartLine = github.Int(c.StartLine)
-			rc.Line = github.Int(c.EndLine)
+			rc.StartLine = github.Ptr(c.StartLine)
+			rc.Line = github.Ptr(c.EndLine)
 			if c.Side != "" {
-				rc.Side = github.String(c.Side)
+				rc.Side = github.Ptr(c.Side)
 			} else {
-				rc.Side = github.String("RIGHT")
+				rc.Side = github.Ptr("RIGHT")
 			}
 			if c.StartLine != c.EndLine {
-				rc.StartSide = github.String("RIGHT")
+				rc.StartSide = github.Ptr("RIGHT")
 			}
 		} else if c.Line > 0 {
-			rc.Line = github.Int(c.Line)
+			rc.Line = github.Ptr(c.Line)
 			if c.Side != "" {
-				rc.Side = github.String(c.Side)
+				rc.Side = github.Ptr(c.Side)
 			} else {
-				rc.Side = github.String("RIGHT")
+				rc.Side = github.Ptr("RIGHT")
 			}
 		}
 		reviewRequest.Comments = append(reviewRequest.Comments, rc)

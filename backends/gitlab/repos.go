@@ -48,6 +48,7 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
 	forkOpts := &gitlab.ForkProjectOptions{}
 	if opts.Organization != "" {
+		//nolint:staticcheck // Namespace is deprecated in newer client-go but still functional
 		forkOpts.Namespace = gitlab.Ptr(opts.Organization)
 	}
 	if opts.Name != "" {

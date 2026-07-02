@@ -82,6 +82,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		ghClient = github.NewClient(httpClient)
 	} else {
 		base := cfg.BaseURL
+		//nolint:staticcheck // NewEnterpriseClient is deprecated but the replacement API (WithEnterpriseURLs) is not available in all go-github versions
 		ec, err := github.NewEnterpriseClient(base, "", httpClient)
 		if err != nil {
 			return nil, fmt.Errorf("github: failed to create enterprise client for %s: %w", base, err)
@@ -163,6 +164,8 @@ func convertHooks(h *provider.Hooks) *transport.Hooks {
 // oauthToken is preserved for tests that need to build a go-github client
 // directly. It is not used by New above (the transport layer injects the
 // bearer token instead).
+//
+//nolint:unused // kept for test helpers
 func oauthToken(token string) *http.Client {
 	src := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	return &http.Client{Transport: &oauth2.Transport{Source: src}}

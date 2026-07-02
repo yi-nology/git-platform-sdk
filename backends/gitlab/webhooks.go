@@ -99,15 +99,15 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			PathWithNS string `json:"path_with_namespace"`
 		} `json:"project"`
 		ObjectAttributes struct {
-			IID          int64     `json:"iid"`
-			Title        string    `json:"title"`
-			Description  string    `json:"description"`
-			State        string    `json:"state"`
-			SourceBranch string    `json:"source_branch"`
-			TargetBranch string    `json:"target_branch"`
-			Action       string    `json:"action"`
-			MergeStatus  string    `json:"merge_status"`
-			URL          string    `json:"url"`
+			IID          int64  `json:"iid"`
+			Title        string `json:"title"`
+			Description  string `json:"description"`
+			State        string `json:"state"`
+			SourceBranch string `json:"source_branch"`
+			TargetBranch string `json:"target_branch"`
+			Action       string `json:"action"`
+			MergeStatus  string `json:"merge_status"`
+			URL          string `json:"url"`
 			LastCommit   struct {
 				ID string `json:"id"`
 			} `json:"last_commit"`

@@ -61,8 +61,8 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		return nil, provider.Wrap(provider.PlatformGitee, "ListRepos", err)
 	}
 	result := make([]*provider.PlatformRepo, 0, len(repos))
-	for _, r := range repos {
-		result = append(result, r.toPlatformRepo())
+	for i := range repos {
+		result = append(result, repos[i].toPlatformRepo())
 	}
 	return result, nil
 }
@@ -404,7 +404,7 @@ func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts prov
 		body["author_email"] = opts.Email
 	}
 	var resp struct {
-		Commit  struct {
+		Commit struct {
 			SHA string `json:"sha"`
 		} `json:"commit"`
 		Content struct {
@@ -743,8 +743,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		Repository struct {
 			FullName string `json:"full_name"`
 		} `json:"repository"`
-		Ref       string `json:"ref"`
-		After     string `json:"after"`
+		Ref       string    `json:"ref"`
+		After     string    `json:"after"`
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
 	}

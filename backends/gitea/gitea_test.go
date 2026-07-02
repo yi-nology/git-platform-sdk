@@ -92,8 +92,8 @@ func TestCreateCR(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, giteasdk.PullRequest{
 			ID: 7, Index: 7, Title: "test", State: giteasdk.StateOpen,
-			Head: &giteasdk.PRBranchInfo{Ref: "feature", Sha: "abc"},
-			Base: &giteasdk.PRBranchInfo{Ref: "main"},
+			Head:   &giteasdk.PRBranchInfo{Ref: "feature", Sha: "abc"},
+			Base:   &giteasdk.PRBranchInfo{Ref: "main"},
 			Poster: &giteasdk.User{ID: 1, UserName: "dev"},
 		})
 	}))

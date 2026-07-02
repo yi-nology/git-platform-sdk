@@ -4,9 +4,9 @@ import "testing"
 
 func TestSplitFullName(t *testing.T) {
 	tests := []struct {
-		input       string
-		wantOwner   string
-		wantName    string
+		input     string
+		wantOwner string
+		wantName  string
 	}{
 		{"owner/repo", "owner", "repo"},
 		{"org/sub/repo", "org", "sub/repo"},

@@ -79,10 +79,10 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 // CreateCommitStatus implements provider.CommitManager.
 func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
 	status := &github.RepoStatus{
-		State:       github.String(opts.State),
-		Context:     github.String(opts.Context),
-		Description: github.String(opts.Description),
-		TargetURL:   github.String(opts.TargetURL),
+		State:       github.Ptr(opts.State),
+		Context:     github.Ptr(opts.Context),
+		Description: github.Ptr(opts.Description),
+		TargetURL:   github.Ptr(opts.TargetURL),
 	}
 	_, _, err := p.client.Repositories.CreateStatus(ctx, owner, repo, sha, status)
 	if err != nil {

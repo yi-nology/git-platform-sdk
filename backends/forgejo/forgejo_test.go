@@ -89,8 +89,8 @@ func TestCreateCR(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, forgejosdk.PullRequest{
 			ID: 7, Index: 7, Title: "test", State: forgejosdk.StateOpen,
-			Head: &forgejosdk.PRBranchInfo{Ref: "feature", Sha: "abc"},
-			Base: &forgejosdk.PRBranchInfo{Ref: "main"},
+			Head:   &forgejosdk.PRBranchInfo{Ref: "feature", Sha: "abc"},
+			Base:   &forgejosdk.PRBranchInfo{Ref: "main"},
 			Poster: &forgejosdk.User{ID: 1, UserName: "dev"},
 		})
 	}))

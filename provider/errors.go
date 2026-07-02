@@ -10,15 +10,15 @@ import (
 // Sentinel errors classify transport and provider failures so callers can
 // branch on category without inspecting status codes or wrapped causes.
 var (
-	ErrNotFound            = errors.New("resource not found")
-	ErrAuthentication      = errors.New("authentication failed")
-	ErrRateLimited         = errors.New("rate limited")
-	ErrForbidden           = errors.New("forbidden")
-	ErrConflict            = errors.New("conflict")
-	ErrNotImplemented      = errors.New("not implemented")
-	ErrInvalidInput        = errors.New("invalid input")
-	ErrWebhookValidation   = errors.New("webhook validation failed")
-	ErrConnectionFailed    = errors.New("connection failed")
+	ErrNotFound             = errors.New("resource not found")
+	ErrAuthentication       = errors.New("authentication failed")
+	ErrRateLimited          = errors.New("rate limited")
+	ErrForbidden            = errors.New("forbidden")
+	ErrConflict             = errors.New("conflict")
+	ErrNotImplemented       = errors.New("not implemented")
+	ErrInvalidInput         = errors.New("invalid input")
+	ErrWebhookValidation    = errors.New("webhook validation failed")
+	ErrConnectionFailed     = errors.New("connection failed")
 	ErrPlatformNotSupported = errors.New("platform not supported")
 )
 
@@ -162,7 +162,7 @@ func httpStatusFromError(err error) (int, bool) {
 		return 0, false
 	}
 	v := reflect.ValueOf(err)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return 0, false
 		}
@@ -234,7 +234,7 @@ func parseStatusFromString(msg string) (int, bool) {
 }
 
 func indexOfCaseInsensitive(s, sub string) int {
-	if len(sub) == 0 {
+	if sub == "" {
 		return 0
 	}
 	for i := 0; i+len(sub) <= len(s); i++ {
@@ -286,8 +286,10 @@ func classifyStatusCode(statusCode int) error {
 	}
 }
 
-// Convenience predicates for callers.
-func IsNotFound(err error) bool      { return errors.Is(err, ErrNotFound) }
+// IsNotFound reports whether err is an ErrNotFound.
+//
+//nolint:staticcheck // intentional grouped export
+func IsNotFound(err error) bool       { return errors.Is(err, ErrNotFound) }
 func IsAuthentication(err error) bool { return errors.Is(err, ErrAuthentication) }
 func IsRateLimited(err error) bool    { return errors.Is(err, ErrRateLimited) }
 func IsForbidden(err error) bool      { return errors.Is(err, ErrForbidden) }

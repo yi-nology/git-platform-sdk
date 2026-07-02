@@ -46,7 +46,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number in
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitCode, "CreateNote", err)
 	}
-	return fmt.Sprintf("%s", comment.ID), nil
+	return string(comment.ID), nil
 }
 
 // DeleteNote implements provider.DiffManager.
@@ -68,7 +68,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitCode, "CreateDiscussion", err)
 	}
-	return fmt.Sprintf("%s", comment.ID), nil
+	return string(comment.ID), nil
 }
 
 // CreateReview implements provider.DiffManager.

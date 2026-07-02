@@ -56,7 +56,7 @@ func (e *Error) IsStatus(code int) bool { return e.StatusCode == code }
 
 // IsStatusClass reports whether the error is in the given status class. For
 // example IsStatusClass(http.StatusInternalServerError) reports 5xx.
-func (e *Error) IsStatusClass(min int) bool { return e.StatusCode >= min && e.StatusCode < min+100 }
+func (e *Error) IsStatusClass(lo int) bool { return e.StatusCode >= lo && e.StatusCode < lo+100 }
 
 // IsClientError reports 4xx.
 func (e *Error) IsClientError() bool { return e.IsStatusClass(http.StatusBadRequest) }

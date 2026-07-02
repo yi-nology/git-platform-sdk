@@ -90,21 +90,21 @@ type InviteReviewerOptions struct {
 
 // CodeReview represents a Tencent 工蜂 native code review.
 type CodeReview struct {
-	ID           int      `json:"id"`
-	IID          int      `json:"iid"`
-	ProjectID    int      `json:"project_id"`
-	Title        string   `json:"title"`
-	Description  string   `json:"description"`
-	State        string   `json:"state"`
-	SourceBranch string   `json:"source_branch"`
-	TargetBranch string   `json:"target_branch"`
-	SourceCommit string   `json:"source_commit"`
-	TargetCommit string   `json:"target_commit"`
-	Author       *provider.CRUser  `json:"author"`
-	Reviewers    []string `json:"reviewers"`
-	WebURL       string   `json:"web_url"`
-	CreatedAt    string   `json:"created_at"`
-	UpdatedAt    string   `json:"updated_at"`
+	ID           int              `json:"id"`
+	IID          int              `json:"iid"`
+	ProjectID    int              `json:"project_id"`
+	Title        string           `json:"title"`
+	Description  string           `json:"description"`
+	State        string           `json:"state"`
+	SourceBranch string           `json:"source_branch"`
+	TargetBranch string           `json:"target_branch"`
+	SourceCommit string           `json:"source_commit"`
+	TargetCommit string           `json:"target_commit"`
+	Author       *provider.CRUser `json:"author"`
+	Reviewers    []string         `json:"reviewers"`
+	WebURL       string           `json:"web_url"`
+	CreatedAt    string           `json:"created_at"`
+	UpdatedAt    string           `json:"updated_at"`
 }
 
 // CreateCodeReviewOptions creates a native code review.
@@ -139,18 +139,18 @@ type UpdateCodeReviewOptions struct {
 
 // MRReview represents the review state of a merge request.
 type MRReview struct {
-	ID           int     `json:"id"`
-	IID          int     `json:"iid"`
-	ProjectID    int     `json:"project_id"`
-	State        string  `json:"state"`
-	Title        string  `json:"title"`
-	Description  string  `json:"description"`
+	ID           int              `json:"id"`
+	IID          int              `json:"iid"`
+	ProjectID    int              `json:"project_id"`
+	State        string           `json:"state"`
+	Title        string           `json:"title"`
+	Description  string           `json:"description"`
 	Author       *provider.CRUser `json:"author"`
-	SourceBranch string  `json:"source_branch"`
-	TargetBranch string  `json:"target_branch"`
-	WebURL       string  `json:"web_url"`
-	CreatedAt    string  `json:"created_at"`
-	UpdatedAt    string  `json:"updated_at"`
+	SourceBranch string           `json:"source_branch"`
+	TargetBranch string           `json:"target_branch"`
+	WebURL       string           `json:"web_url"`
+	CreatedAt    string           `json:"created_at"`
+	UpdatedAt    string           `json:"updated_at"`
 }
 
 // CommitDiffOptions controls a single-commit diff.
@@ -161,13 +161,13 @@ type CommitDiffOptions struct {
 
 // CommitComment represents a comment on a commit.
 type CommitComment struct {
-	ID        int     `json:"id"`
-	Body      string  `json:"body"`
+	ID        int              `json:"id"`
+	Body      string           `json:"body"`
 	Author    *provider.CRUser `json:"author"`
-	Path      string  `json:"path"`
-	Line      int     `json:"line"`
-	LineType  string  `json:"line_type"`
-	CreatedAt string  `json:"created_at"`
+	Path      string           `json:"path"`
+	Line      int              `json:"line"`
+	LineType  string           `json:"line_type"`
+	CreatedAt string           `json:"created_at"`
 }
 
 // CreateCommitCommentOptions creates a comment on a commit.
