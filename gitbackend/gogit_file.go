@@ -284,7 +284,7 @@ func (b *GoGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, 
 			continue
 		}
 		fullPath := filepath.Join(repoPath, file)
-		_ = os.MkdirAll(filepath.Dir(fullPath), 0o755)
+		_ = os.MkdirAll(filepath.Dir(fullPath), 0o750)
 		f, err := os.Create(fullPath)
 		if err != nil {
 			_ = reader.Close()

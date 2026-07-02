@@ -272,7 +272,7 @@ func (b *GoGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, branch, 
 	ahead := 0
 	iter, _ := repo.Log(&git.LogOptions{From: branchRef.Hash()})
 	if iter != nil {
-		iter.ForEach(func(c *object.Commit) error {
+		_ = iter.ForEach(func(c *object.Commit) error {
 			if c.Hash == baseHash {
 				return io.EOF
 			}
@@ -285,7 +285,7 @@ func (b *GoGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, branch, 
 	behind := 0
 	iter2, _ := repo.Log(&git.LogOptions{From: upstreamRef.Hash()})
 	if iter2 != nil {
-		iter2.ForEach(func(c *object.Commit) error {
+		_ = iter2.ForEach(func(c *object.Commit) error {
 			if c.Hash == baseHash {
 				return io.EOF
 			}

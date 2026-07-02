@@ -70,14 +70,14 @@ func (h *SSHKeyHelper) CreateTempKeyFile(keyContent string) (string, error) {
 	}
 
 	if _, err := tmpFile.WriteString(keyContent); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to write key file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
-	if err := os.Chmod(tmpFile.Name(), 0600); err != nil {
-		os.Remove(tmpFile.Name())
+	if err := os.Chmod(tmpFile.Name(), 0o600); err != nil {
+		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to set key file permissions: %v", err)
 	}
 
@@ -99,7 +99,7 @@ func (h *SSHKeyHelper) BuildSecureSSHCommand(keyPath string) string {
 // CleanupTempFile removes a temporary key file. Safe to call with empty string.
 func (h *SSHKeyHelper) CleanupTempFile(filePath string) {
 	if filePath != "" {
-		os.Remove(filePath)
+		_ = os.Remove(filePath)
 	}
 }
 
