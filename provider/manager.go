@@ -47,9 +47,10 @@ type Manager struct {
 	// integrating with an external secret manager.
 	hasher func(token string) string
 
-	// janitor state
-	janitorOnce sync.Once
+	// janitor state (protected by janitorMu)
+	janitorMu   sync.Mutex
 	janitorStop chan struct{}
+	janitorDone chan struct{} // closed when goroutine exits
 }
 
 // ManagerOption configures a Manager at construction time.
@@ -232,44 +233,54 @@ func (m *Manager) Cleanup() {
 
 // StartJanitor launches a background goroutine that calls Cleanup every
 // interval until ctx is cancelled or Stop is called. Calling StartJanitor
-// more than once is a no-op (the first call wins).
-//
-// This is useful for long-running services that want stale providers to be
-// reclaimed without explicit Cleanup calls. Short-lived CLIs should skip it.
+// more than once without an intervening Stop is a no-op.
 func (m *Manager) StartJanitor(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	m.janitorOnce.Do(func() {
-		m.janitorStop = make(chan struct{})
-		go func() {
-			ticker := time.NewTicker(interval)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-m.janitorStop:
-					return
-				case <-ticker.C:
-					m.Cleanup()
-				}
+	m.janitorMu.Lock()
+	defer m.janitorMu.Unlock()
+	if m.janitorStop != nil {
+		return // already running
+	}
+	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
+	m.janitorStop = stopCh
+	m.janitorDone = doneCh
+	go func(stop, done chan struct{}) {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stop:
+				return
+			case <-ticker.C:
+				m.Cleanup()
 			}
-		}()
-	})
+		}
+	}(stopCh, doneCh)
 }
 
-// Stop halts the background janitor started by StartJanitor. It is safe to
-// call when no janitor is running. After Stop, StartJanitor can be called
-// again to launch a fresh janitor.
+// Stop halts the background janitor and blocks until it has exited.
 func (m *Manager) Stop() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.janitorStop != nil {
-		close(m.janitorStop)
-		m.janitorStop = nil
-		m.janitorOnce = sync.Once{}
+	m.janitorMu.Lock()
+	if m.janitorStop == nil {
+		m.janitorMu.Unlock()
+		return
 	}
+	close(m.janitorStop)
+	m.janitorStop = nil
+	done := m.janitorDone
+	m.janitorMu.Unlock()
+	if done != nil {
+		<-done
+	}
+	m.janitorMu.Lock()
+	m.janitorDone = nil
+	m.janitorMu.Unlock()
 }
 
 // buildKey derives a stable cache key from the config. The token is passed
