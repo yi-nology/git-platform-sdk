@@ -50,10 +50,10 @@ func TestNewProvider_Success(t *testing.T) {
 func TestListRepos(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.Repository{
-			{ID: sdkgithub.Int64(1), FullName: sdkgithub.String("owner/r1"), Name: sdkgithub.String("r1"),
-				Owner: &sdkgithub.User{Login: sdkgithub.String("owner")}, DefaultBranch: sdkgithub.String("main")},
-			{ID: sdkgithub.Int64(2), FullName: sdkgithub.String("owner/r2"), Name: sdkgithub.String("r2"),
-				Owner: &sdkgithub.User{Login: sdkgithub.String("owner")}, DefaultBranch: sdkgithub.String("main"), Private: sdkgithub.Bool(true)},
+			{ID: sdkgithub.Ptr(int64(1)), FullName: sdkgithub.Ptr("owner/r1"), Name: sdkgithub.Ptr("r1"),
+				Owner: &sdkgithub.User{Login: sdkgithub.Ptr("owner")}, DefaultBranch: sdkgithub.Ptr("main")},
+			{ID: sdkgithub.Ptr(int64(2)), FullName: sdkgithub.Ptr("owner/r2"), Name: sdkgithub.Ptr("r2"),
+				Owner: &sdkgithub.User{Login: sdkgithub.Ptr("owner")}, DefaultBranch: sdkgithub.Ptr("main"), Private: sdkgithub.Ptr(true)},
 		})
 	}))
 	defer srv.Close()
@@ -77,8 +77,8 @@ func TestListRepos(t *testing.T) {
 func TestGetRepo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(&sdkgithub.Repository{
-			ID: sdkgithub.Int64(42), FullName: sdkgithub.String("owner/repo"), Name: sdkgithub.String("repo"),
-			Owner: &sdkgithub.User{Login: sdkgithub.String("owner")}, DefaultBranch: sdkgithub.String("main"),
+			ID: sdkgithub.Ptr(int64(42)), FullName: sdkgithub.Ptr("owner/repo"), Name: sdkgithub.Ptr("repo"),
+			Owner: &sdkgithub.User{Login: sdkgithub.Ptr("owner")}, DefaultBranch: sdkgithub.Ptr("main"),
 		})
 	}))
 	defer srv.Close()
@@ -96,11 +96,11 @@ func TestGetRepo(t *testing.T) {
 func TestCreateCR(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(&sdkgithub.PullRequest{
-			Number: sdkgithub.Int(7), Title: sdkgithub.String("test"), State: sdkgithub.String("open"),
-			Head:  &sdkgithub.PullRequestBranch{Ref: sdkgithub.String("feature"), SHA: sdkgithub.String("abc")},
-			Base:  &sdkgithub.PullRequestBranch{Ref: sdkgithub.String("main")},
-			User:  &sdkgithub.User{ID: sdkgithub.Int64(1), Login: sdkgithub.String("dev"), AvatarURL: sdkgithub.String("https://a/v")},
-			HTMLURL: sdkgithub.String("https://github.com/owner/repo/pull/7"),
+			Number: sdkgithub.Ptr(7), Title: sdkgithub.Ptr("test"), State: sdkgithub.Ptr("open"),
+			Head:    &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("feature"), SHA: sdkgithub.Ptr("abc")},
+			Base:    &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("main")},
+			User:    &sdkgithub.User{ID: sdkgithub.Ptr(int64(1)), Login: sdkgithub.Ptr("dev"), AvatarURL: sdkgithub.Ptr("https://a/v")},
+			HTMLURL: sdkgithub.Ptr("https://github.com/owner/repo/pull/7"),
 		})
 	}))
 	defer srv.Close()
@@ -124,12 +124,12 @@ func TestCreateCR(t *testing.T) {
 func TestListCRs_MergedDetected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.PullRequest{
-			{Number: sdkgithub.Int(1), Title: sdkgithub.String("a"), State: sdkgithub.String("open"),
-				Head: &sdkgithub.PullRequestBranch{Ref: sdkgithub.String("a")}, Base: &sdkgithub.PullRequestBranch{Ref: sdkgithub.String("main")},
-				User: &sdkgithub.User{ID: sdkgithub.Int64(1), Login: sdkgithub.String("u")}},
-			{Number: sdkgithub.Int(2), Title: sdkgithub.String("b"), State: sdkgithub.String("closed"), Merged: sdkgithub.Bool(true),
-				Head: &sdkgithub.PullRequestBranch{Ref: sdkgithub.String("b")}, Base: &sdkgithub.PullRequestBranch{Ref: sdkgithub.String("main")},
-				User: &sdkgithub.User{ID: sdkgithub.Int64(1), Login: sdkgithub.String("u")}},
+			{Number: sdkgithub.Ptr(1), Title: sdkgithub.Ptr("a"), State: sdkgithub.Ptr("open"),
+				Head: &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("a")}, Base: &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("main")},
+				User: &sdkgithub.User{ID: sdkgithub.Ptr(int64(1)), Login: sdkgithub.Ptr("u")}},
+			{Number: sdkgithub.Ptr(2), Title: sdkgithub.Ptr("b"), State: sdkgithub.Ptr("closed"), Merged: sdkgithub.Ptr(true),
+				Head: &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("b")}, Base: &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("main")},
+				User: &sdkgithub.User{ID: sdkgithub.Ptr(int64(1)), Login: sdkgithub.Ptr("u")}},
 		})
 	}))
 	defer srv.Close()
@@ -155,14 +155,14 @@ func TestGetCRDiff_Pagination(t *testing.T) {
 			// First page: return 100 files to force pagination
 			files := make([]*sdkgithub.CommitFile, 100)
 			for i := range files {
-				files[i] = &sdkgithub.CommitFile{Filename: sdkgithub.String("f" + string(rune('a'+i%26))), Status: sdkgithub.String("modified"), Additions: sdkgithub.Int(1), Deletions: sdkgithub.Int(0)}
+				files[i] = &sdkgithub.CommitFile{Filename: sdkgithub.Ptr("f" + string(rune('a'+i%26))), Status: sdkgithub.Ptr("modified"), Additions: sdkgithub.Ptr(1), Deletions: sdkgithub.Ptr(0)}
 			}
 			_ = json.NewEncoder(w).Encode(files)
 			return
 		}
 		// Second page: 1 file
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.CommitFile{
-			{Filename: sdkgithub.String("last"), Status: sdkgithub.String("added"), Additions: sdkgithub.Int(5)},
+			{Filename: sdkgithub.Ptr("last"), Status: sdkgithub.Ptr("added"), Additions: sdkgithub.Ptr(5)},
 		})
 	}))
 	defer srv.Close()
@@ -237,8 +237,8 @@ func TestParseWebhookEvent_Push(t *testing.T) {
 func TestListBranches(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.Branch{
-			{Name: sdkgithub.String("main")},
-			{Name: sdkgithub.String("dev")},
+			{Name: sdkgithub.Ptr("main")},
+			{Name: sdkgithub.Ptr("dev")},
 		})
 	}))
 	defer srv.Close()
@@ -274,7 +274,7 @@ func TestCreateBranch_WithCommitSHA(t *testing.T) {
 func TestListTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.RepositoryTag{
-			{Name: sdkgithub.String("v1.0"), Commit: &sdkgithub.Commit{SHA: sdkgithub.String("abc")}},
+			{Name: sdkgithub.Ptr("v1.0"), Commit: &sdkgithub.Commit{SHA: sdkgithub.Ptr("abc")}},
 		})
 	}))
 	defer srv.Close()

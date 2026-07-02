@@ -103,7 +103,7 @@ func TestCreateCR(t *testing.T) {
 			"iid": 7, "title": "test", "state": "opened",
 			"source_branch": "feature", "target_branch": "main",
 			"web_url": "https://gitlab.com/owner/repo/-/merge_requests/7",
-			"author": map[string]any{"id": 1, "username": "dev", "name": "Dev"},
+			"author":  map[string]any{"id": 1, "username": "dev", "name": "Dev"},
 		})
 	}))
 	defer srv.Close()

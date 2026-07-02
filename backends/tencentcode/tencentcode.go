@@ -207,8 +207,8 @@ func platform() provider.Platform { return provider.PlatformTencentCode }
 // Compile-time guarantee that *Provider satisfies provider.Provider and
 // TencentCodeExtras. The extras methods live in extras.go.
 var (
-	_ provider.Provider    = (*Provider)(nil)
-	_ TencentCodeExtras   = (*Provider)(nil)
+	_ provider.Provider = (*Provider)(nil)
+	_ TencentCodeExtras = (*Provider)(nil)
 )
 
 // avoid unused-import warnings when subtle is only used in webhook code.

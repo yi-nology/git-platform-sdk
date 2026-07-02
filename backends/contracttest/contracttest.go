@@ -55,7 +55,7 @@ func Run(t *testing.T, h Harness) {
 }
 
 func testPlatform(t *testing.T, h Harness) {
-	srv := httptest.NewServer(http.HandlerFunc(stubHandler(h)))
+	srv := httptest.NewServer(stubHandler(h))
 	defer srv.Close()
 	p := h.NewProvider(t, srv.URL)
 	if p.Platform() != h.Platform {

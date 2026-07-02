@@ -12,10 +12,10 @@ import (
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
 	encoded := encodeProjectPath(opts.Owner, opts.Repo)
 	body := map[string]any{
-		"source_branch":       opts.SourceBranch,
-		"target_branch":       opts.TargetBranch,
-		"title":               opts.Title,
-		"description":         opts.Description,
+		"source_branch":        opts.SourceBranch,
+		"target_branch":        opts.TargetBranch,
+		"title":                opts.Title,
+		"description":          opts.Description,
 		"remove_source_branch": opts.RemoveSourceBranch,
 	}
 	if len(opts.Labels) > 0 {

@@ -38,8 +38,8 @@ type RetryConfig struct {
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
 		MaxAttempts: 3,
-		BaseDelay:  500 * time.Millisecond,
-		MaxDelay:   30 * time.Second,
+		BaseDelay:   500 * time.Millisecond,
+		MaxDelay:    30 * time.Second,
 	}
 }
 

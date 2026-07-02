@@ -11,10 +11,10 @@ package all
 import (
 	// Each backend self-registers via its own init().
 	_ "github.com/yi-nology/git-platform-sdk/backends/forgejo"
-	_ "github.com/yi-nology/git-platform-sdk/backends/gitea"
-	_ "github.com/yi-nology/git-platform-sdk/backends/github"
 	_ "github.com/yi-nology/git-platform-sdk/backends/gitcode"
+	_ "github.com/yi-nology/git-platform-sdk/backends/gitea"
 	_ "github.com/yi-nology/git-platform-sdk/backends/gitee"
+	_ "github.com/yi-nology/git-platform-sdk/backends/github"
 	_ "github.com/yi-nology/git-platform-sdk/backends/gitlab"
 	_ "github.com/yi-nology/git-platform-sdk/backends/tencentcode"
 )

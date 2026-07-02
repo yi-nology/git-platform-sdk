@@ -38,12 +38,12 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 // CreateRelease implements provider.ReleaseManager.
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
 	r, _, err := p.client.Repositories.CreateRelease(ctx, owner, repo, &github.RepositoryRelease{
-		TagName:         github.String(opts.TagName),
-		TargetCommitish: github.String(opts.Target),
-		Name:            github.String(opts.Title),
-		Body:            github.String(opts.Body),
-		Draft:           github.Bool(opts.Draft),
-		Prerelease:      github.Bool(opts.Prerelease),
+		TagName:         github.Ptr(opts.TagName),
+		TargetCommitish: github.Ptr(opts.Target),
+		Name:            github.Ptr(opts.Title),
+		Body:            github.Ptr(opts.Body),
+		Draft:           github.Ptr(opts.Draft),
+		Prerelease:      github.Ptr(opts.Prerelease),
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateRelease", err)
@@ -61,7 +61,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)

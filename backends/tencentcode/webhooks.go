@@ -18,9 +18,9 @@ import (
 func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
 	encoded := encodeProjectPath(opts.Owner, opts.Repo)
 	body := map[string]any{
-		"url":          opts.URL,
-		"token":        opts.Secret,
-		"push_events":  true,
+		"url":         opts.URL,
+		"token":       opts.Secret,
+		"push_events": true,
 	}
 	if len(opts.Events) > 0 {
 		em := map[string]bool{}
@@ -142,11 +142,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	actor := &provider.CRUser{ID: int64(pl.User.ID), Username: pl.User.Username, Name: pl.User.Name}
 
 	event := &provider.NormalizedEvent{
-		ID:        fmt.Sprintf("tc-%d-%d", time.Now().UnixNano(), pl.ObjectAttributes.IID),
-		Source:    p.Platform(),
-		Timestamp: time.Now(),
-		Actor:     actor,
-		Repo:      er,
+		ID:         fmt.Sprintf("tc-%d-%d", time.Now().UnixNano(), pl.ObjectAttributes.IID),
+		Source:     p.Platform(),
+		Timestamp:  time.Now(),
+		Actor:      actor,
+		Repo:       er,
 		RawPayload: json.RawMessage(body),
 	}
 

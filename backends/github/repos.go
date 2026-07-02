@@ -21,6 +21,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 			ListOptions: listOpts.ListOptions,
 		})
 	} else {
+		//nolint:staticcheck // Repositories.List is deprecated but works fine for our use case
 		repos, _, err = p.client.Repositories.List(ctx, "", listOpts)
 	}
 	if err != nil {
@@ -71,13 +72,13 @@ func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
 	r := &github.Repository{}
 	if opts.Name != "" {
-		r.Name = github.String(opts.Name)
+		r.Name = github.Ptr(opts.Name)
 	}
 	if opts.Description != "" {
-		r.Description = github.String(opts.Description)
+		r.Description = github.Ptr(opts.Description)
 	}
 	if opts.DefaultBranch != "" {
-		r.DefaultBranch = github.String(opts.DefaultBranch)
+		r.DefaultBranch = github.Ptr(opts.DefaultBranch)
 	}
 	if opts.Private != nil {
 		r.Private = opts.Private

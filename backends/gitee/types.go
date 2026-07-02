@@ -11,10 +11,10 @@ import (
 // drive the provider-neutral result types.
 
 type giteeRepo struct {
-	ID            int    `json:"id"`
-	FullName      string `json:"full_name"`
-	Name          string `json:"name"`
-	Owner         struct {
+	ID       int    `json:"id"`
+	FullName string `json:"full_name"`
+	Name     string `json:"name"`
+	Owner    struct {
 		Login string `json:"login"`
 	} `json:"owner"`
 	Description   string `json:"description"`
@@ -60,7 +60,7 @@ type giteePR struct {
 		Login string `json:"login"`
 		Name  string `json:"name"`
 	} `json:"user"`
-	Labels     []struct {
+	Labels []struct {
 		Name string `json:"name"`
 	} `json:"labels"`
 	Assignees []struct {
@@ -83,11 +83,9 @@ func (pr *giteePR) toChangeRequest() *provider.ChangeRequest {
 	for _, a := range pr.Assignees {
 		reviewers = append(reviewers, &provider.CRUser{ID: int64(a.ID), Username: a.Login})
 	}
-	mergeStatus := "unknown"
+	mergeStatus := "conflicting"
 	if pr.Mergeable {
 		mergeStatus = "mergeable"
-	} else {
-		mergeStatus = "conflicting"
 	}
 	return &provider.ChangeRequest{
 		ID:           int64(pr.ID),
@@ -110,9 +108,9 @@ func (pr *giteePR) toChangeRequest() *provider.ChangeRequest {
 }
 
 type giteeComment struct {
-	ID        int64     `json:"id"`
-	Body      string    `json:"body"`
-	User      struct {
+	ID   int64  `json:"id"`
+	Body string `json:"body"`
+	User struct {
 		ID    int    `json:"id"`
 		Login string `json:"login"`
 		Name  string `json:"name"`
@@ -175,7 +173,7 @@ type giteeCommitDetail struct {
 			Email string `json:"email"`
 		} `json:"committer"`
 	} `json:"commit"`
-	Author    *struct {
+	Author *struct {
 		ID    int    `json:"id"`
 		Login string `json:"login"`
 	} `json:"author"`

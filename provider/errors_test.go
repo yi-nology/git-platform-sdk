@@ -2,7 +2,6 @@ package provider
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"testing"
 )
@@ -177,9 +176,8 @@ func TestClassifyStatus(t *testing.T) {
 	if !errors.Is(ClassifyStatus(404), ErrNotFound) {
 		t.Error("expected 404 to be ErrNotFound")
 	}
-	if !errors.Is(ClassifyStatus(502), fmt.Errorf("")) {
-		// 5xx doesn't match a sentinel; just ensure no panic
-	}
+	// 5xx returns a non-sentinel error; just verify no panic.
+	_ = ClassifyStatus(502)
 }
 
 // fakeStatusError is a test double for the statusCoder interface.
@@ -187,9 +185,9 @@ type fakeStatusError struct {
 	code int
 }
 
-func (e *fakeStatusError) Error() string { return "fake" }
+func (e *fakeStatusError) Error() string   { return "fake" }
 func (e *fakeStatusError) StatusCode() int { return e.code }
-func (e *fakeStatusError) Unwrap() error { return nil }
+func (e *fakeStatusError) Unwrap() error   { return nil }
 
 func containsSubstr(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {

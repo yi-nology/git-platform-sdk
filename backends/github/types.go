@@ -12,15 +12,13 @@ import (
 // shapes are unchanged from the upstream go-github package.
 
 type (
-	ghRepo           = github.Repository
-	ghPR             = github.PullRequest
-	ghBranch         = github.Branch
-	ghHook           = github.Hook
-	ghCommit         = github.RepositoryCommit
-	ghRelease        = github.RepositoryRelease
-	ghUser           = github.User
-	ghPullReqComment = github.PullRequestComment
-	ghIssueComment   = github.IssueComment
+	ghRepo    = github.Repository
+	ghPR      = github.PullRequest
+	ghBranch  = github.Branch
+	ghHook    = github.Hook
+	ghCommit  = github.RepositoryCommit
+	ghRelease = github.RepositoryRelease
+	ghUser    = github.User
 )
 
 // convertRepo maps a go-github Repository to the provider-neutral type.
@@ -176,15 +174,6 @@ func convertUser(u *ghUser) *provider.CRUser {
 		Name:      u.GetName(),
 		AvatarURL: u.GetAvatarURL(),
 	}
-}
-
-// timeOrZero safely extracts the Time from a *github.Timestamp. Returns
-// time.Time{} when the timestamp is nil.
-func timeOrZero(ts *github.Timestamp) time.Time {
-	if ts == nil {
-		return time.Time{}
-	}
-	return ts.Time
 }
 
 // tsOrZero takes a value-type github.Timestamp and returns the underlying

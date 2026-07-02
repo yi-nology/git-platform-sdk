@@ -16,7 +16,7 @@ import (
 // GitHub backend.
 func TestGitHub_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
-		Name:   "GitHub",
+		Name:     "GitHub",
 		Platform: provider.PlatformGitHub,
 		NewProvider: func(t *testing.T, baseURL string) provider.Provider {
 			p, err := provider.NewProvider(provider.Config{
@@ -37,10 +37,10 @@ func TestGitHub_Contract(t *testing.T) {
 func githubNonEmptyList() string {
 	repos := []*sdkgithub.Repository{
 		{
-			ID:       sdkgithub.Int64(1),
-			FullName: sdkgithub.String("owner/repo"),
-			Name:     sdkgithub.String("repo"),
-			Owner:    &sdkgithub.User{Login: sdkgithub.String("owner")},
+			ID:       sdkgithub.Ptr(int64(1)),
+			FullName: sdkgithub.Ptr("owner/repo"),
+			Name:     sdkgithub.Ptr("repo"),
+			Owner:    &sdkgithub.User{Login: sdkgithub.Ptr("owner")},
 		},
 	}
 	b, _ := json.Marshal(repos)

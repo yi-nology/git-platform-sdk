@@ -38,9 +38,9 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 		sha = commits[0].SHA
 	}
 	_, _, err := p.client.Git.CreateRef(ctx, owner, repo, &github.Reference{
-		Ref: github.String("refs/heads/" + branch),
+		Ref: github.Ptr("refs/heads/" + branch),
 		Object: &github.GitObject{
-			SHA: github.String(sha),
+			SHA: github.Ptr(sha),
 		},
 	})
 	if err != nil {

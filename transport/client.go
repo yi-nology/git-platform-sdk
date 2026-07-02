@@ -312,7 +312,7 @@ func (c *Client) roundTripRequest(req *http.Request) {
 	if c.Auth != nil {
 		c.Auth.Apply(req)
 	}
-	c.Hooks.ExecuteRequest(req.Context(), req)
+	_ = c.Hooks.ExecuteRequest(req.Context(), req)
 }
 
 // encodeBody returns the io.Reader for the request body, the content-type
@@ -520,6 +520,6 @@ func readAndClose(resp *http.Response) ([]byte, error) {
 	if resp == nil {
 		return nil, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return io.ReadAll(resp.Body)
 }

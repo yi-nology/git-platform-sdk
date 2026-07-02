@@ -110,9 +110,9 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			Base struct {
 				Ref string `json:"ref"`
 			} `json:"base"`
-			Merged   bool      `json:"merged"`
-			HTMLURL  string    `json:"html_url"`
-			User     struct {
+			Merged  bool   `json:"merged"`
+			HTMLURL string `json:"html_url"`
+			User    struct {
 				ID    int    `json:"id"`
 				Login string `json:"login"`
 			} `json:"user"`
@@ -131,11 +131,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	actor := &provider.CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
 	event := &provider.NormalizedEvent{
-		ID:        fmt.Sprintf("gt-%d-%d", time.Now().UnixNano(), pl.Number),
-		Source:    p.Platform(),
-		Timestamp: time.Now(),
-		Actor:     actor,
-		Repo:      er,
+		ID:         fmt.Sprintf("gt-%d-%d", time.Now().UnixNano(), pl.Number),
+		Source:     p.Platform(),
+		Timestamp:  time.Now(),
+		Actor:      actor,
+		Repo:       er,
 		RawPayload: json.RawMessage(body),
 	}
 
