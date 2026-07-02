@@ -155,7 +155,7 @@ func (b *GoGitBackend) CherryPick(ctx context.Context, repoPath, commitHash stri
 				continue
 			}
 			fullPath := filepath.Join(repoPath, change.To.Name)
-			_ = os.MkdirAll(filepath.Dir(fullPath), 0o755)
+			_ = os.MkdirAll(filepath.Dir(fullPath), 0o750)
 			f, err := os.Create(fullPath)
 			if err != nil {
 				_ = reader.Close()

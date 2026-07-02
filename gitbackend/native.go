@@ -33,6 +33,7 @@ func NewNativeGitBackend(opts Options) (*NativeGitBackend, error) {
 func (b *NativeGitBackend) runGit(ctx context.Context, repoPath string, args []string, auth AuthConfig) (string, string, error) {
 	args = withInsecureArgs(auth, args)
 
+	//nolint:gosec // G204: args are intentionally dynamic — this wraps arbitrary git commands.
 	cmd := exec.CommandContext(ctx, b.gitPath, args...)
 	if repoPath != "" {
 		cmd.Dir = repoPath
@@ -78,15 +79,15 @@ func (b *NativeGitBackend) resolveAuth(auth AuthConfig) (AuthConfig, func()) {
 			keyContent += "\n"
 		}
 		if _, err := tmpFile.WriteString(keyContent); err != nil {
-			tmpFile.Close()
-			os.Remove(tmpFile.Name())
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpFile.Name())
 			return auth, cleanup
 		}
-		tmpFile.Close()
-		os.Chmod(tmpFile.Name(), 0600)
+		_ = tmpFile.Close()
+		_ = os.Chmod(tmpFile.Name(), 0o600)
 
 		auth.SSHKey = tmpFile.Name()
-		cleanup = func() { os.Remove(tmpFile.Name()) }
+		cleanup = func() { _ = os.Remove(tmpFile.Name()) }
 	}
 
 	return auth, cleanup

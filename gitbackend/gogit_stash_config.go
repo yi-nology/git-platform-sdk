@@ -56,8 +56,7 @@ func (b *GoGitBackend) GetConfig(ctx context.Context, repoPath, key string) (str
 	section := parts[0]
 	subsection := parts[1]
 
-	switch section {
-	case "user":
+	if section == "user" {
 		switch subsection {
 		case "name":
 			return cfg.Author.Name, nil

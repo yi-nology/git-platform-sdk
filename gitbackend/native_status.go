@@ -64,8 +64,8 @@ func (b *NativeGitBackend) getAheadBehind(ctx context.Context, repoPath string) 
 		return 0, 0, nil
 	}
 	ahead, behind := 0, 0
-	fmt.Sscanf(parts[0], "%d", &ahead)
-	fmt.Sscanf(parts[1], "%d", &behind)
+	_, _ = fmt.Sscanf(parts[0], "%d", &ahead)
+	_, _ = fmt.Sscanf(parts[1], "%d", &behind)
 	return ahead, behind, nil
 }
 

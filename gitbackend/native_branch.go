@@ -154,7 +154,7 @@ func (b *NativeGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, bran
 		return 0, 0, nil
 	}
 	var ahead, behind int
-	fmt.Sscanf(parts[0], "%d", &ahead)
-	fmt.Sscanf(parts[1], "%d", &behind)
+	_, _ = fmt.Sscanf(parts[0], "%d", &ahead)
+	_, _ = fmt.Sscanf(parts[1], "%d", &behind)
 	return ahead, behind, nil
 }
