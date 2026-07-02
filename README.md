@@ -1,6 +1,6 @@
 # Git Platform SDK
 
-Go 语言的多平台 Git 统一 SDK，支持 GitHub、GitLab、Gitea、Forgejo、Gitee、GitCode 等平台。
+Go 语言的多平台 Git 统一 SDK，支持 GitHub、GitLab、Gitea、Forgejo、Gitee、GitCode、Tencent 工蜂 等平台。
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/yi-nology/git-platform-sdk.svg)](https://pkg.go.dev/github.com/yi-nology/git-platform-sdk)
 [![CI](https://github.com/yi-nology/git-platform-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/yi-nology/git-platform-sdk/actions/workflows/ci.yml)
@@ -12,6 +12,13 @@ Go 语言的多平台 Git 统一 SDK，支持 GitHub、GitLab、Gitea、Forgejo�
 
 `git-platform-sdk` 提供统一的接口来操作不同的 Git 平台，无需关心底层 API 差异。支持自动平台检测、统一的仓库/Issue/PR/Webhook 管理。
 
+### 架构亮点
+
+- **统一传输层** (`transport/`): 所有平台共享 auth/retry/hooks/logger 管道, 第三方 SDK (go-github, gitlab client-go 等) 通过 `http.RoundTripper` 包装接入
+- **按平台拆包** (`backends/<platform>/`): 每个平台独立包, 按职责拆文件 (repos/crs/webhooks/branches/commits/files/diffs/releases)
+- **契约测试** (`backends/contracttest/`): 跨平台统一测试套件, 确保接口行为一致
+- **错误归一** (`provider.ProviderError`): 自动从 4 种来源 (StatusCode 方法/字段, *http.Response 字段, 错误字符串) 提取 HTTP 状态码
+
 ## 支持的平台
 
 | 平台 | 状态 | API 覆盖 | 默认 API |
@@ -20,9 +27,9 @@ Go 语言的多平台 Git 统一 SDK，支持 GitHub、GitLab、Gitea、Forgejo�
 | GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release | `https://gitlab.com/api/v4` |
 | Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://gitea.com/api/v1` |
 | Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://codeberg.org` |
-| Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件 | `https://gitee.com/api/v5` |
+| Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://gitee.com/api/v5` |
 | GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://api.gitcode.com/api/v5` |
-| Tencent Code | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://git.code.tencent.com/api/v3` |
+| Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
 
 ## 安装
 
@@ -40,6 +47,8 @@ import (
     "fmt"
     "log"
 
+    "github.com/yi-nology/git-platform-sdk/backends/all" // 注册所有平台
+    _ "github.com/yi-nology/git-platform-sdk/backends/all"
     "github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -71,9 +80,12 @@ func main() {
 }
 ```
 
+> **重要**: 必须导入 `backends/all` (blank import) 才能注册所有平台后端。
+> 如果只需要特定平台, 可以单独导入, 例如 `_ "github.com/yi-nology/git-platform-sdk/backends/github"`。
+
 ## 平台检测
 
-SDK 支持自动检测远程 URL 对应的平台：
+SDK 支持自动检测远程 URL 对应的平台:
 
 ```go
 // HTTPS URL
@@ -91,35 +103,40 @@ result, _ = provider.DetectPlatform("https://my-gitea.example.com/owner/repo.git
 
 ## API 使用
 
-### Provider Manager（带缓存）
+### Provider Manager（带缓存 + 统计）
 
-Provider Manager 提供带 TTL 缓存的 Provider 管理，避免重复创建实例：
+Provider Manager 提供带 TTL 缓存的 Provider 管理, 并支持命中率统计和后台自动清理:
 
 ```go
 import "github.com/yi-nology/git-platform-sdk/provider"
 
-// 创建管理器，缓存 30 分钟过期
-mgr := provider.NewManager(30 * time.Minute)
+// 创建管理器, 缓存 30 分钟过期, 最多缓存 100 个 provider
+mgr := provider.NewManager(30*time.Minute, provider.WithMaxSize(100))
+
+// 启动后台 janitor, 每 5 分钟清理过期条目
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+mgr.StartJanitor(ctx, 5*time.Minute)
+defer mgr.Stop()
 
 // 通过 URL 自动检测平台并获取 Provider
 p, err := mgr.GetByURL("https://github.com/owner/repo.git", "your-token")
 
-// 通过 Config 获取
-p, err = mgr.Get(provider.Config{
-    Platform: provider.PlatformGitHub,
-    Token:    "your-token",
-})
+// 查看缓存统计
+stats := mgr.Stats()
+fmt.Printf("Hits: %d, Misses: %d, Size: %d\n", stats.Hits, stats.Misses, stats.Size)
 
 // 缓存管理
-mgr.Len()       // 当前缓存数量
 mgr.Remove(cfg) // 移除指定缓存
 mgr.Purge()     // 清空所有缓存
-mgr.Cleanup()   // 清除过期条目
+mgr.Cleanup()   // 手动清除过期条目
 ```
+
+**缓存键安全性**: Manager 使用 `SHA256(token)[:16]` 作为缓存键的一部分, 不会在内存或日志中泄露原始 token。
 
 ### Provider 接口
 
-Provider 接口由 8 个子接口组合而成，消费者可以只依赖需要的子接口：
+Provider 接口由 8 个子接口组合而成, 消费者可以只依赖需要的子接口:
 
 ```go
 type Provider interface {
@@ -151,190 +168,62 @@ func (h *WebhookHandler) HandleEvent(r *http.Request) error {
 }
 ```
 
-### GitCode 平台示例
+### Tencent 工蜂专属能力
+
+Tencent 工蜂 backend 额外实现了 `TencentCodeExtras` 接口, 暴露工蜂独有的功能:
 
 ```go
-p, err := provider.NewProvider(provider.Config{
-    Platform: provider.PlatformGitCode,
-    Token:    "your-gitcode-token",
+import "github.com/yi-nology/git-platform-sdk/backends/tencentcode"
+
+p, _ := provider.NewProvider(provider.Config{
+    Platform: provider.PlatformTencentCode,
+    Token:    "your-token",
 })
 
-repos, _ := p.ListRepos(ctx, provider.ListRepoOptions{})
-
-pr, _ := p.CreateCR(ctx, provider.CreateCROptions{
-    Owner:        "owner",
-    Repo:         "repo",
-    Title:        "新功能",
-    SourceBranch: "feature",
-    TargetBranch: "main",
-})
-```
-
-### 多平台统一调用
-
-```go
-configs := map[provider.Platform]provider.Config{
-    provider.PlatformGitHub:  {Platform: provider.PlatformGitHub, Token: githubToken},
-    provider.PlatformGitLab:  {Platform: provider.PlatformGitLab, Token: gitlabToken},
-    provider.PlatformGitCode: {Platform: provider.PlatformGitCode, Token: gitcodeToken},
-}
-
-for platform, cfg := range configs {
-    p, _ := provider.NewProvider(cfg)
-    repos, _ := p.ListRepos(ctx, provider.ListRepoOptions{Page: 1, PerPage: 5})
-    fmt.Printf("%s: %d 个仓库\n", platform, len(repos))
+// 通过类型断言获取专属能力
+if tc, ok := p.(*tencentcode.Provider); ok {
+    // 原生代码评审
+    review, _ := tc.CreateCodeReview(ctx, owner, repo, tencentcode.CreateCodeReviewOptions{
+        Title: "code review", SourceBranch: "feature", TargetBranch: "main",
+    })
+    // MR 评审流程
+    _ = tc.SubmitMRReview(ctx, owner, repo, 42, tencentcode.SubmitReviewOptions{
+        Event: tencentcode.ReviewEventApprove, Summary: "LGTM",
+    })
+    // 分支保护
+    _ = tc.ProtectBranch(ctx, owner, repo, "main", tencentcode.ProtectBranchOptions{})
 }
 ```
 
-### Git 后端操作
+### 统一 Webhook 验证
 
-`gitbackend` 提供本地 Git 仓库的底层操作（Fetch/Push/Clone/状态/Diff/分支/标签/文件…），有两个后端实现，通过工厂自动选择：
-
-| 后端 | Type | 说明 |
-|------|------|------|
-| 原生 git | `"native"` | 调用本地 `git` 命令，功能最全（支持 Rebase/Stash/RunRaw）|
-| go-git | `"gogit"` | 纯 Go 实现（基于 go-git/v5），无需 git 二进制，部分高级操作为桩 |
+SDK 内置 6 种 Webhook 签名验证策略, 通过注册表统一管理:
 
 ```go
-import "github.com/yi-nology/git-platform-sdk/gitbackend"
+// 使用默认注册表 (init 时自动注册所有平台)
+err := provider.DefaultWebhookRegistry().Validate(
+    provider.PlatformGitHub, r, body, secret,
+)
 
-// 显式指定后端
-backend, _ := gitbackend.NewGitBackend(gitbackend.Options{Type: "native"})
-// 留空则自动选择（优先 native，回退 gogit）
-backend, _ = gitbackend.NewGitBackend(gitbackend.Options{})
+// 自定义验证器
+registry := provider.NewWebhookValidatorRegistry()
+registry.Register(provider.Platform("custom"), provider.HMACSHA256Validator{Header: "X-Custom-Sig"})
 ```
 
-#### 认证方式（SSH / HTTPS / 跳过 SSL）
-
-`AuthConfig` 统一描述认证与 TLS 设置，所有网络操作（Fetch/Push/Clone/Pull/FetchAll/PushTag/TestConnection）一致支持：
-
-```go
-// 1) HTTPS Token（GitHub/GitLab/Gitea 等最常用）
-auth := gitbackend.NewTokenAuth("your-access-token")
-
-// 2) HTTP Basic（用户名 + 密码）
-auth := gitbackend.NewHTTPBasicAuth("user", "pass")
-
-// 3) SSH 私钥文件
-auth := gitbackend.NewSSHKeyFileAuth("/home/user/.ssh/id_ed25519", "passphrase")
-
-// 4) SSH 私钥内容（来自数据库/配置，后端自动写临时文件）
-auth := gitbackend.NewSSHKeyContentAuth(pemContent, "passphrase")
-
-// 自托管 / 内网 HTTPS 使用自签证书时，跳过 TLS 校验
-auth.InsecureSkipTLS = true
-```
-
-```go
-// Fetch
-backend.Fetch(ctx, gitbackend.FetchOptions{
-    RepoPath:        "/path/to/repo",
-    Remote:          "origin",
-    Branches:        []string{"main"},
-    Auth:            auth,
-    InsecureSkipTLS: true, // 也可在 AuthConfig 上设置，二者取并集
-})
-
-// GetStatus
-status, _ := backend.GetStatus(ctx, "/path/to/repo")
-fmt.Printf("Branch: %s, Clean: %v\n", status.Branch, status.IsClean)
-
-// Diff between commits
-diff, _ := backend.Diff(ctx, "/path/to/repo", gitbackend.DiffOptions{
-    From: "abc123",
-    To:   "def456",
-})
-```
-
-#### Repository 封装
-
-`Repository` 把仓库路径 + 认证 + TLS 设置绑定到一起，免去每次重复传参，认证与跳过 SSL 对所有操作统一生效：
-
-```go
-// 克隆并绑定（insecure 会对后续所有网络操作生效）
-repo, err := gitbackend.CloneRepository(ctx, backend,
-    "https://git.example.com/owner/repo.git", "/path/to/repo", auth, true)
-defer repo.Close()
-
-repo.Fetch(ctx, "main")          // 已带认证 + 跳过 SSL
-repo.RevParse(ctx, "HEAD")
-repo.Diff(ctx, baseSHA, headSHA)
-```
-
-
-## 项目结构
-
-```
-git-platform-sdk/
-├── provider/
-│   ├── provider.go          # Provider 接口定义 + 子接口组合
-│   ├── registry.go          # Provider 注册表
-│   ├── factory.go           # Provider 工厂
-│   ├── manager.go           # Provider Manager（带缓存）
-│   ├── detect.go            # 平台自动检测
-│   ├── errors.go            # 结构化错误类型
-│   ├── logger.go            # Logger 接口
-│   ├── retry.go             # HTTP 重试/限流
-│   ├── middleware.go         # 请求/响应 Hook
-│   ├── base.go              # 基础 HTTP 客户端
-│   ├── pagination.go        # 分页工具
-│   ├── diffutil.go          # Diff 工具
-│   ├── stateutil.go         # 状态映射工具
-│   ├── convertutil.go       # 转换工具
-│   ├── util.go              # 通用工具
-│   ├── iface_*.go           # 8 个子接口定义
-│   ├── github.go            # GitHub 实现
-│   ├── gitlab.go            # GitLab 实现
-│   ├── gitea.go             # Gitea 实现
-│   ├── forgejo.go           # Forgejo 实现
-│   ├── gitee.go             # Gitee 实现
-│   ├── gitcode.go           # GitCode 实现
-│   └── tencent_code.go      # Tencent Code 实现
-├── gitbackend/
-│   ├── backend.go            # GitBackend 接口 (55 方法) + 类型定义
-│   ├── auth.go               # AuthConfig 构造工具
-│   ├── errors.go             # 结构化错误类型
-│   ├── factory.go            # 后端工厂 + 注册表 (native/gogit 自动选择)
-│   ├── logger.go             # Logger 复用 provider
-│   ├── repository.go         # Repository 状态化封装 (绑定路径+认证)
-│   ├── util.go               # 共享工具 (isCommitSHA, mergeInsecure, skip-SSL 参数)
-│   ├── gogit.go              # go-git v5 后端: 结构体 + 认证 + 工具
-│   ├── gogit_core.go         #   核心: Fetch/Push/Clone/Init/Pull/FetchAll/RunRaw/TestConnection
-│   ├── gogit_branch.go       #   分支: List*/Create/Delete/Rename/Checkout/GetBranchSyncInfo
-│   ├── gogit_status.go       #   状态/Diff/DiffNames/DeletedFiles/RevParse/MergeBase
-│   ├── gogit_commit.go       #   提交/合并/CherryPick/Rebase/Add/CommitWithIdentity
-│   ├── gogit_remote_tag.go   #   远程管理 + 标签
-│   ├── gogit_file.go         #   文件/Tree/Blob/Checkout + 内部 diff 工具
-│   ├── gogit_stash_config.go #   Stash (桩) + Config
-│   ├── native.go             # 原生 git 后端: 结构体 + 命令执行/认证/解析
-│   ├── native_core.go        #   核心操作
-│   ├── native_branch.go      #   分支操作
-│   ├── native_status.go      #   状态/Diff/RevParse/MergeBase
-│   ├── native_commit.go      #   提交/合并/Rebase
-│   ├── native_remote_tag.go  #   远程 + 标签
-│   ├── native_file.go        #   文件/Tree/Blob/Checkout
-│   └── native_stash_config.go#   Stash + Config
-├── pkg/
-│   ├── branchfilter/        # 分支过滤
-│   ├── credential/          # 凭证管理 + AES-GCM 加密
-│   └── encoding/            # Base64 工具
-└── go.mod
-```
-
-## 配置
+### 配置
 
 ```go
 p, err := provider.NewProvider(provider.Config{
     Platform: provider.PlatformGitHub,
-    BaseURL:  "https://github.example.com/api/v3", // 可选，用于自托管
+    BaseURL:  "https://github.example.com/api/v3", // 可选, 用于自托管
     Token:    "your-token",
-    SkipTLS:  true,                                 // 可选，跳过 TLS 验证
-    Logger:   myLogger,                             // 可选，注入日志
-    RetryConfig: &provider.RetryConfig{             // 可选，自动重试
+    SkipTLS:  true,                                 // 可选, 跳过 TLS 验证
+    Logger:   myLogger,                             // 可选, 注入日志
+    RetryConfig: &provider.RetryConfig{             // 可选, 自动重试
         MaxRetries: 3,
         BaseDelay:  500 * time.Millisecond,
     },
-    Hooks: &provider.Hooks{                         // 可选，请求/响应 Hook
+    Hooks: &provider.Hooks{                         // 可选, 请求/响应 Hook
         Response: []provider.ResponseHook{
             func(ctx context.Context, req *http.Request, resp *http.Response, d time.Duration, err error) {
                 log.Printf("%s %s %d %v", req.Method, req.URL.Path, resp.StatusCode, d)
@@ -344,41 +233,145 @@ p, err := provider.NewProvider(provider.Config{
 })
 ```
 
-## CI/CD
+**Retry/Hooks/Logger 对所有平台生效** (包括使用第三方 SDK 的 GitHub/GitLab/Gitea/Forgejo), 因为它们都通过 `transport.RoundTripper` 包装。
 
-本项目通过 GitHub Actions 实现自动化测试与发布，配置位于 `.github/workflows/`。
+### Git 后端操作
 
-### 单元测试 (CI)
+`gitbackend` 提供本地 Git 仓库的底层操作 (Fetch/Push/Clone/状态/Diff/分支/标签/文件…), 有两个后端实现, 通过工厂自动选择:
 
-工作流文件：`.github/workflows/ci.yml`
+| 后端 | Type | 说明 |
+|------|------|------|
+| 原生 git | `"native"` | 调用本地 `git` 命令, 功能最全 (支持 Rebase/Stash/RunRaw) |
+| go-git | `"gogit"` | 纯 Go 实现 (基于 go-git/v5), 无需 git 二进制, 部分高级操作返回 `ErrNotSupported` |
 
-- **触发条件**：推送到 `main` 分支、针对 `main` 的 Pull Request
-- **运行矩阵**：`ubuntu-latest` + `macos-latest`（覆盖 Linux/macOS 两种环境，验证原生 git 后端）
-- **执行步骤**：
-  - `go mod download` 下载依赖
-  - `go vet ./...` 静态检查
-  - `go build ./...` 编译全部包
-  - `go test -race -coverprofile=coverage.out ./...` 运行竞态检测 + 覆盖率统计
-  - 打印覆盖率摘要，并将 `coverage.out` 作为 Artifact 上传（仅 ubuntu，保留 14 天）
+```go
+import "github.com/yi-nology/git-platform-sdk/gitbackend"
 
-### 发布 Release
+// 显式指定后端
+backend, _ := gitbackend.NewGitBackend(gitbackend.Options{Type: "native"})
+// 留空则自动选择 (优先 native, 回退 gogit)
+backend, _ = gitbackend.NewGitBackend(gitbackend.Options{})
+```
 
-工作流文件：`.github/workflows/release.yml`
+#### 认证方式 (SSH / HTTPS / 跳过 SSL)
 
-- **触发条件**：推送 `v*` 格式的 tag（如 `v0.28.0`）
-- **发布流程**：
-  1. 拉取完整历史（`fetch-depth: 0`，用于生成变更日志）
-  2. 运行 `go test ./...` 作为发布门禁 —— 测试失败则中止发布
-  3. 编译全部包
-  4. 自动识别预发布版本（tag 含 `rc`/`beta`/`alpha`/`pre` 时标记为 prerelease）
-  5. 通过 `gh release create --generate-notes` 创建 GitHub Release，自动从提交/PR 生成发布说明
+```go
+// 1) HTTPS Token
+auth := gitbackend.NewTokenAuth("your-access-token")
 
-> 推送 tag 即可触发发布：
-> ```bash
-> git tag v0.28.0
-> git push origin v0.28.0
-> ```
-> Go module proxy 会在 tag 推送后自动索引该版本，无需额外操作。
+// 2) HTTP Basic
+auth := gitbackend.NewHTTPBasicAuth("user", "pass")
+
+// 3) SSH 私钥文件
+auth := gitbackend.NewSSHKeyFileAuth("/home/user/.ssh/id_ed25519", "passphrase")
+
+// 4) SSH 私钥内容
+auth := gitbackend.NewSSHKeyContentAuth(pemContent, "passphrase")
+
+// 跳过 TLS
+auth.InsecureSkipTLS = true
+```
+
+#### Repository 封装
+
+```go
+repo, err := gitbackend.CloneRepository(ctx, backend,
+    "https://git.example.com/owner/repo.git", "/path/to/repo", auth, true)
+defer repo.Close()
+
+repo.Fetch(ctx, "main")
+repo.RevParse(ctx, "HEAD")
+repo.Diff(ctx, baseSHA, headSHA)
+```
+
+## 项目结构
+
+```
+git-platform-sdk/
+├── provider/                    # 公共 API (类型 + 接口 + 工厂 + Manager)
+│   ├── provider.go              # Provider interface, Platform, 核心类型
+│   ├── options.go               # 所有 Options/Result 类型 (集中定义)
+│   ├── errors.go                # ProviderError + Wrap/New 助手 + 状态码反射
+│   ├── webhook.go               # WebhookValidator 接口 + 注册表 + 6 种策略
+│   ├── manager.go               # TTL 缓存 Manager (SHA256 键 + Stats + Janitor)
+│   ├── detect.go                # 平台自动检测
+│   ├── factory.go               # 平台注册 + NewProvider
+│   ├── pagination.go            # NormalizePageOpts + X-Total-Count 解析
+│   ├── diffutil.go              # BuildRawDiff / CountDiffLines / SumDiffStats
+│   ├── stateutil.go             # MapStateToCR 状态映射
+│   ├── middleware.go            # Hooks (RequestHook / ResponseHook)
+│   ├── retry.go                 # RetryConfig
+│   └── logger.go                # Logger 接口
+│
+├── transport/                   # 统一 HTTP 传输层
+│   ├── client.go                # Client + Do/DoJSON/DoRaw + RoundTripper
+│   ├── auth.go                  # AuthStrategy (Bearer/Token/PrivateToken/None)
+│   ├── retry.go                 # RetryConfig + 指数退避 + jitter
+│   ├── hooks.go                 # transport.Hooks
+│   ├── errors.go                # transport.Error + IsStatus
+│   └── logger.go                # transport.Logger + slog 适配
+│
+├── backends/                    # 平台实现 (每个独立包)
+│   ├── github/                  # GitHub (go-github SDK + transport 包装)
+│   ├── gitlab/                  # GitLab (client-go SDK + transport 包装)
+│   ├── gitea/                   # Gitea (gitea SDK + transport 包装)
+│   ├── forgejo/                 # Forgejo (forgejo SDK + transport 包装)
+│   ├── gitcode/                 # GitCode (gitcode_api SDK)
+│   ├── gitee/                   # Gitee (直接使用 transport.Client)
+│   ├── tencentcode/             # Tencent 工蜂 (transport.Client + Extras)
+│   ├── all/                     # 一行 blank import 注册所有平台
+│   └── contracttest/            # 跨平台契约测试套件
+│
+├── gitbackend/                  # 本地 Git 操作 (native + gogit 双后端)
+├── pkg/
+│   ├── branchfilter/            # 分支过滤
+│   ├── credential/              # 凭证管理 + AES-GCM 加密
+│   └── encoding/                # Base64 工具
+├── Makefile                     # test/lint/fmt/cover 等命令
+├── .golangci.yml                # lint 配置
+└── go.mod
+```
+
+## 开发
+
+### 常用命令
+
+```bash
+make test       # 运行所有测试 (race + coverage)
+make lint       # golangci-lint
+make fmt        # gofmt + goimports
+make vet        # go vet
+make check      # CI 门禁 (vet + lint + test)
+make cover      # 打印覆盖率摘要
+```
+
+### 添加新平台
+
+1. 创建 `backends/<platform>/` 目录
+2. 实现 `provider.Provider` 接口 (参考 `backends/gitee/` 作为模板)
+3. 添加 `init.go` 注册到 `provider.Register`
+4. 在 `backends/all/all.go` 添加 blank import
+5. 创建 `contract_test.go` 调用 `contracttest.Run` 验证契约
+
+### CI/CD
+
+本项目通过 GitHub Actions 实现自动化测试与发布, 配置位于 `.github/workflows/`。
+
+#### 单元测试 (CI)
+
+- **触发条件**: 推送到 `main` 分支、针对 `main` 的 Pull Request
+- **运行矩阵**: `ubuntu-latest` + `macos-latest`
+- **执行步骤**: `go vet` + `go build` + `go test -race -coverprofile`
+
+#### 发布 Release
+
+- **触发条件**: 推送 `v*` 格式的 tag
+- **发布流程**: 测试门禁 → 编译 → 自动识别预发布 → 创建 GitHub Release
+
+```bash
+git tag v0.28.0
+git push origin v0.28.0
+```
 
 ## 相关项目
 

@@ -19,6 +19,10 @@ type Config struct {
 
 // NewProvider creates a Provider for the given platform using the registry.
 // Returns ErrPlatformNotSupported if the platform is not registered.
+//
+// Platform backends are registered via init() functions. Import
+// "github.com/yi-nology/git-platform-sdk/backends/all" with a blank
+// identifier to register every platform shipped with the SDK.
 func NewProvider(cfg Config) (Provider, error) {
 	registryMu.RLock()
 	ctor, ok := registry[cfg.Platform]
