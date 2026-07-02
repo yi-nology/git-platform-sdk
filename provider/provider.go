@@ -70,23 +70,32 @@ const (
 
 // ChangeRequest represents a pull request or merge request.
 type ChangeRequest struct {
-	ID           int64     `json:"id"`
-	Number       int       `json:"number"`
-	Title        string    `json:"title"`
-	Description  string    `json:"description"`
-	State        CRState   `json:"state"`
-	SourceBranch string    `json:"source_branch"`
-	TargetBranch string    `json:"target_branch"`
-	HeadSHA      string    `json:"head_sha,omitempty"`
-	BaseSHA      string    `json:"base_sha,omitempty"`
-	StartSHA     string    `json:"start_sha,omitempty"`
-	Author       *CRUser   `json:"author"`
-	Reviewers    []*CRUser `json:"reviewers"`
-	Labels       []string  `json:"labels"`
-	MergeStatus  string    `json:"merge_status"`
-	WebURL       string    `json:"web_url"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           int64   `json:"id"`
+	Number       int     `json:"number"`
+	Title        string  `json:"title"`
+	Description  string  `json:"description"`
+	State        CRState `json:"state"`
+	SourceBranch string  `json:"source_branch"`
+	TargetBranch string  `json:"target_branch"`
+	// HeadSHA is the SHA of the source-branch tip.
+	// BaseSHA is the diff base: the merge-base (common ancestor) where GitLab/TencentCode
+	// expose it via diff_refs.base_sha. GitHub/Gitea do not expose a distinct merge base in
+	// webhook payloads, so BaseSHA there is the target-branch tip (equivalent to StartSHA).
+	// StartSHA is the SHA of the target-branch tip at event time (GitLab diff_refs.start_sha).
+	// On GitHub/Gitea it equals BaseSHA since no separate value is exposed.
+	HeadSHA  string `json:"head_sha,omitempty"`
+	BaseSHA  string `json:"base_sha,omitempty"`
+	StartSHA string `json:"start_sha,omitempty"`
+	// Draft reports the work-in-progress / draft state uniformly across platforms
+	// (GitHub pr.draft, Gitea draft, GitLab/TencentCode work_in_progress).
+	Draft       bool      `json:"draft"`
+	Author      *CRUser   `json:"author"`
+	Reviewers   []*CRUser `json:"reviewers"`
+	Labels      []string  `json:"labels"`
+	MergeStatus string    `json:"merge_status"`
+	WebURL      string    `json:"web_url"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // CRUser represents a user on a platform.
@@ -122,6 +131,7 @@ type NormalizedEvent struct {
 
 // EventRepo represents the repository in a webhook event.
 type EventRepo struct {
+	ID       int64  `json:"id"`
 	FullName string `json:"full_name"`
 	Owner    string `json:"owner"`
 	Name     string `json:"name"`

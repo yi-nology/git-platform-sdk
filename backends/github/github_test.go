@@ -182,7 +182,7 @@ func TestGetCRDiff_Pagination(t *testing.T) {
 
 func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	p := newTestProvider(t, "http://example.test/api/v3")
-	body := `{"action":"opened","number":1,"pull_request":{"number":1,"state":"open","title":"t","head":{"ref":"f","sha":"abc"},"base":{"ref":"main"}},"repository":{"full_name":"owner/repo"},"sender":{"login":"dev"}}`
+	body := `{"action":"opened","number":1,"pull_request":{"number":1,"state":"open","title":"t","draft":true,"head":{"ref":"f","sha":"headSHA"},"base":{"ref":"main","sha":"baseSHA"}},"repository":{"id":42,"full_name":"owner/repo"},"sender":{"login":"dev"}}`
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-GitHub-Event", "pull_request")
 	r.Header.Set("Content-Type", "application/json")
@@ -195,6 +195,22 @@ func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	}
 	if ne.CR == nil || ne.CR.Number != 1 {
 		t.Errorf("expected PR with number 1, got %+v", ne.CR)
+	}
+	if ne.Repo == nil || ne.Repo.ID != 42 {
+		t.Errorf("expected repo ID 42, got %+v", ne.Repo)
+	}
+	if ne.CR.HeadSHA != "headSHA" {
+		t.Errorf("expected head SHA headSHA, got %q", ne.CR.HeadSHA)
+	}
+	if ne.CR.BaseSHA != "baseSHA" {
+		t.Errorf("expected base SHA baseSHA, got %q", ne.CR.BaseSHA)
+	}
+	// GitHub exposes no distinct merge-base: StartSHA mirrors the base tip.
+	if ne.CR.StartSHA != "baseSHA" {
+		t.Errorf("expected start SHA baseSHA, got %q", ne.CR.StartSHA)
+	}
+	if !ne.CR.Draft {
+		t.Errorf("expected draft=true, got %+v", ne.CR)
 	}
 }
 

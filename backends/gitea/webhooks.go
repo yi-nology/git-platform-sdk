@@ -95,6 +95,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			Login string `json:"login"`
 		} `json:"sender"`
 		Repository struct {
+			ID       int64  `json:"id"`
 			FullName string `json:"full_name"`
 		} `json:"repository"`
 		PullRequest *struct {
@@ -109,7 +110,9 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			} `json:"head"`
 			Base struct {
 				Ref string `json:"ref"`
+				SHA string `json:"sha"`
 			} `json:"base"`
+			Draft   bool   `json:"draft"`
 			Merged  bool   `json:"merged"`
 			HTMLURL string `json:"html_url"`
 			User    struct {
@@ -128,6 +131,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	}
 
 	er := provider.BuildEventRepo(pl.Repository.FullName)
+	er.ID = pl.Repository.ID
 	actor := &provider.CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
 	event := &provider.NormalizedEvent{
@@ -154,12 +158,17 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 				Title:        pl.PullRequest.Title,
 				Description:  pl.PullRequest.Body,
 				State:        mapState(pl.PullRequest.State, pl.PullRequest.Merged),
+				Draft:        pl.PullRequest.Draft,
 				SourceBranch: pl.PullRequest.Head.Ref,
 				TargetBranch: pl.PullRequest.Base.Ref,
-				WebURL:       pl.PullRequest.HTMLURL,
-				Author:       &provider.CRUser{ID: int64(pl.PullRequest.User.ID), Username: pl.PullRequest.User.Login},
-				CreatedAt:    pl.PullRequest.CreatedAt,
-				UpdatedAt:    pl.PullRequest.UpdatedAt,
+				HeadSHA:      pl.PullRequest.Head.SHA,
+				BaseSHA:      pl.PullRequest.Base.SHA,
+				// Gitea exposes no distinct merge-base; base.sha is the target tip.
+				StartSHA:  pl.PullRequest.Base.SHA,
+				WebURL:    pl.PullRequest.HTMLURL,
+				Author:    &provider.CRUser{ID: int64(pl.PullRequest.User.ID), Username: pl.PullRequest.User.Login},
+				CreatedAt: pl.PullRequest.CreatedAt,
+				UpdatedAt: pl.PullRequest.UpdatedAt,
 			}
 		}
 	case "push":

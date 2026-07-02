@@ -97,6 +97,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
 			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo.ID = e.GetRepo().GetID()
 		}
 		if e.GetPullRequest() != nil {
 			ne.CR = convertPR(e.GetPullRequest())
@@ -109,6 +110,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
 			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo.ID = e.GetRepo().GetID()
 		}
 	case *github.CreateEvent:
 		ne.Type = "branch.created"

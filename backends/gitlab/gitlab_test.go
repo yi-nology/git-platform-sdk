@@ -241,7 +241,7 @@ func TestParseWebhookEvent_MergeRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
-	body := `{"object_kind":"merge_request","user":{"id":1,"username":"dev","name":"Dev"},"project":{"path_with_namespace":"owner/repo"},"object_attributes":{"iid":7,"title":"t","description":"d","state":"opened","source_branch":"f","target_branch":"main","action":"open","merge_status":"can_be_merged","url":"https://gitlab.com/owner/repo/-/merge_requests/7","last_commit":{"id":"abc"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
+	body := `{"object_kind":"merge_request","user":{"id":1,"username":"dev","name":"Dev"},"project":{"id":99,"path_with_namespace":"owner/repo"},"object_attributes":{"iid":7,"title":"t","description":"d","state":"opened","source_branch":"f","target_branch":"main","action":"open","merge_status":"can_be_merged","url":"https://gitlab.com/owner/repo/-/merge_requests/7","merge_commit_sha":"mcSHA","work_in_progress":true,"last_commit":{"id":"abc"},"diff_refs":{"base_sha":"bSHA","start_sha":"sSHA","head_sha":"hSHA"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	ne, err := p.ParseWebhookEvent(r, "")
@@ -253,6 +253,47 @@ func TestParseWebhookEvent_MergeRequest(t *testing.T) {
 	}
 	if ne.CR == nil || ne.CR.Number != 7 {
 		t.Errorf("expected CR with number 7, got %+v", ne.CR)
+	}
+	if ne.Repo == nil || ne.Repo.ID != 99 {
+		t.Errorf("expected repo ID 99, got %+v", ne.Repo)
+	}
+	// merge_commit_sha takes priority over diff_refs.base_sha.
+	if ne.CR.BaseSHA != "mcSHA" {
+		t.Errorf("expected base SHA mcSHA, got %q", ne.CR.BaseSHA)
+	}
+	// diff_refs.head_sha overrides last_commit.id.
+	if ne.CR.HeadSHA != "hSHA" {
+		t.Errorf("expected head SHA hSHA, got %q", ne.CR.HeadSHA)
+	}
+	if ne.CR.StartSHA != "sSHA" {
+		t.Errorf("expected start SHA sSHA, got %q", ne.CR.StartSHA)
+	}
+	if !ne.CR.Draft {
+		t.Errorf("expected draft=true (work_in_progress), got %+v", ne.CR)
+	}
+}
+
+func TestParseWebhookEvent_MergeRequest_NoDiffRefs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	// No diff_refs and no merge_commit_sha: head must fall back to last_commit
+	// and base/start must be empty (open MR never merged).
+	body := `{"object_kind":"merge_request","user":{"id":1,"username":"dev","name":"Dev"},"project":{"id":99,"path_with_namespace":"owner/repo"},"object_attributes":{"iid":7,"title":"t","state":"opened","source_branch":"f","target_branch":"main","action":"open","merge_status":"can_be_merged","url":"https://gitlab.com/owner/repo/-/merge_requests/7","last_commit":{"id":"abcOnly"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	ne, err := p.ParseWebhookEvent(r, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.CR.HeadSHA != "abcOnly" {
+		t.Errorf("expected head SHA to fall back to last_commit abcOnly, got %q", ne.CR.HeadSHA)
+	}
+	if ne.CR.BaseSHA != "" {
+		t.Errorf("expected empty base SHA without merge_commit_sha/diff_refs, got %q", ne.CR.BaseSHA)
+	}
+	if ne.CR.StartSHA != "" {
+		t.Errorf("expected empty start SHA without diff_refs, got %q", ne.CR.StartSHA)
 	}
 }
 

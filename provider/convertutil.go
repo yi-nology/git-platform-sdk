@@ -29,3 +29,26 @@ func BuildEventRepo(fullName string) *EventRepo {
 		Name:     name,
 	}
 }
+
+// ResolveMRSHAs derives the (head, base, start) SHAs for a GitLab-style merge
+// request from the raw webhook fields. This encodes the shared priority used by
+// the GitLab, TencentCode (and future GitCode) backends:
+//
+//   - head: diff_refs.head_sha when present, otherwise last_commit.id
+//   - base: merge_commit_sha when present, otherwise diff_refs.base_sha
+//   - start: diff_refs.start_sha (may be empty)
+//
+// Keeping this in one place guarantees identical fallback semantics across the
+// GitLab-family backends and avoids behavioural drift.
+func ResolveMRSHAs(diffRefsHead, diffRefsBase, diffRefsStart, mergeCommitSHA, lastCommitID string) (head, base, start string) {
+	head = lastCommitID
+	if diffRefsHead != "" {
+		head = diffRefsHead
+	}
+	base = mergeCommitSHA
+	if base == "" {
+		base = diffRefsBase
+	}
+	start = diffRefsStart
+	return head, base, start
+}

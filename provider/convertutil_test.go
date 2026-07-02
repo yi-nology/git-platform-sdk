@@ -66,3 +66,51 @@ func TestBuildEventRepo_NoSlash(t *testing.T) {
 		t.Fatalf("expected repo-only, got %q", er.Name)
 	}
 }
+
+func TestResolveMRSHAs(t *testing.T) {
+	tests := []struct {
+		name                          string
+		diffHead, diffBase, diffStart string
+		mergeCommit, lastCommit       string
+		wantHead, wantBase, wantStart string
+	}{
+		{
+			name:     "all present: merge_commit wins for base, diff_refs head wins",
+			diffHead: "hSHA", diffBase: "bSHA", diffStart: "sSHA",
+			mergeCommit: "mcSHA", lastCommit: "abc",
+			wantHead: "hSHA", wantBase: "mcSHA", wantStart: "sSHA",
+		},
+		{
+			name:     "no merge_commit: base falls back to diff_refs.base_sha",
+			diffHead: "hSHA", diffBase: "bSHA", diffStart: "sSHA",
+			mergeCommit: "", lastCommit: "abc",
+			wantHead: "hSHA", wantBase: "bSHA", wantStart: "sSHA",
+		},
+		{
+			name:     "no diff_refs: head falls back to last_commit, base/start empty",
+			diffHead: "", diffBase: "", diffStart: "",
+			mergeCommit: "", lastCommit: "abcOnly",
+			wantHead: "abcOnly", wantBase: "", wantStart: "",
+		},
+		{
+			name:     "merged without diff_refs: merge_commit used as base",
+			diffHead: "", diffBase: "", diffStart: "",
+			mergeCommit: "mcSHA", lastCommit: "abc",
+			wantHead: "abc", wantBase: "mcSHA", wantStart: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			head, base, start := ResolveMRSHAs(tt.diffHead, tt.diffBase, tt.diffStart, tt.mergeCommit, tt.lastCommit)
+			if head != tt.wantHead {
+				t.Errorf("head = %q, want %q", head, tt.wantHead)
+			}
+			if base != tt.wantBase {
+				t.Errorf("base = %q, want %q", base, tt.wantBase)
+			}
+			if start != tt.wantStart {
+				t.Errorf("start = %q, want %q", start, tt.wantStart)
+			}
+		})
+	}
+}
