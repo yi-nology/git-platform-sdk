@@ -132,7 +132,7 @@ func (h *SSHKeyHelper) DetectKeyType(privateKey, passphrase string) string {
 		keyContent += "\n"
 	}
 
-	var rawKey interface{}
+	var rawKey any
 	var err error
 	if passphrase != "" {
 		rawKey, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(keyContent), []byte(passphrase))

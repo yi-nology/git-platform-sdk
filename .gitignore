@@ -13,3 +13,10 @@ Thumbs.db
 # Editor/IDE
 .vscode/
 .idea/
+
+# golangci-lint
+.golangci-lint-cache/
+
+# Local environment
+.env
+.env.local

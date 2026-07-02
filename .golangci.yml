@@ -1,0 +1,85 @@
+# golangci-lint configuration for git-platform-sdk
+#
+# Enabled linters focus on correctness (errcheck, staticcheck, gosec),
+# modern Go idioms (gocritic, gocyclo), and consistent formatting.
+# Disabled linters are either too noisy for this codebase or overlap with
+# stronger alternatives.
+
+run:
+  timeout: 5m
+  go: "1.26"
+  modules-download-mode: readonly
+
+linters:
+  disable-all: true
+  enable:
+    # Correctness
+    - errcheck       # unchecked errors
+    - staticcheck    # SA* checks (bugs, perf, simplifications)
+    - govet          # go vet
+    - ineffassign    # ineffectual assignments
+    - unused         # unused identifiers
+    - typecheck      # type resolution issues
+
+    # Security
+    - gosec          # security pitfalls
+
+    # Modern idioms
+    - gocritic       # style + simplification hints
+    - gocyclo        # cyclomatic complexity
+    - misspell       # spelling mistakes
+    - unconvert      # unnecessary type conversions
+    - unparam        # unused function parameters
+    - gomodguard     # blocked module imports
+
+    # Formatting
+    - gofmt          # gofmt compliance
+    - goimports      # import ordering
+
+linters-settings:
+  gocyclo:
+    min-complexity: 30  # tolerate moderate complexity in SDK glue code
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+    disabled-checks:
+      - hugeParam       # SDK methods legitimately take large option structs
+      - exitAfterDefer  # not applicable (no main package)
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+  govet:
+    enable-all: false
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # Test files get more leeway.
+    - path: _test\.go
+      linters:
+        - gosec
+        - gocyclo
+        - errcheck
+        - gocritic
+    # init.go files are deliberately tiny; skip style checks.
+    - path: backends/.*/init\.go
+      linters:
+        - gocritic
+    # The extras file mirrors a third-party API shape; tolerate longer lines
+    # and deeper nesting.
+    - path: backends/tencentcode/extras\.go
+      linters:
+        - gocyclo
+        - gocritic
+    # Webhook parsers legitimately use crypto/subtle.ConstantTimeCompare.
+    - path: backends/.*/webhooks\.go
+      linters:
+        - gosec
+    # transport package uses math/rand for jitter (CSPRNG not required).
+    - path: transport/retry\.go
+      linters:
+        - gosec
+  exclude-use-default: false

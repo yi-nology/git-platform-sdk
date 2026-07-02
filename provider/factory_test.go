@@ -1,37 +1,46 @@
-package provider
+package provider_test
 
-import "testing"
+import (
+	"testing"
+
+	// Register all built-in backends so factory/manager tests have providers
+	// to work with. Without this, only custom-registered platforms would be
+	// available.
+	_ "github.com/yi-nology/git-platform-sdk/backends/all"
+
+	"github.com/yi-nology/git-platform-sdk/provider"
+)
 
 func TestNewProvider_GitLab(t *testing.T) {
-	p, err := NewProvider(Config{
-		Platform: PlatformGitLab,
+	p, err := provider.NewProvider(provider.Config{
+		Platform: provider.PlatformGitLab,
 		BaseURL:  "https://gitlab.com/api/v4",
 		Token:    "test-token",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Platform() != PlatformGitLab {
+	if p.Platform() != provider.PlatformGitLab {
 		t.Errorf("expected GitLab, got %s", p.Platform())
 	}
 }
 
 func TestNewProvider_GitHub(t *testing.T) {
-	p, err := NewProvider(Config{
-		Platform: PlatformGitHub,
+	p, err := provider.NewProvider(provider.Config{
+		Platform: provider.PlatformGitHub,
 		Token:    "test-token",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Platform() != PlatformGitHub {
+	if p.Platform() != provider.PlatformGitHub {
 		t.Errorf("expected GitHub, got %s", p.Platform())
 	}
 }
 
 func TestNewProvider_Gitea(t *testing.T) {
-	_, err := NewProvider(Config{
-		Platform: PlatformGitea,
+	_, err := provider.NewProvider(provider.Config{
+		Platform: provider.PlatformGitea,
 		BaseURL:  "https://gitea.com/api/v1",
 		Token:    "test-token",
 	})
@@ -42,21 +51,21 @@ func TestNewProvider_Gitea(t *testing.T) {
 }
 
 func TestNewProvider_TencentCode(t *testing.T) {
-	p, err := NewProvider(Config{
-		Platform: PlatformTencentCode,
+	p, err := provider.NewProvider(provider.Config{
+		Platform: provider.PlatformTencentCode,
 		Token:    "test-token",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Platform() != PlatformTencentCode {
+	if p.Platform() != provider.PlatformTencentCode {
 		t.Errorf("expected TencentCode, got %s", p.Platform())
 	}
 }
 
 func TestNewProvider_Unsupported(t *testing.T) {
-	_, err := NewProvider(Config{
-		Platform: Platform("unsupported"),
+	_, err := provider.NewProvider(provider.Config{
+		Platform: provider.Platform("unsupported"),
 	})
 	if err == nil {
 		t.Error("expected error for unsupported platform")
@@ -64,14 +73,14 @@ func TestNewProvider_Unsupported(t *testing.T) {
 }
 
 func TestNewProvider_DefaultBaseURL(t *testing.T) {
-	p, err := NewProvider(Config{
-		Platform: PlatformGitHub,
+	p, err := provider.NewProvider(provider.Config{
+		Platform: provider.PlatformGitHub,
 		Token:    "test",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Platform() != PlatformGitHub {
+	if p.Platform() != provider.PlatformGitHub {
 		t.Errorf("expected GitHub with empty BaseURL, got %s", p.Platform())
 	}
 }

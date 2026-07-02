@@ -1,12 +1,16 @@
-package provider
+package provider_test
 
 import (
 	"testing"
 	"time"
+
+	_ "github.com/yi-nology/git-platform-sdk/backends/all"
+
+	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 func TestNewManager(t *testing.T) {
-	m := NewManager(30 * time.Minute)
+	m := provider.NewManager(30 * time.Minute)
 	if m == nil {
 		t.Fatal("expected non-nil manager")
 	}
@@ -16,9 +20,9 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestManager_Get_CachesProvider(t *testing.T) {
-	m := NewManager(30 * time.Minute)
-	cfg := Config{
-		Platform: PlatformGitHub,
+	m := provider.NewManager(30 * time.Minute)
+	cfg := provider.Config{
+		Platform: provider.PlatformGitHub,
 		Token:    "test-token",
 	}
 
@@ -43,14 +47,14 @@ func TestManager_Get_CachesProvider(t *testing.T) {
 }
 
 func TestManager_Get_DifferentConfigs(t *testing.T) {
-	m := NewManager(30 * time.Minute)
+	m := provider.NewManager(30 * time.Minute)
 
-	p1, err := m.Get(Config{Platform: PlatformGitHub, Token: "token-1"})
+	p1, err := m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "token-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	p2, err := m.Get(Config{Platform: PlatformGitHub, Token: "token-2"})
+	p2, err := m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "token-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,13 +68,13 @@ func TestManager_Get_DifferentConfigs(t *testing.T) {
 }
 
 func TestManager_GetByURL(t *testing.T) {
-	m := NewManager(30 * time.Minute)
+	m := provider.NewManager(30 * time.Minute)
 
 	p, err := m.GetByURL("https://github.com/owner/repo.git", "test-token")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Platform() != PlatformGitHub {
+	if p.Platform() != provider.PlatformGitHub {
 		t.Errorf("expected GitHub, got %s", p.Platform())
 	}
 	if m.Len() != 1 {
@@ -79,7 +83,7 @@ func TestManager_GetByURL(t *testing.T) {
 }
 
 func TestManager_GetByURL_SameURL(t *testing.T) {
-	m := NewManager(30 * time.Minute)
+	m := provider.NewManager(30 * time.Minute)
 
 	p1, err := m.GetByURL("https://github.com/owner/repo.git", "test-token")
 	if err != nil {
@@ -97,7 +101,7 @@ func TestManager_GetByURL_SameURL(t *testing.T) {
 }
 
 func TestManager_GetByURL_InvalidURL(t *testing.T) {
-	m := NewManager(30 * time.Minute)
+	m := provider.NewManager(30 * time.Minute)
 
 	_, err := m.GetByURL("://invalid", "test-token")
 	if err == nil {
@@ -106,8 +110,8 @@ func TestManager_GetByURL_InvalidURL(t *testing.T) {
 }
 
 func TestManager_Remove(t *testing.T) {
-	m := NewManager(30 * time.Minute)
-	cfg := Config{Platform: PlatformGitHub, Token: "test-token"}
+	m := provider.NewManager(30 * time.Minute)
+	cfg := provider.Config{Platform: provider.PlatformGitHub, Token: "test-token"}
 
 	_, err := m.Get(cfg)
 	if err != nil {
@@ -124,10 +128,10 @@ func TestManager_Remove(t *testing.T) {
 }
 
 func TestManager_Purge(t *testing.T) {
-	m := NewManager(30 * time.Minute)
+	m := provider.NewManager(30 * time.Minute)
 
-	m.Get(Config{Platform: PlatformGitHub, Token: "token-1"})
-	m.Get(Config{Platform: PlatformGitLab, Token: "token-2"})
+	m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "token-1"})
+	m.Get(provider.Config{Platform: provider.PlatformGitLab, Token: "token-2"})
 	if m.Len() != 2 {
 		t.Fatalf("expected 2, got %d", m.Len())
 	}
@@ -139,9 +143,9 @@ func TestManager_Purge(t *testing.T) {
 }
 
 func TestManager_Cleanup(t *testing.T) {
-	m := NewManager(50 * time.Millisecond)
+	m := provider.NewManager(50 * time.Millisecond)
 
-	m.Get(Config{Platform: PlatformGitHub, Token: "test-token"})
+	m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "test-token"})
 	if m.Len() != 1 {
 		t.Fatalf("expected 1, got %d", m.Len())
 	}
@@ -154,9 +158,9 @@ func TestManager_Cleanup(t *testing.T) {
 }
 
 func TestManager_Cleanup_NoExpiry(t *testing.T) {
-	m := NewManager(0) // no expiry
+	m := provider.NewManager(0) // no expiry
 
-	m.Get(Config{Platform: PlatformGitHub, Token: "test-token"})
+	m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "test-token"})
 	time.Sleep(10 * time.Millisecond)
 	m.Cleanup()
 	if m.Len() != 1 {
@@ -165,9 +169,9 @@ func TestManager_Cleanup_NoExpiry(t *testing.T) {
 }
 
 func TestManager_Get_UnsupportedPlatform(t *testing.T) {
-	m := NewManager(30 * time.Minute)
+	m := provider.NewManager(30 * time.Minute)
 
-	_, err := m.Get(Config{Platform: Platform("unsupported")})
+	_, err := m.Get(provider.Config{Platform: provider.Platform("unsupported")})
 	if err == nil {
 		t.Error("expected error for unsupported platform")
 	}
