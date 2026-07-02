@@ -84,16 +84,21 @@ func convertPR(pr *ghPR) *provider.ChangeRequest {
 			labels = append(labels, l.GetName())
 		}
 	}
+	// GitHub exposes no distinct merge-base in webhook payloads; base.sha is the
+	// target-branch tip, which serves as both BaseSHA and StartSHA.
+	baseSHA := pr.GetBase().GetSHA()
 	return &provider.ChangeRequest{
 		ID:           int64(pr.GetNumber()),
 		Number:       pr.GetNumber(),
 		Title:        pr.GetTitle(),
 		Description:  pr.GetBody(),
 		State:        state,
+		Draft:        pr.GetDraft(),
 		SourceBranch: pr.GetHead().GetRef(),
 		TargetBranch: pr.GetBase().GetRef(),
 		HeadSHA:      pr.GetHead().GetSHA(),
-		BaseSHA:      pr.GetBase().GetSHA(),
+		BaseSHA:      baseSHA,
+		StartSHA:     baseSHA,
 		Author:       author,
 		Reviewers:    reviewers,
 		Labels:       labels,

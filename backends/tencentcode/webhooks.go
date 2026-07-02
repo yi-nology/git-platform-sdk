@@ -104,21 +104,29 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			URL  string `json:"url"`
 		} `json:"repository"`
 		Project struct {
+			ID         int64  `json:"id"`
 			PathWithNS string `json:"path_with_namespace"`
 		} `json:"project"`
 		ObjectAttributes struct {
-			IID          int    `json:"iid"`
-			Title        string `json:"title"`
-			Description  string `json:"description"`
-			State        string `json:"state"`
-			SourceBranch string `json:"source_branch"`
-			TargetBranch string `json:"target_branch"`
-			Action       string `json:"action"`
-			MergeStatus  string `json:"merge_status"`
-			URL          string `json:"url"`
-			LastCommit   struct {
+			IID            int    `json:"iid"`
+			Title          string `json:"title"`
+			Description    string `json:"description"`
+			State          string `json:"state"`
+			SourceBranch   string `json:"source_branch"`
+			TargetBranch   string `json:"target_branch"`
+			Action         string `json:"action"`
+			MergeStatus    string `json:"merge_status"`
+			URL            string `json:"url"`
+			MergeCommitSHA string `json:"merge_commit_sha"`
+			WorkInProgress bool   `json:"work_in_progress"`
+			LastCommit     struct {
 				ID string `json:"id"`
 			} `json:"last_commit"`
+			DiffRefs struct {
+				BaseSHA  string `json:"base_sha"`
+				StartSHA string `json:"start_sha"`
+				HeadSHA  string `json:"head_sha"`
+			} `json:"diff_refs"`
 			CreatedAt tcTime `json:"created_at"`
 			UpdatedAt tcTime `json:"updated_at"`
 		} `json:"object_attributes"`
@@ -139,6 +147,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		repoName = pl.Repository.Name
 	}
 	er := provider.BuildEventRepo(repoName)
+	er.ID = pl.Project.ID
 	actor := &provider.CRUser{ID: int64(pl.User.ID), Username: pl.User.Username, Name: pl.User.Name}
 
 	event := &provider.NormalizedEvent{
@@ -159,14 +168,25 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		}
 		event.Type = "cr." + action
 		event.CommitSHA = pl.ObjectAttributes.LastCommit.ID
+		headSHA, baseSHA, startSHA := provider.ResolveMRSHAs(
+			pl.ObjectAttributes.DiffRefs.HeadSHA,
+			pl.ObjectAttributes.DiffRefs.BaseSHA,
+			pl.ObjectAttributes.DiffRefs.StartSHA,
+			pl.ObjectAttributes.MergeCommitSHA,
+			pl.ObjectAttributes.LastCommit.ID,
+		)
 		event.CR = &provider.ChangeRequest{
 			ID:           int64(pl.ObjectAttributes.IID),
 			Number:       pl.ObjectAttributes.IID,
 			Title:        pl.ObjectAttributes.Title,
 			Description:  pl.ObjectAttributes.Description,
 			State:        state,
+			Draft:        pl.ObjectAttributes.WorkInProgress,
 			SourceBranch: pl.ObjectAttributes.SourceBranch,
 			TargetBranch: pl.ObjectAttributes.TargetBranch,
+			HeadSHA:      headSHA,
+			BaseSHA:      baseSHA,
+			StartSHA:     startSHA,
 			MergeStatus:  pl.ObjectAttributes.MergeStatus,
 			WebURL:       pl.ObjectAttributes.URL,
 			Author:       actor,

@@ -150,7 +150,7 @@ func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
-	body := `{"action":"opened","number":1,"sender":{"id":1,"login":"dev"},"repository":{"full_name":"owner/repo"},"pull_request":{"number":1,"title":"t","state":"open","head":{"ref":"f","sha":"abc"},"base":{"ref":"main"},"html_url":"https://gitea.com/owner/repo/pulls/1","user":{"id":1,"login":"dev"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
+	body := `{"action":"opened","number":1,"sender":{"id":1,"login":"dev"},"repository":{"id":55,"full_name":"owner/repo"},"pull_request":{"number":1,"title":"t","state":"open","draft":true,"head":{"ref":"f","sha":"abc"},"base":{"ref":"main","sha":"baseSHA"},"html_url":"https://gitea.com/owner/repo/pulls/1","user":{"id":1,"login":"dev"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitea-Event", "pull_request")
 	r.Header.Set("Content-Type", "application/json")
@@ -163,6 +163,22 @@ func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	}
 	if ne.CR == nil || ne.CR.Number != 1 {
 		t.Errorf("expected CR with number 1, got %+v", ne.CR)
+	}
+	if ne.Repo == nil || ne.Repo.ID != 55 {
+		t.Errorf("expected repo ID 55, got %+v", ne.Repo)
+	}
+	if ne.CR.HeadSHA != "abc" {
+		t.Errorf("expected head SHA abc, got %q", ne.CR.HeadSHA)
+	}
+	if ne.CR.BaseSHA != "baseSHA" {
+		t.Errorf("expected base SHA baseSHA, got %q", ne.CR.BaseSHA)
+	}
+	// Gitea exposes no distinct merge-base: StartSHA mirrors the base tip.
+	if ne.CR.StartSHA != "baseSHA" {
+		t.Errorf("expected start SHA baseSHA, got %q", ne.CR.StartSHA)
+	}
+	if !ne.CR.Draft {
+		t.Errorf("expected draft=true, got %+v", ne.CR)
 	}
 }
 
