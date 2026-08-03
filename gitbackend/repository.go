@@ -135,10 +135,13 @@ func (r *Repository) CommitWithIdentity(ctx context.Context, name, email, msg st
 	return r.backend.CommitWithIdentity(ctx, r.dir, name, email, msg)
 }
 
-// Close releases any resources associated with the repository.
-//
-// The default implementation is a no-op; backends may override it in the
-// future (e.g. to remove credential helpers). Callers should always invoke it
-// (typically via defer) so cleanup keeps working when the implementation
-// changes.
-func (r *Repository) Close() error { return nil }
+// Close releases any resources associated with the repository. Currently this
+// is a graceful no-op (the backends do not hold persistent state), but callers
+// should always invoke it via defer so that future resource cleanup (e.g.
+// temporary credential helpers, cached file handles) is wired in automatically.
+func (r *Repository) Close() error {
+	// No resources to release today. The native and gogit backends are
+	// stateless between calls. When a future backend needs cleanup (temp
+	// credential files, etc.), implement it here.
+	return nil
+}

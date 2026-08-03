@@ -150,6 +150,63 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		if pushEvent.Repository != nil {
 			ne.Repo = provider.BuildEventRepo(pushEvent.Repository.FullName)
 		}
+	case "tag_push":
+		tagEvent, err := p.client.ParseTagPushEvent(body)
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+		}
+		ne.Type = "tag.push"
+		ne.Tag = strings.TrimPrefix(tagEvent.Ref, "refs/tags/")
+		ne.CommitSHA = tagEvent.After
+		if tagEvent.Sender != nil {
+			senderID, _ := parseGitCodeID(tagEvent.Sender.ID)
+			ne.Actor = &provider.CRUser{
+				ID: senderID, Username: tagEvent.Sender.Login, AvatarURL: tagEvent.Sender.AvatarURL,
+			}
+		}
+		if tagEvent.Repository != nil {
+			ne.Repo = provider.BuildEventRepo(tagEvent.Repository.FullName)
+		}
+	case "create":
+		var createEvent struct {
+			Ref        string       `json:"ref"`
+			Sender     *gitcode.User `json:"sender"`
+			Repository *gitcode.Repository `json:"repository"`
+		}
+		if err := json.Unmarshal(body, &createEvent); err != nil {
+			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+		}
+		ne.Type = "branch.created"
+		ne.Branch = createEvent.Ref
+		if createEvent.Sender != nil {
+			senderID, _ := parseGitCodeID(createEvent.Sender.ID)
+			ne.Actor = &provider.CRUser{
+				ID: senderID, Username: createEvent.Sender.Login, AvatarURL: createEvent.Sender.AvatarURL,
+			}
+		}
+		if createEvent.Repository != nil {
+			ne.Repo = provider.BuildEventRepo(createEvent.Repository.FullName)
+		}
+	case "delete":
+		var deleteEvent struct {
+			Ref        string       `json:"ref"`
+			Sender     *gitcode.User `json:"sender"`
+			Repository *gitcode.Repository `json:"repository"`
+		}
+		if err := json.Unmarshal(body, &deleteEvent); err != nil {
+			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+		}
+		ne.Type = "branch.deleted"
+		ne.Branch = deleteEvent.Ref
+		if deleteEvent.Sender != nil {
+			senderID, _ := parseGitCodeID(deleteEvent.Sender.ID)
+			ne.Actor = &provider.CRUser{
+				ID: senderID, Username: deleteEvent.Sender.Login, AvatarURL: deleteEvent.Sender.AvatarURL,
+			}
+		}
+		if deleteEvent.Repository != nil {
+			ne.Repo = provider.BuildEventRepo(deleteEvent.Repository.FullName)
+		}
 	default:
 		ne.Type = eventType
 	}

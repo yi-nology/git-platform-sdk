@@ -137,6 +137,8 @@ github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXf
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+github.com/studyzy/gongfeng-sdk-go v0.5.0 h1:5dGPbMMb3X62j3QOsLqHogLvCowW0zaCQIimFcleBJ0=
+github.com/studyzy/gongfeng-sdk-go v0.5.0/go.mod h1:9DWaRQPNcLtTVMQE1fvBiFrP2pe49PgkinLpK2dLDE0=
 github.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/RsTxqYcX6fHqOXZwwMP+2VyYWJeWM2qQFM=
 github.com/xanzy/ssh-agent v0.3.3/go.mod h1:6dzNDKs0J9rVPHPhaGCukekBHKqfl+L3KghI1Bc68Uw=
 github.com/yi-nology/gitcode_api v0.3.0 h1:Gp+JD3AXak0JQi4or4p3uP9uPSFYsCYOOxnzxOcXDEE=

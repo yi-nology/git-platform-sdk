@@ -2,7 +2,6 @@ package gitcode
 
 import (
 	"context"
-	"fmt"
 
 	gitcode "github.com/yi-nology/gitcode_api"
 
@@ -50,9 +49,15 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 
 // GetArchive implements provider.ReleaseManager.
 //
-// GitCode's API does not expose a public archive endpoint.
+// The GitCode platform API (/api/v5) does not expose an archive download
+// endpoint (equivalent to GitHub's GET /repos/{owner}/{repo}/archive/{ref}.{format}).
+// The SDK does offer ArchiveRepository/GetArchiveStatus for toggling a repo's
+// archived flag, but those manage repository state, not downloadable tarballs.
+// This is a platform-level limitation. If GitCode adds archive downloads in the
+// future, this method should be implemented using raw HTTP to handle the binary
+// response body.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	return nil, provider.Wrap(provider.PlatformGitCode, "GetArchive", fmt.Errorf("%w: GetArchive for GitCode", provider.ErrNotImplemented))
+	return nil, provider.Wrap(provider.PlatformGitCode, "GetArchive", provider.ErrNotImplemented)
 }
 
 func convertRelease(r *gitcode.Release) *provider.ReleaseInfo {

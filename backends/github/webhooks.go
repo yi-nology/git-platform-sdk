@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -121,7 +120,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		ne.Branch = e.GetRef()
 		ne.Actor = convertUser(e.GetSender())
 	default:
-		return nil, errors.New("github: unsupported webhook event type")
+		ne.Type = eventType
 	}
 	return ne, nil
 }

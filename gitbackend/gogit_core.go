@@ -3,6 +3,7 @@ package gitbackend
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -15,6 +16,17 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 	repo, err := git.PlainOpen(opts.RepoPath)
 	if err != nil {
 		return nil, newGitError("Fetch", opts.RepoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+
+	remote := opts.Remote
+	if remote == "" {
+		remote = "origin"
+	}
+
+	// Snapshot remote refs before the fetch.
+	before := make(map[string]plumbing.Hash)
+	if err := collectRemoteRefs(repo, remote, before); err != nil {
+		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
 
 	fetchOpts := &git.FetchOptions{
@@ -35,7 +47,63 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
-	return &FetchResult{}, nil
+
+	// Snapshot remote refs after the fetch.
+	after := make(map[string]plumbing.Hash)
+	if err := collectRemoteRefs(repo, remote, after); err != nil {
+		return nil, newGitError("Fetch", opts.RepoPath, "", err)
+	}
+
+	// Diff before/after to populate the result.
+	remotePrefix := "refs/remotes/" + remote + "/"
+	headsPrefix := remotePrefix + "heads/"
+	tagsPrefix := remotePrefix + "tags/"
+
+	result := &FetchResult{}
+
+	for ref, hash := range after {
+		if oldHash, existed := before[ref]; !existed {
+			// New ref after fetch.
+			result.FetchedRefs = append(result.FetchedRefs, ref)
+			if strings.HasPrefix(ref, headsPrefix) {
+				result.NewBranches = append(result.NewBranches, strings.TrimPrefix(ref, headsPrefix))
+			} else if strings.HasPrefix(ref, tagsPrefix) {
+				result.NewTags = append(result.NewTags, strings.TrimPrefix(ref, tagsPrefix))
+			}
+		} else if oldHash != hash {
+			// Existing ref moved to a different commit.
+			result.FetchedRefs = append(result.FetchedRefs, ref)
+			if strings.HasPrefix(ref, headsPrefix) {
+				result.UpdatedBranch = append(result.UpdatedBranch, strings.TrimPrefix(ref, headsPrefix))
+			}
+		}
+	}
+
+	for ref := range before {
+		if _, exists := after[ref]; !exists {
+			// Ref was pruned or deleted.
+			result.DeletedBranch = append(result.DeletedBranch, ref)
+		}
+	}
+
+	return result, nil
+}
+
+// collectRemoteRefs populates the target map with all remote-tracking refs
+// (refs/remotes/<remote>/*) and their current hashes.
+func collectRemoteRefs(repo *git.Repository, remote string, target map[string]plumbing.Hash) error {
+	prefix := "refs/remotes/" + remote + "/"
+	iter, err := repo.References()
+	if err != nil {
+		return err
+	}
+	return iter.ForEach(func(ref *plumbing.Reference) error {
+		name := ref.Name().String()
+		if strings.HasPrefix(name, prefix) {
+			target[name] = ref.Hash()
+		}
+		return nil
+	})
 }
 
 func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult, error) {
@@ -70,6 +138,9 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 	if err != nil {
 		return nil, newGitError("Push", opts.RepoPath, "", err)
 	}
+	// go-git's PushContext does not expose per-ref success/failure details,
+	// so we return the requested refspecs as PushedRefs. Callers that need
+	// granular per-ref error reporting should use the native backend.
 	return &PushResult{PushedRefs: refSpecs}, nil
 }
 
@@ -148,15 +219,16 @@ func (b *GoGitBackend) Pull(ctx context.Context, repoPath, remote, branch string
 	return nil
 }
 
+// RunRaw is not supported by the pure-Go (gogit) backend because go-git does
+// not shell out to the git binary. This method exists to satisfy the
+// GitBackend interface; callers that need arbitrary git commands should use
+// the native backend instead.
 func (b *GoGitBackend) RunRaw(ctx context.Context, repoPath string, args []string) (string, string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	_, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return "", "", newGitError("RunRaw", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
-	_ = repo // verify it's a git repo
-	// go-git doesn't support arbitrary commands; this is a no-op stub.
-	// Use the native backend for RunRaw.
-	return "", "", newGitError("RunRaw", repoPath, "", fmt.Errorf("RunRaw not supported in gogit backend, use native backend"))
+	return "", "", newGitError("RunRaw", repoPath, "", fmt.Errorf("RunRaw not supported in gogit backend (pure-Go); use native backend for arbitrary git commands"))
 }
 
 func (b *GoGitBackend) TestConnection(ctx context.Context, url string, auth AuthConfig) error {

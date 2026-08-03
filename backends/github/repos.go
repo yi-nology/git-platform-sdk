@@ -43,6 +43,30 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 	return convertRepo(r), nil
 }
 
+// CreateRepo implements provider.RepoManager.
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+	r := &github.Repository{
+		Name:        github.Ptr(opts.Name),
+		Description: github.Ptr(opts.Description),
+		Private:     github.Ptr(opts.Private),
+		AutoInit:    github.Ptr(opts.AutoInit),
+	}
+	if opts.DefaultBranch != "" {
+		r.DefaultBranch = github.Ptr(opts.DefaultBranch)
+	}
+	var result *github.Repository
+	var err error
+	if owner == "" {
+		result, _, err = p.client.Repositories.Create(ctx, "", r)
+	} else {
+		result, _, err = p.client.Repositories.Create(ctx, owner, r)
+	}
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "CreateRepo", err)
+	}
+	return convertRepo(result), nil
+}
+
 // ForkRepo implements provider.RepoManager.
 func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
 	forkOpts := &github.RepositoryCreateForkOptions{}

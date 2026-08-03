@@ -64,7 +64,11 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 
 // CreateCommitStatus implements provider.CommitManager.
 //
-// GitCode's API does not yet expose a commit-status endpoint.
+// The GitCode platform API (/api/v5) does not expose a commit-status
+// endpoint (equivalent to GitHub's POST /repos/{owner}/{repo}/statuses/{sha}).
+// This is a platform-level limitation, not an SDK gap. If GitCode adds
+// commit-status support in the future, this method should be implemented
+// using the SDK's doRequest helper or raw HTTP.
 func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
 	return provider.Wrap(provider.PlatformGitCode, "CreateCommitStatus", provider.ErrNotImplemented)
 }
