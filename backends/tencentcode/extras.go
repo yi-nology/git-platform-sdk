@@ -2,12 +2,13 @@ package tencentcode
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 
-	"github.com/yi-nology/git-platform-sdk/pkg/encoding"
+	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -59,7 +60,7 @@ type TencentCodeExtras interface {
 	RemoveProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int) error
 }
 
-// Compile-time assertion that *tencentCodeProvider satisfies TencentCodeExtras.
+// Compile-time assertion that *Provider satisfies TencentCodeExtras.
 var _ TencentCodeExtras = (*Provider)(nil)
 
 // ---------------------------------------------------------------------------
@@ -202,10 +203,12 @@ type TreeEntryNode struct {
 	Path string `json:"path"`
 }
 
-// ProtectBranchOptions configures branch protection.
+// ProtectBranchOptions configures branch protection rules on Tencent Code (工蜂).
 type ProtectBranchOptions struct {
-	// Placeholder for future protection rules (merge/push access levels, etc.).
-	// 工蜂's protect endpoint currently takes no required body fields.
+	MergeAccessLevel          int  `json:"merge_access_level,omitempty"`
+	PushAccessLevel           int  `json:"push_access_level,omitempty"`
+	AllowForcePush            bool `json:"allow_force_push,omitempty"`
+	CodeOwnerApprovalRequired bool `json:"code_owner_approval_required,omitempty"`
 }
 
 // ProtectedBranchMember represents a member granted access to a protected branch.
@@ -227,116 +230,144 @@ type ProtectedBranchMemberOptions struct {
 // ===========================================================================
 
 func (t *Provider) CreateCodeReview(ctx context.Context, owner, repo string, opts CreateCodeReviewOptions) (*CodeReview, error) {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{
-		"title":         opts.Title,
-		"source_branch": opts.SourceBranch,
-		"target_branch": opts.TargetBranch,
-		"description":   opts.Description,
+	sdkOpts := &gongfeng.CreateCommitReviewOptions{
+		Title:        gongfeng.Ptr(opts.Title),
+		SourceBranch: gongfeng.Ptr(opts.SourceBranch),
+		TargetBranch: gongfeng.Ptr(opts.TargetBranch),
+		Description:  gongfeng.Ptr(opts.Description),
 	}
 	if opts.SourceCommit != "" {
-		body["source_commit"] = opts.SourceCommit
+		sdkOpts.SourceCommit = gongfeng.Ptr(opts.SourceCommit)
 	}
 	if opts.TargetCommit != "" {
-		body["target_commit"] = opts.TargetCommit
+		sdkOpts.TargetCommit = gongfeng.Ptr(opts.TargetCommit)
 	}
 	if opts.ReviewerIDs != "" {
-		body["reviewer_ids"] = opts.ReviewerIDs
+		sdkOpts.ReviewerIDs = gongfeng.Ptr(opts.ReviewerIDs)
 	}
 	if opts.NecessaryReviewerIDs != "" {
-		body["necessary_reviewer_ids"] = opts.NecessaryReviewerIDs
+		sdkOpts.NecessaryReviewerIDs = gongfeng.Ptr(opts.NecessaryReviewerIDs)
 	}
 	if opts.ApproverRule != 0 {
-		body["approver_rule"] = opts.ApproverRule
+		sdkOpts.ApproverRule = gongfeng.Ptr(opts.ApproverRule)
 	}
 	if opts.NecessaryApproverRule != 0 {
-		body["necessary_approver_rule"] = opts.NecessaryApproverRule
+		sdkOpts.NecessaryApproverRule = gongfeng.Ptr(opts.NecessaryApproverRule)
 	}
-	var cr CodeReview
-	if err := t.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/review", encoded), body, &cr); err != nil {
-		return nil, err
+	review, _, err := t.client.Reviews.CreateCommitReview(ctx, pid(owner, repo), sdkOpts)
+	if err != nil {
+		return nil, sdkError("CreateCodeReview", err)
 	}
-	return &cr, nil
+	return reviewToCodeReview(review), nil
 }
 
 func (t *Provider) ListCodeReviews(ctx context.Context, owner, repo string, opts ListCodeReviewsOptions) ([]*CodeReview, error) {
-	encoded := encodeProjectPath(owner, repo)
-	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	q := url.Values{}
-	q.Set("page", strconv.Itoa(opts.Page))
-	q.Set("per_page", strconv.Itoa(opts.PerPage))
+	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+	sdkOpts := &gongfeng.ListCommitReviewsOptions{
+		ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
+	}
 	if opts.State != "" {
-		q.Set("state", opts.State)
+		sdkOpts.State = gongfeng.Ptr(opts.State)
 	}
 	if opts.AuthorID != 0 {
-		q.Set("author_id", strconv.Itoa(opts.AuthorID))
+		sdkOpts.AuthorID = gongfeng.Ptr(opts.AuthorID)
 	}
 	if opts.OrderBy != "" {
-		q.Set("order_by", opts.OrderBy)
+		sdkOpts.OrderBy = gongfeng.Ptr(opts.OrderBy)
 	}
 	if opts.Sort != "" {
-		q.Set("sort", opts.Sort)
+		sdkOpts.Sort = gongfeng.Ptr(opts.Sort)
 	}
-	var reviews []*CodeReview
-	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/reviews?%s", encoded, q.Encode()), nil, &reviews); err != nil {
-		return nil, err
+	reviews, _, err := t.client.Reviews.ListCommitReviews(ctx, pid(owner, repo), sdkOpts)
+	if err != nil {
+		return nil, sdkError("ListCodeReviews", err)
 	}
-	return reviews, nil
+	result := make([]*CodeReview, 0, len(reviews))
+	for _, r := range reviews {
+		result = append(result, reviewToCodeReview(r))
+	}
+	return result, nil
 }
 
 func (t *Provider) GetCodeReview(ctx context.Context, owner, repo string, reviewID int) (*CodeReview, error) {
-	encoded := encodeProjectPath(owner, repo)
-	var cr CodeReview
-	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/review/%d", encoded, reviewID), nil, &cr); err != nil {
-		return nil, err
+	review, _, err := t.client.Reviews.GetCommitReview(ctx, pid(owner, repo), reviewID)
+	if err != nil {
+		return nil, sdkError("GetCodeReview", err)
 	}
-	return &cr, nil
+	return reviewToCodeReview(review), nil
 }
 
 func (t *Provider) UpdateCodeReview(ctx context.Context, owner, repo string, reviewID int, opts UpdateCodeReviewOptions) (*CodeReview, error) {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{"title": opts.Title, "description": opts.Description}
-	var cr CodeReview
-	if err := t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/review/%d", encoded, reviewID), body, &cr); err != nil {
-		return nil, err
+	sdkOpts := &gongfeng.UpdateCommitReviewOptions{
+		Title:       gongfeng.Ptr(opts.Title),
+		Description: gongfeng.Ptr(opts.Description),
 	}
-	return &cr, nil
+	review, _, err := t.client.Reviews.UpdateCommitReview(ctx, pid(owner, repo), reviewID, sdkOpts)
+	if err != nil {
+		return nil, sdkError("UpdateCodeReview", err)
+	}
+	return reviewToCodeReview(review), nil
 }
 
 func (t *Provider) InviteCodeReviewer(ctx context.Context, owner, repo string, reviewID int, opts InviteReviewerOptions) error {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{}
+	sdkOpts := &gongfeng.InviteCommitReviewerOptions{}
 	if opts.ReviewerID != "" {
-		body["reviewer_id"] = opts.ReviewerID
+		if id, err := strconv.Atoi(opts.ReviewerID); err == nil {
+			sdkOpts.ReviewerID = gongfeng.Ptr(id)
+		}
 	}
 	if opts.NecessaryReviewerID != "" {
-		body["necessary_reviewer_id"] = opts.NecessaryReviewerID
+		if id, err := strconv.Atoi(opts.NecessaryReviewerID); err == nil {
+			sdkOpts.NecessaryReviewerID = gongfeng.Ptr(id)
+		}
 	}
-	return t.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/review/%d/invite", encoded, reviewID), body, nil)
+	_, err := t.client.Reviews.InviteCommitReviewer(ctx, pid(owner, repo), reviewID, sdkOpts)
+	if err != nil {
+		return sdkError("InviteCodeReviewer", err)
+	}
+	return nil
 }
 
 func (t *Provider) RemoveCodeReviewer(ctx context.Context, owner, repo string, reviewID int, reviewerID string) error {
-	encoded := encodeProjectPath(owner, repo)
-	q := url.Values{}
-	q.Set("reviewer_id", reviewerID)
-	return t.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/review/%d/dismissals?%s", encoded, reviewID, q.Encode()), nil, nil)
+	sdkOpts := &gongfeng.RemoveCommitReviewerOptions{}
+	if id, err := strconv.Atoi(reviewerID); err == nil {
+		sdkOpts.ReviewerID = gongfeng.Ptr(id)
+	}
+	_, err := t.client.Reviews.RemoveCommitReviewer(ctx, pid(owner, repo), reviewID, sdkOpts)
+	if err != nil {
+		return sdkError("RemoveCodeReviewer", err)
+	}
+	return nil
 }
 
 func (t *Provider) SubmitCodeReview(ctx context.Context, owner, repo string, reviewID int, opts SubmitReviewOptions) error {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{"reviewer_event": string(opts.Event), "summary": opts.Summary}
-	return t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/review/%d/reviewer/summary", encoded, reviewID), body, nil)
+	sdkOpts := &gongfeng.SubmitCommitReviewSummaryOptions{
+		ReviewerEvent: gongfeng.Ptr(string(opts.Event)),
+		Summary:       gongfeng.Ptr(opts.Summary),
+	}
+	_, _, err := t.client.Reviews.SubmitCommitReviewSummary(ctx, pid(owner, repo), reviewID, sdkOpts)
+	if err != nil {
+		return sdkError("SubmitCodeReview", err)
+	}
+	return nil
 }
 
 func (t *Provider) ReopenCodeReview(ctx context.Context, owner, repo string, reviewID int) error {
-	encoded := encodeProjectPath(owner, repo)
-	return t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/review/%d/reopen", encoded, reviewID), nil, nil)
+	_, _, err := t.client.Reviews.ReopenCommitReview(ctx, pid(owner, repo), reviewID)
+	if err != nil {
+		return sdkError("ReopenCodeReview", err)
+	}
+	return nil
 }
 
 func (t *Provider) GetCodeReviewChangedFiles(ctx context.Context, owner, repo string, reviewID int) ([]*provider.ChangedFile, error) {
-	encoded := encodeProjectPath(owner, repo)
+	// The SDK provides DownloadCommitReviewChangedFiles which writes to an io.Writer.
+	// For JSON parsing, use a raw API call via the SDK client.
+	encoded := owner + "/" + repo
 	var files []*provider.ChangedFile
-	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/review/%d/changed_files", encoded, reviewID), nil, &files); err != nil {
+	err := t.doRequest(ctx, "GetCodeReviewChangedFiles", "GET",
+		fmt.Sprintf("projects/%s/review/%d/changed_files", encoded, reviewID), nil, &files)
+	if err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -347,55 +378,69 @@ func (t *Provider) GetCodeReviewChangedFiles(ctx context.Context, owner, repo st
 // ===========================================================================
 
 func (t *Provider) GetMRReview(ctx context.Context, owner, repo string, mrNumber int) (*MRReview, error) {
-	encoded := encodeProjectPath(owner, repo)
-	var mr MRReview
-	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_request/%d/review", encoded, mrNumber), nil, &mr); err != nil {
-		return nil, err
+	review, _, err := t.client.Reviews.GetMRReview(ctx, pid(owner, repo), mrNumber)
+	if err != nil {
+		return nil, sdkError("GetMRReview", err)
 	}
-	return &mr, nil
+	return reviewToMRReview(review), nil
 }
 
 func (t *Provider) InviteMRReviewer(ctx context.Context, owner, repo string, mrNumber int, opts InviteReviewerOptions) error {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{}
+	sdkOpts := &gongfeng.InviteMRReviewerOptions{}
 	if opts.ReviewerID != "" {
 		if id, err := strconv.Atoi(opts.ReviewerID); err == nil {
-			body["reviewer_id"] = id
-		} else {
-			body["reviewer_id"] = opts.ReviewerID
+			sdkOpts.ReviewerID = gongfeng.Ptr(id)
 		}
 	}
 	if opts.NecessaryReviewerID != "" {
 		if id, err := strconv.Atoi(opts.NecessaryReviewerID); err == nil {
-			body["necessary_reviewer_id"] = id
-		} else {
-			body["necessary_reviewer_id"] = opts.NecessaryReviewerID
+			sdkOpts.NecessaryReviewerID = gongfeng.Ptr(id)
 		}
 	}
-	return t.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/merge_request/%d/review/invite", encoded, mrNumber), body, nil)
+	_, err := t.client.Reviews.InviteMRReviewer(ctx, pid(owner, repo), mrNumber, sdkOpts)
+	if err != nil {
+		return sdkError("InviteMRReviewer", err)
+	}
+	return nil
 }
 
 func (t *Provider) RemoveMRReviewer(ctx context.Context, owner, repo string, mrNumber int, reviewerID int) error {
-	encoded := encodeProjectPath(owner, repo)
-	q := url.Values{}
-	q.Set("reviewer_id", strconv.Itoa(reviewerID))
-	return t.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/merge_request/%d/review/dismissals?%s", encoded, mrNumber, q.Encode()), nil, nil)
+	sdkOpts := &gongfeng.RemoveMRReviewerOptions{
+		ReviewerID: gongfeng.Ptr(reviewerID),
+	}
+	_, err := t.client.Reviews.RemoveMRReviewer(ctx, pid(owner, repo), mrNumber, sdkOpts)
+	if err != nil {
+		return sdkError("RemoveMRReviewer", err)
+	}
+	return nil
 }
 
 func (t *Provider) CancelMRReview(ctx context.Context, owner, repo string, mrNumber int) error {
-	encoded := encodeProjectPath(owner, repo)
-	return t.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/merge_request/%d/review/cancel", encoded, mrNumber), nil, nil)
+	_, err := t.client.Reviews.CancelMRReview(ctx, pid(owner, repo), mrNumber)
+	if err != nil {
+		return sdkError("CancelMRReview", err)
+	}
+	return nil
 }
 
 func (t *Provider) SubmitMRReview(ctx context.Context, owner, repo string, mrNumber int, opts SubmitReviewOptions) error {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{"reviewer_event": string(opts.Event), "summary": opts.Summary}
-	return t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_request/%d/reviewer/summary", encoded, mrNumber), body, nil)
+	sdkOpts := &gongfeng.SubmitMRReviewSummaryOptions{
+		ReviewerEvent: gongfeng.Ptr(string(opts.Event)),
+		Summary:       gongfeng.Ptr(opts.Summary),
+	}
+	_, _, err := t.client.Reviews.SubmitMRReviewSummary(ctx, pid(owner, repo), mrNumber, sdkOpts)
+	if err != nil {
+		return sdkError("SubmitMRReview", err)
+	}
+	return nil
 }
 
 func (t *Provider) ReopenMRReview(ctx context.Context, owner, repo string, mrNumber int) error {
-	encoded := encodeProjectPath(owner, repo)
-	return t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/merge_request/%d/review/reopen", encoded, mrNumber), nil, nil)
+	_, _, err := t.client.Reviews.ReopenMRReview(ctx, pid(owner, repo), mrNumber)
+	if err != nil {
+		return sdkError("ReopenMRReview", err)
+	}
+	return nil
 }
 
 // ===========================================================================
@@ -403,82 +448,97 @@ func (t *Provider) ReopenMRReview(ctx context.Context, owner, repo string, mrNum
 // ===========================================================================
 
 func (t *Provider) GetCommitDiff(ctx context.Context, owner, repo, sha string, opts CommitDiffOptions) ([]*provider.ChangedFile, error) {
-	encoded := encodeProjectPath(owner, repo)
-	q := url.Values{}
+	sdkOpts := &gongfeng.GetCommitDiffOptions{}
 	if opts.Path != "" {
-		q.Set("path", opts.Path)
+		sdkOpts.Path = gongfeng.Ptr(opts.Path)
 	}
 	if opts.IgnoreWhiteSpace {
-		q.Set("ignore_white_space", "true")
+		sdkOpts.IgnoreWhiteSpace = gongfeng.Ptr(true)
 	}
-	path := fmt.Sprintf("/projects/%s/repository/commits/%s/diff", encoded, url.PathEscape(sha))
-	if enc := q.Encode(); enc != "" {
-		path += "?" + enc
+	diffs, _, err := t.client.Commits.GetCommitDiff(ctx, pid(owner, repo), sha, sdkOpts)
+	if err != nil {
+		return nil, sdkError("GetCommitDiff", err)
 	}
-	var files []*provider.ChangedFile
-	if err := t.doRequest(ctx, "GET", path, nil, &files); err != nil {
-		return nil, err
+	result := make([]*provider.ChangedFile, 0, len(diffs))
+	for _, d := range diffs {
+		result = append(result, convertDiff(d))
 	}
-	return files, nil
+	return result, nil
 }
 
 func (t *Provider) ListCommitComments(ctx context.Context, owner, repo, sha string, page, perPage int) ([]*CommitComment, error) {
-	encoded := encodeProjectPath(owner, repo)
 	page, perPage = provider.NormalizePageOpts(page, perPage)
-	var comments []*CommitComment
-	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/commits/%s/comments?page=%d&per_page=%d", encoded, url.PathEscape(sha), page, perPage), nil, &comments); err != nil {
-		return nil, err
+	sdkOpts := &gongfeng.ListCommitCommentsOptions{
+		ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
 	}
-	return comments, nil
+	comments, _, err := t.client.Commits.ListCommitComments(ctx, pid(owner, repo), sha, sdkOpts)
+	if err != nil {
+		return nil, sdkError("ListCommitComments", err)
+	}
+	result := make([]*CommitComment, 0, len(comments))
+	for _, c := range comments {
+		cc := &CommitComment{
+			Body:     c.Note,
+			Path:     c.Path,
+			Line:     c.Line,
+			LineType: c.LineType,
+		}
+		if c.Author != nil {
+			cc.Author = convertUser(c.Author)
+		}
+		result = append(result, cc)
+	}
+	return result, nil
 }
 
 func (t *Provider) CreateCommitComment(ctx context.Context, owner, repo, sha string, opts CreateCommitCommentOptions) (*CommitComment, error) {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{"note": opts.Note}
+	sdkOpts := &gongfeng.CreateCommitCommentOptions{
+		Note: gongfeng.Ptr(opts.Note),
+	}
 	if opts.Path != "" {
-		body["path"] = opts.Path
+		sdkOpts.Path = gongfeng.Ptr(opts.Path)
 	}
 	if opts.Line > 0 {
-		body["line"] = opts.Line
+		sdkOpts.Line = gongfeng.Ptr(opts.Line)
 	}
 	if opts.LineType != "" {
-		body["line_type"] = opts.LineType
+		sdkOpts.LineType = gongfeng.Ptr(opts.LineType)
 	}
-	var c CommitComment
-	if err := t.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/repository/commits/%s/comments", encoded, url.PathEscape(sha)), body, &c); err != nil {
-		return nil, err
+	comment, _, err := t.client.Commits.CreateCommitComment(ctx, pid(owner, repo), sha, sdkOpts)
+	if err != nil {
+		return nil, sdkError("CreateCommitComment", err)
 	}
-	return &c, nil
+	cc := &CommitComment{
+		Body:     comment.Note,
+		Path:     comment.Path,
+		Line:     comment.Line,
+		LineType: comment.LineType,
+	}
+	if comment.Author != nil {
+		cc.Author = convertUser(comment.Author)
+	}
+	return cc, nil
 }
 
 func (t *Provider) GetCommitRefs(ctx context.Context, owner, repo, sha string, refType CommitRefType) (*CommitRefs, error) {
-	encoded := encodeProjectPath(owner, repo)
-	q := url.Values{}
+	sdkOpts := &gongfeng.ListCommitRefsOptions{}
 	if refType != "" {
-		q.Set("type", string(refType))
+		sdkOpts.Type = gongfeng.Ptr(string(refType))
 	}
-	path := fmt.Sprintf("/projects/%s/repository/commits/%s/refs", encoded, url.PathEscape(sha))
-	if enc := q.Encode(); enc != "" {
-		path += "?" + enc
-	}
-	var refs struct {
-		Type     string `json:"type"`
-		Branches []struct {
-			Name string `json:"name"`
-		} `json:"branches"`
-		Tags []struct {
-			Name string `json:"name"`
-		} `json:"tags"`
-	}
-	if err := t.doRequest(ctx, "GET", path, nil, &refs); err != nil {
-		return nil, err
+	refs, _, err := t.client.Commits.ListCommitRefs(ctx, pid(owner, repo), sha, sdkOpts)
+	if err != nil {
+		return nil, sdkError("GetCommitRefs", err)
 	}
 	result := &CommitRefs{}
-	for _, b := range refs.Branches {
-		result.Branches = append(result.Branches, b.Name)
-	}
-	for _, tg := range refs.Tags {
-		result.Tags = append(result.Tags, tg.Name)
+	for _, ref := range refs {
+		switch ref.Type {
+		case "branch":
+			result.Branches = append(result.Branches, ref.Name)
+		case "tag":
+			result.Tags = append(result.Tags, ref.Name)
+		default:
+			result.Branches = append(result.Branches, ref.Name)
+		}
 	}
 	return result, nil
 }
@@ -488,45 +548,47 @@ func (t *Provider) GetCommitRefs(ctx context.Context, owner, repo, sha string, r
 // ===========================================================================
 
 func (t *Provider) GetRepoTree(ctx context.Context, owner, repo, path, ref string, recursive bool) ([]*TreeEntryNode, error) {
-	encoded := encodeProjectPath(owner, repo)
-	q := url.Values{}
+	sdkOpts := &gongfeng.ListTreeOptions{}
 	if path != "" {
-		q.Set("path", path)
+		sdkOpts.Path = gongfeng.Ptr(path)
 	}
 	if ref != "" {
-		q.Set("ref_name", ref)
+		sdkOpts.RefName = gongfeng.Ptr(ref)
 	}
-	if recursive {
-		q.Set("recursive", "true")
+	nodes, _, err := t.client.Repositories.ListTree(ctx, pid(owner, repo), sdkOpts)
+	if err != nil {
+		return nil, sdkError("GetRepoTree", err)
 	}
-	reqPath := fmt.Sprintf("/projects/%s/repository/tree", encoded)
-	if enc := q.Encode(); enc != "" {
-		reqPath += "?" + enc
+	result := make([]*TreeEntryNode, 0, len(nodes))
+	for _, n := range nodes {
+		result = append(result, &TreeEntryNode{
+			ID:   n.ID,
+			Name: n.Name,
+			Type: n.Type,
+			Mode: n.Mode,
+		})
 	}
-	var nodes []*TreeEntryNode
-	if err := t.doRequest(ctx, "GET", reqPath, nil, &nodes); err != nil {
-		return nil, err
-	}
-	return nodes, nil
+	return result, nil
 }
 
 func (t *Provider) GetBlob(ctx context.Context, owner, repo, sha string) ([]byte, error) {
-	encoded := encodeProjectPath(owner, repo)
-	// The blob endpoint returns raw content; decode as base64 content first, then
-	// fall back to raw bytes.
+	// The SDK does not expose a blob endpoint directly. Use a raw API call.
+	encoded := owner + "/" + repo
 	var blob struct {
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
 	}
-	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/blobs/%s", encoded, url.PathEscape(sha)), nil, &blob); err != nil {
+	err := t.doRequest(ctx, "GetBlob", "GET",
+		fmt.Sprintf("projects/%s/repository/blobs/%s", url.PathEscape(encoded), url.PathEscape(sha)), nil, &blob)
+	if err != nil {
 		return nil, err
 	}
 	if blob.Encoding == "base64" {
-		decoded, err := encoding.Base64Decode(strings.ReplaceAll(blob.Content, "\n", ""))
+		decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(blob.Content, "\n", ""))
 		if err != nil {
 			return nil, err
 		}
-		return []byte(decoded), nil
+		return decoded, nil
 	}
 	return []byte(blob.Content), nil
 }
@@ -536,43 +598,80 @@ func (t *Provider) GetBlob(ctx context.Context, owner, repo, sha string) ([]byte
 // ===========================================================================
 
 func (t *Provider) ProtectBranch(ctx context.Context, owner, repo, branch string, opts ProtectBranchOptions) error {
-	encoded := encodeProjectPath(owner, repo)
-	return t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/repository/branches/%s/protect", encoded, url.PathEscape(branch)), nil, nil)
+	return t.doRequest(ctx, "ProtectBranch", "PUT",
+		fmt.Sprintf("projects/%s/repository/branches/%s/protect", pid(owner, repo), url.PathEscape(branch)), opts, nil)
 }
 
 func (t *Provider) UnprotectBranch(ctx context.Context, owner, repo, branch string) error {
-	encoded := encodeProjectPath(owner, repo)
-	return t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/repository/branches/%s/unprotect", encoded, url.PathEscape(branch)), nil, nil)
+	return t.doRequest(ctx, "UnprotectBranch", "PUT",
+		fmt.Sprintf("projects/%s/repository/branches/%s/unprotect", pid(owner, repo), url.PathEscape(branch)), nil, nil)
 }
 
 func (t *Provider) ListProtectedBranchMembers(ctx context.Context, owner, repo, branch string) ([]*ProtectedBranchMember, error) {
-	encoded := encodeProjectPath(owner, repo)
 	var members []*ProtectedBranchMember
-	if err := t.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/branches/protected/%s/members", encoded, url.PathEscape(branch)), nil, &members); err != nil {
+	err := t.doRequest(ctx, "ListProtectedBranchMembers", "GET",
+		fmt.Sprintf("projects/%s/branches/protected/%s/members", pid(owner, repo), url.PathEscape(branch)), nil, &members)
+	if err != nil {
 		return nil, err
 	}
 	return members, nil
 }
 
 func (t *Provider) AddProtectedBranchMember(ctx context.Context, owner, repo, branch string, opts ProtectedBranchMemberOptions) error {
-	encoded := encodeProjectPath(owner, repo)
 	body := map[string]any{"user_id": opts.UserID}
 	if opts.AccessLevel != 0 {
 		body["access_level"] = opts.AccessLevel
 	}
-	return t.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/branches/protected/%s/members", encoded, url.PathEscape(branch)), body, nil)
+	return t.doRequest(ctx, "AddProtectedBranchMember", "POST",
+		fmt.Sprintf("projects/%s/branches/protected/%s/members", pid(owner, repo), url.PathEscape(branch)), body, nil)
 }
 
 func (t *Provider) UpdateProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int, opts ProtectedBranchMemberOptions) error {
-	encoded := encodeProjectPath(owner, repo)
 	body := map[string]any{}
 	if opts.AccessLevel != 0 {
 		body["access_level"] = opts.AccessLevel
 	}
-	return t.doRequest(ctx, "PUT", fmt.Sprintf("/projects/%s/branches/protected/%s/members/%d", encoded, url.PathEscape(branch), userID), body, nil)
+	return t.doRequest(ctx, "UpdateProtectedBranchMember", "PUT",
+		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", pid(owner, repo), url.PathEscape(branch), userID), body, nil)
 }
 
 func (t *Provider) RemoveProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int) error {
-	encoded := encodeProjectPath(owner, repo)
-	return t.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/branches/protected/%s/members/%d", encoded, url.PathEscape(branch), userID), nil, nil)
+	return t.doRequest(ctx, "RemoveProtectedBranchMember", "DELETE",
+		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", pid(owner, repo), url.PathEscape(branch), userID), nil, nil)
+}
+
+// ===========================================================================
+// Helpers to convert SDK types to extras types
+// ===========================================================================
+
+func reviewToCodeReview(r *gongfeng.Review) *CodeReview {
+	cr := &CodeReview{
+		ID:          r.ID,
+		ProjectID:   r.ProjectID,
+		Title:       r.Title,
+		Description: r.Description,
+		State:       r.State,
+		CreatedAt:   r.CreatedAt.String(),
+		UpdatedAt:   r.UpdatedAt.String(),
+	}
+	if r.Author != nil {
+		cr.Author = convertUser(r.Author)
+	}
+	return cr
+}
+
+func reviewToMRReview(r *gongfeng.Review) *MRReview {
+	mr := &MRReview{
+		ID:          r.ID,
+		ProjectID:   r.ProjectID,
+		State:       r.State,
+		Title:       r.Title,
+		Description: r.Description,
+		CreatedAt:   r.CreatedAt.String(),
+		UpdatedAt:   r.UpdatedAt.String(),
+	}
+	if r.Author != nil {
+		mr.Author = convertUser(r.Author)
+	}
+	return mr
 }

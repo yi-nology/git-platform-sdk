@@ -65,6 +65,50 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 	}, nil
 }
 
+// CreateRepo implements provider.RepoManager.
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+	var r *gitcode.Repository
+	var err error
+	if owner != "" {
+		orgOpts := gitcode.CreateOrgRepoOptions{
+			Name:        opts.Name,
+			Description: opts.Description,
+			Private:     &opts.Private,
+			AutoInit:    &opts.AutoInit,
+		}
+		if opts.DefaultBranch != "" {
+			orgOpts.DefaultBranch = opts.DefaultBranch
+		}
+		r, err = p.client.CreateOrgRepository(ctx, owner, orgOpts)
+	} else {
+		r, err = p.client.CreateRepository(ctx, gitcode.CreateRepositoryOptions{
+			Name:        opts.Name,
+			Description: opts.Description,
+			Private:     &opts.Private,
+			AutoInit:    &opts.AutoInit,
+		})
+	}
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "CreateRepo", err)
+	}
+	ownerName := ""
+	if r.Owner != nil {
+		ownerName = r.Owner.Login
+	}
+	return &provider.PlatformRepo{
+		ID:            r.ID,
+		FullName:      r.FullName,
+		Name:          r.Name,
+		Owner:         ownerName,
+		Description:   r.Description,
+		CloneURL:      r.CloneURL,
+		SSHURL:        r.SSHURL,
+		DefaultBranch: r.DefaultBranch,
+		Private:       r.Private,
+		Platform:      provider.PlatformGitCode,
+	}, nil
+}
+
 // ForkRepo implements provider.RepoManager.
 func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
 	r, err := p.client.ForkRepository(ctx, owner, repo, nil)

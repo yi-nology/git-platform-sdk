@@ -11,16 +11,19 @@ import (
 	"strings"
 	"time"
 
+	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // CreateWebhook implements provider.WebhookManager.
 func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
-	encoded := encodeProjectPath(opts.Owner, opts.Repo)
-	body := map[string]any{
-		"url":         opts.URL,
-		"token":       opts.Secret,
-		"push_events": true,
+	pid := opts.Owner + "/" + opts.Repo
+	addOpts := &gongfeng.AddWebhookOptions{
+		URL:        gongfeng.Ptr(opts.URL),
+		PushEvents: gongfeng.Ptr(true),
+	}
+	if opts.Secret != "" {
+		addOpts.Token = gongfeng.Ptr(opts.Secret)
 	}
 	if len(opts.Events) > 0 {
 		em := map[string]bool{}
@@ -28,40 +31,40 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 			em[e] = true
 		}
 		if v, ok := em["push"]; ok {
-			body["push_events"] = v
+			addOpts.PushEvents = gongfeng.Ptr(v)
 		}
-		body["merge_requests_events"] = em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"]
-		body["tag_push_events"] = em["tag_push"] || em["tag"]
+		mrEvents := em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"]
+		addOpts.MergeRequestsEvents = gongfeng.Ptr(mrEvents)
+		tagEvents := em["tag_push"] || em["tag"]
+		addOpts.TagPushEvents = gongfeng.Ptr(tagEvents)
 	}
-	var wh struct {
-		ID  int    `json:"id"`
-		URL string `json:"url"`
+	hook, _, err := p.client.Webhooks.AddWebhook(ctx, pid, addOpts)
+	if err != nil {
+		return nil, sdkError("CreateWebhook", err)
 	}
-	if err := p.doRequest(ctx, "POST", "/projects/"+encoded+"/hooks", body, &wh); err != nil {
-		return nil, err
-	}
-	return &provider.PlatformWebhook{ID: int64(wh.ID), URL: wh.URL}, nil
+	return convertWebhook(hook), nil
 }
 
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	encoded := encodeProjectPath(owner, repo)
-	return p.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/hooks/%d", encoded, webhookID), nil, nil)
+	pid := owner + "/" + repo
+	_, err := p.client.Webhooks.DeleteWebhook(ctx, pid, int(webhookID))
+	if err != nil {
+		return sdkError("DeleteWebhook", err)
+	}
+	return nil
 }
 
 // ListWebhooks implements provider.WebhookManager.
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
-	encoded := encodeProjectPath(owner, repo)
-	var whs []struct {
-		ID  int    `json:"id"`
-		URL string `json:"url"`
+	pid := owner + "/" + repo
+	hooks, _, err := p.client.Webhooks.ListWebhooks(ctx, pid, nil)
+	if err != nil {
+		return nil, sdkError("ListWebhooks", err)
 	}
-	if err := p.doRequest(ctx, "GET", "/projects/"+encoded+"/hooks", nil, &whs); err != nil {
-		return nil, err
-	}
-	result := make([]*provider.PlatformWebhook, 0, len(whs))
-	for _, wh := range whs {
-		result = append(result, &provider.PlatformWebhook{ID: int64(wh.ID), URL: wh.URL})
+	result := make([]*provider.PlatformWebhook, 0, len(hooks))
+	for _, wh := range hooks {
+		result = append(result, convertWebhook(wh))
 	}
 	return result, nil
 }
@@ -127,8 +130,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 				StartSHA string `json:"start_sha"`
 				HeadSHA  string `json:"head_sha"`
 			} `json:"diff_refs"`
-			CreatedAt tcTime `json:"created_at"`
-			UpdatedAt tcTime `json:"updated_at"`
+			CreatedAt gongfeng.Time `json:"created_at"`
+			UpdatedAt gongfeng.Time `json:"updated_at"`
 		} `json:"object_attributes"`
 		Ref        string `json:"ref"`
 		Before     string `json:"before"`

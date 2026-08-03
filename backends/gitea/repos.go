@@ -58,6 +58,30 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 	return convertRepo(r), nil
 }
 
+// CreateRepo implements provider.RepoManager.
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+	createOpts := gitea.CreateRepoOption{
+		Name:        opts.Name,
+		Description: opts.Description,
+		Private:     opts.Private,
+		AutoInit:    opts.AutoInit,
+	}
+	if opts.DefaultBranch != "" {
+		createOpts.DefaultBranch = opts.DefaultBranch
+	}
+	var r *gitea.Repository
+	var err error
+	if owner != "" {
+		r, _, err = p.client.CreateOrgRepo(owner, createOpts)
+	} else {
+		r, _, err = p.client.CreateRepo(createOpts)
+	}
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitea, "CreateRepo", err)
+	}
+	return convertRepo(r), nil
+}
+
 // ForkRepo implements provider.RepoManager.
 func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
 	forkOpts := gitea.CreateForkOption{}

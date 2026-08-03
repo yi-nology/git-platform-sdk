@@ -1,85 +1,72 @@
 package tencentcode
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 
+	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListTags implements provider.ReleaseManager.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	encoded := encodeProjectPath(owner, repo)
-	var tags []struct {
-		Name   string `json:"name"`
-		Commit struct {
-			ID string `json:"id"`
-		} `json:"commit"`
-	}
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/tags", encoded), nil, &tags); err != nil {
-		return nil, err
+	pid := owner + "/" + repo
+	tags, _, err := p.client.Tags.ListTags(ctx, pid, nil)
+	if err != nil {
+		return nil, sdkError("ListTags", err)
 	}
 	result := make([]*provider.TagInfo, 0, len(tags))
-	for _, tg := range tags {
-		result = append(result, &provider.TagInfo{Name: tg.Name, Commit: tg.Commit.ID})
+	for _, t := range tags {
+		result = append(result, convertTag(t))
 	}
 	return result, nil
 }
 
 // ListReleases implements provider.ReleaseManager.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	encoded := encodeProjectPath(owner, repo)
-	var releases []struct {
-		ID          int    `json:"id"`
-		TagName     string `json:"tag_name"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/releases", encoded), nil, &releases); err != nil {
-		return nil, err
+	pid := owner + "/" + repo
+	releases, _, err := p.client.Releases.ListReleases(ctx, pid, nil)
+	if err != nil {
+		return nil, sdkError("ListReleases", err)
 	}
 	result := make([]*provider.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
-		result = append(result, &provider.ReleaseInfo{
-			ID: int64(r.ID), TagName: r.TagName, Title: r.Name, Body: r.Description,
-		})
+		result = append(result, convertRelease(r))
 	}
 	return result, nil
 }
 
 // CreateRelease implements provider.ReleaseManager.
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{
-		"tag_name":    opts.TagName,
-		"name":        opts.Title,
-		"description": opts.Body,
+	pid := owner + "/" + repo
+	createOpts := &gongfeng.CreateReleaseOptions{
+		Tag:         gongfeng.Ptr(opts.TagName),
+		Title:       gongfeng.Ptr(opts.Title),
+		Description: gongfeng.Ptr(opts.Body),
 	}
 	if opts.Target != "" {
-		body["target_commitish"] = opts.Target
+		createOpts.StartPoint = gongfeng.Ptr(opts.Target)
 	}
-	var r struct {
-		ID          int    `json:"id"`
-		TagName     string `json:"tag_name"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
+	release, _, err := p.client.Releases.CreateRelease(ctx, pid, createOpts)
+	if err != nil {
+		return nil, sdkError("CreateRelease", err)
 	}
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/releases", encoded), body, &r); err != nil {
-		return nil, err
-	}
-	return &provider.ReleaseInfo{
-		ID: int64(r.ID), TagName: r.TagName, Title: r.Name, Body: r.Description,
-	}, nil
+	return convertRelease(release), nil
 }
 
 // GetArchive implements provider.ReleaseManager.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	encoded := encodeProjectPath(owner, repo)
-	suffix := "tar.gz"
-	if format == "zip" {
-		suffix = "zip"
+	pid := owner + "/" + repo
+	var buf bytes.Buffer
+	opts := &gongfeng.ArchiveOptions{}
+	if ref != "" {
+		opts.SHA = gongfeng.Ptr(ref)
 	}
-	return p.doRawRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/archive.%s?sha=%s", encoded, suffix, ref))
+	_, err := p.client.Repositories.Archive(ctx, pid, &buf, opts)
+	if err != nil {
+		return nil, sdkError("GetArchive", err)
+	}
+	return buf.Bytes(), nil
 }
 
 var _ provider.ReleaseManager = (*Provider)(nil)

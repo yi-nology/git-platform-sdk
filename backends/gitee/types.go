@@ -68,6 +68,7 @@ type giteePR struct {
 		Login string `json:"login"`
 	} `json:"assignees"`
 	Mergeable bool       `json:"mergeable"`
+	Draft     bool       `json:"draft"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	MergedAt  *time.Time `json:"merged_at"`
@@ -101,6 +102,7 @@ func (pr *giteePR) toChangeRequest() *provider.ChangeRequest {
 		Reviewers:    reviewers,
 		Labels:       labels,
 		MergeStatus:  mergeStatus,
+		Draft:        pr.Draft,
 		WebURL:       pr.HTMLURL,
 		CreatedAt:    pr.CreatedAt,
 		UpdatedAt:    pr.UpdatedAt,

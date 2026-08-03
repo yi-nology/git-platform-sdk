@@ -123,6 +123,36 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 	return r.toPlatformRepo(), nil
 }
 
+// CreateRepo implements provider.RepoManager.
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+	body := map[string]any{
+		"name": opts.Name,
+	}
+	if opts.Description != "" {
+		body["description"] = opts.Description
+	}
+	body["private"] = opts.Private
+	if opts.AutoInit {
+		body["auto_init"] = "true"
+	}
+	if opts.DefaultBranch != "" {
+		body["default_branch"] = opts.DefaultBranch
+	}
+
+	var path string
+	if owner != "" {
+		path = fmt.Sprintf("/orgs/%s/repos", owner)
+	} else {
+		path = "/user/repos"
+	}
+
+	var r giteeRepo
+	if err := p.doRequest(ctx, "POST", path, body, &r); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateRepo", err)
+	}
+	return r.toPlatformRepo(), nil
+}
+
 var _ provider.RepoManager = (*Provider)(nil)
 
 // --- Change Requests ---
@@ -249,8 +279,9 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, numbe
 
 // ListCRComments implements provider.ChangeRequestManager.
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*provider.CRComment, error) {
+	page, perPage := provider.NormalizePageOpts(1, 0)
 	var comments []giteeComment
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/comments", owner, repo, number), nil, &comments); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/comments?page=%d&per_page=%d", owner, repo, number, page, perPage), nil, &comments); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListCRComments", err)
 	}
 	result := make([]*provider.CRComment, 0, len(comments))
@@ -262,8 +293,9 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, numbe
 
 // ListCRCommits implements provider.ChangeRequestManager.
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*provider.CRCommit, error) {
+	page, perPage := provider.NormalizePageOpts(1, 0)
 	var commits []giteeCommit
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/commits", owner, repo, number), nil, &commits); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/commits?page=%d&per_page=%d", owner, repo, number, page, perPage), nil, &commits); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListCRCommits", err)
 	}
 	result := make([]*provider.CRCommit, 0, len(commits))
@@ -279,10 +311,11 @@ var _ provider.ChangeRequestManager = (*Provider)(nil)
 
 // ListBranches implements provider.BranchManager.
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
+	page, perPage := provider.NormalizePageOpts(1, 0)
 	var branches []struct {
 		Name string `json:"name"`
 	}
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/branches", owner, repo), nil, &branches); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/branches?page=%d&per_page=%d", owner, repo, page, perPage), nil, &branches); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListBranches", err)
 	}
 	result := make([]*provider.PlatformBranch, 0, len(branches))
@@ -483,13 +516,14 @@ var _ provider.FileManager = (*Provider)(nil)
 
 // ListTags implements provider.ReleaseManager.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
+	page, perPage := provider.NormalizePageOpts(1, 0)
 	var tags []struct {
 		Name   string `json:"name"`
 		Commit struct {
 			SHA string `json:"sha"`
 		} `json:"commit"`
 	}
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/tags", owner, repo), nil, &tags); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/tags?page=%d&per_page=%d", owner, repo, page, perPage), nil, &tags); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListTags", err)
 	}
 	result := make([]*provider.TagInfo, 0, len(tags))
@@ -501,8 +535,9 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 
 // ListReleases implements provider.ReleaseManager.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
+	page, perPage := provider.NormalizePageOpts(1, 0)
 	var releases []giteeRelease
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/releases", owner, repo), nil, &releases); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/releases?page=%d&per_page=%d", owner, repo, page, perPage), nil, &releases); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListReleases", err)
 	}
 	result := make([]*provider.ReleaseInfo, 0, len(releases))
@@ -790,6 +825,17 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Action = "push"
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
 		event.CommitSHA = pl.After
+	case "tag_push":
+		event.Type = "tag.push"
+		event.Action = "tag.push"
+		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
+		event.CommitSHA = pl.After
+	case "note", "comment":
+		event.Type = "comment.created"
+		event.Action = "comment.created"
+	case "Issue Hook":
+		event.Type = "issue." + pl.Action
+		event.Action = pl.Action
 	}
 	return event, nil
 }

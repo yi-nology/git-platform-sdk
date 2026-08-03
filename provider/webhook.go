@@ -254,6 +254,6 @@ func init() {
 	defaultWebhookRegistry.Register(PlatformForgejo, HMACSHA256Validator{Header: "X-Gitea-Signature"})
 	defaultWebhookRegistry.Register(PlatformGitee, HMACSHA256Validator{Header: "X-Gitee-Token"})
 	defaultWebhookRegistry.Register(PlatformGitCode, HMACSHA256Validator{Header: "X-Token"})
-	defaultWebhookRegistry.Register(PlatformTencentCode, HMACSHA256Validator{Header: "X-Gitee-Token"})
+	defaultWebhookRegistry.Register(PlatformTencentCode, StaticTokenValidator{Header: "X-Token"})
 	defaultWebhookRegistry.Register(PlatformGitLab, StaticTokenValidator{Header: "X-Gitlab-Token"})
 }

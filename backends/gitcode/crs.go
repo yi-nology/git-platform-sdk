@@ -32,6 +32,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo string, number int) (*
 
 // ListCRs implements provider.ChangeRequestManager.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
+	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	state := gitcode.PullRequestStateOpen
 	switch opts.State {
 	case provider.CRStateClosed:
@@ -50,6 +51,8 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	for _, pr := range prs {
 		result = append(result, convertPullRequest(pr))
 	}
+	// NOTE: The GitCode SDK does not expose total count from the response,
+	// so we fall back to the number of results in this page.
 	return result, len(result), nil
 }
 
@@ -177,6 +180,7 @@ func convertPullRequest(pr *gitcode.PullRequest) *provider.ChangeRequest {
 			ID: authorID, Username: pr.Author.Login, AvatarURL: pr.Author.AvatarURL,
 		}
 	}
+	cr.Draft = pr.Draft
 	return cr
 }
 

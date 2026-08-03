@@ -44,6 +44,39 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 	return convertProject(proj), nil
 }
 
+// CreateRepo implements provider.RepoManager.
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+	createOpts := &gitlab.CreateProjectOptions{
+		Name:                 gitlab.Ptr(opts.Name),
+		Description:          gitlab.Ptr(opts.Description),
+		Visibility:           gitlab.Ptr(gitlab.VisibilityValue("private")),
+		InitializeWithReadme: gitlab.Ptr(opts.AutoInit),
+	}
+	if !opts.Private {
+		createOpts.Visibility = gitlab.Ptr(gitlab.VisibilityValue("public"))
+	}
+	if opts.DefaultBranch != "" {
+		createOpts.DefaultBranch = gitlab.Ptr(opts.DefaultBranch)
+	}
+	if owner != "" {
+		// Create under a namespace (group) by looking up the namespace ID from the owner path.
+		namespaces, _, nsErr := p.client.Namespaces.SearchNamespace(owner, gitlab.WithContext(ctx))
+		if nsErr == nil {
+			for _, ns := range namespaces {
+				if ns.Path == owner || ns.FullPath == owner {
+					createOpts.NamespaceID = gitlab.Ptr(int64(ns.ID))
+					break
+				}
+			}
+		}
+	}
+	proj, _, err := p.client.Projects.CreateProject(createOpts, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "CreateRepo", err)
+	}
+	return convertProject(proj), nil
+}
+
 // ForkRepo implements provider.RepoManager.
 func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
 	forkOpts := &gitlab.ForkProjectOptions{}

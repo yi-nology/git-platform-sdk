@@ -9,23 +9,24 @@
 package tencentcode
 
 import (
+	"bytes"
 	"context"
-	"crypto/subtle"
 	"crypto/tls"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
+	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
 )
 
 // Provider is the Tencent 工蜂 implementation of provider.Provider.
 type Provider struct {
-	client *transport.Client
-	logger provider.Logger
+	client    *gongfeng.Client
+	transport *transport.Client
+	logger    provider.Logger
 }
 
 // New builds a Tencent Code Provider from the given config.
@@ -36,14 +37,15 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
-		baseURL = "https://git.code.tencent.com/api/v3"
+		baseURL = "https://git.code.tencent.com"
 	}
 
-	c := transport.NewClient(baseURL, transport.PrivateToken{Token: cfg.Token})
-	c.Logger = toTransportLogger(logger)
-	c.Timeout = 30 * time.Second
+	// Build a transport.Client so we can leverage the retry/hooks/auth pipeline.
+	transportClient := transport.NewClient(baseURL+"/api/v3", transport.PrivateToken{Token: cfg.Token})
+	transportClient.Logger = toTransportLogger(logger)
+	transportClient.Timeout = 30 * time.Second
 	if cfg.SkipTLS {
-		c.Transport = &http.Transport{
+		transportClient.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 				MinVersion:         tls.VersionTLS12,
@@ -72,12 +74,33 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			MaxDelay:    cfg.RetryConfig.MaxDelay,
 			Statuses:    cfg.RetryConfig.RetryOn,
 		}
-		c.Retry = &rc
+		transportClient.Retry = &rc
 	}
 	if cfg.Hooks != nil {
-		c.Hooks = convertHooks(cfg.Hooks)
+		transportClient.Hooks = convertHooks(cfg.Hooks)
 	}
-	return &Provider{client: c, logger: logger}, nil
+
+	// Build an *http.Client whose Transport uses the transport layer's
+	// RoundTripper (with auth, hooks, and optional retry).
+	httpClient := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: transportClient.NewRetryingRoundTripper(),
+	}
+
+	// Normalize the base URL for the gongfeng SDK (it appends /api/v3/ itself).
+	sdkBaseURL := strings.TrimRight(baseURL, "/")
+	sdkBaseURL = strings.TrimSuffix(sdkBaseURL, "/api/v3")
+
+	// Create the gongfeng SDK client with the custom HTTP client.
+	gfClient, err := gongfeng.NewClient(cfg.Token,
+		gongfeng.WithHTTPClient(httpClient),
+		gongfeng.WithBaseURL(sdkBaseURL),
+	)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "New", err)
+	}
+
+	return &Provider{client: gfClient, transport: transportClient, logger: logger}, nil
 }
 
 // toTransportLogger adapts provider.Logger to transport.Logger.
@@ -120,11 +143,12 @@ func convertHooks(h *provider.Hooks) *transport.Hooks {
 	return out
 }
 
-// encodeProjectPath URL-encodes the "owner/repo" path used by Tencent 工蜂's
-// project-scoped endpoints. The API uses the encoded form in the URL rather
-// than a path parameter.
-func encodeProjectPath(owner, repo string) string {
-	return url.PathEscape(owner + "/" + repo)
+// sdkError wraps an error as a provider.ProviderError for the TencentCode platform.
+func sdkError(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return provider.Wrap(provider.PlatformTencentCode, op, err)
 }
 
 // Platform implements provider.Provider.
@@ -135,7 +159,7 @@ func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnection
 	var user struct {
 		Username string `json:"username"`
 	}
-	if err := p.doRequest(ctx, "GET", "/user", nil, &user); err != nil {
+	if err := p.doRequest(ctx, "TestConnection", "GET", "user", nil, &user); err != nil {
 		return &provider.TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
 	result := &provider.TestConnectionResult{
@@ -151,59 +175,6 @@ func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnection
 	return result, nil
 }
 
-// doRequest is a tiny convenience wrapper for JSON-in / JSON-out calls.
-func (p *Provider) doRequest(ctx context.Context, method, path string, body, result any) error {
-	_, err := p.client.DoJSON(ctx, &transport.Request{
-		Method: method, Path: path, Body: body, Result: result,
-	})
-	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, opFromPath(method, path), err)
-	}
-	return nil
-}
-
-// doRequestWithHeaders is the same as doRequest but returns the response
-// headers. Used for paginated endpoints that expose X-Total-Count.
-func (p *Provider) doRequestWithHeaders(ctx context.Context, method, path string, body, result any) (http.Header, error) {
-	resp, err := p.client.DoJSON(ctx, &transport.Request{
-		Method: method, Path: path, Body: body, Result: result,
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, opFromPath(method, path), err)
-	}
-	return resp.Header, nil
-}
-
-// doRawRequest executes a request and returns the raw body bytes. Used for
-// archive downloads.
-func (p *Provider) doRawRequest(ctx context.Context, method, path string) ([]byte, error) {
-	resp, err := p.client.Do(ctx, &transport.Request{Method: method, Path: path})
-	if err != nil {
-		return nil, provider.Wrap(platform(), "doRawRequest", err)
-	}
-	return resp.Body, nil
-}
-
-// opFromPath derives a short operation name from the method+path for error
-// wrapping. Example: "GET /projects/owner%2Frepo/merge_requests" ->
-// "GET merge_requests".
-func opFromPath(method, path string) string {
-	// Take the last segment after the final "/".
-	last := path
-	if i := strings.LastIndex(path, "/"); i >= 0 {
-		last = path[i+1:]
-	}
-	// Drop any query string.
-	if i := strings.IndexByte(last, '?'); i >= 0 {
-		last = last[:i]
-	}
-	return method + " " + last
-}
-
-// platform is a tiny helper so doRawRequest doesn't need to be a method on
-// Provider (it is, but the helper avoids repetition).
-func platform() provider.Platform { return provider.PlatformTencentCode }
-
 // Compile-time guarantee that *Provider satisfies provider.Provider and
 // TencentCodeExtras. The extras methods live in extras.go.
 var (
@@ -211,6 +182,46 @@ var (
 	_ TencentCodeExtras = (*Provider)(nil)
 )
 
-// avoid unused-import warnings when subtle is only used in webhook code.
-var _ = subtle.ConstantTimeCompare
+// doRequest executes a JSON request through the gongfeng SDK client.
+// Used by extras.go and diffs.go for endpoints not covered by SDK services.
+func (p *Provider) doRequest(ctx context.Context, op, method, path string, body, result any) error {
+	req, err := p.client.NewRequest(ctx, method, path, body)
+	if err != nil {
+		return provider.Wrap(provider.PlatformTencentCode, op, err)
+	}
+	if _, err := p.client.Do(req, result); err != nil {
+		return sdkError(op, err)
+	}
+	return nil
+}
+
+// doRawRequest executes a request and returns the raw body bytes.
+// Used for archive downloads and blob retrieval.
+func (p *Provider) doRawRequest(ctx context.Context, op, method, path string) ([]byte, error) {
+	req, err := p.client.NewRequest(ctx, method, path, nil)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, op, err)
+	}
+	var buf bytes.Buffer
+	if _, err := p.client.Do(req, &buf); err != nil {
+		return nil, sdkError(op, err)
+	}
+	return buf.Bytes(), nil
+}
+
+// extractTotalCount returns the total item count from the SDK response,
+// falling back to the length of the result slice.
+func extractTotalCount(resp *gongfeng.Response, fallback int) int {
+	if resp != nil && resp.TotalItems > 0 {
+		return resp.TotalItems
+	}
+	return fallback
+}
+
+// pid returns the project identifier in "owner/repo" format for SDK calls.
+func pid(owner, repo string) string {
+	return owner + "/" + repo
+}
+
+// avoid unused-import warnings.
 var _ = fmt.Sprintf

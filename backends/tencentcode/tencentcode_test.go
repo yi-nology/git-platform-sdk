@@ -21,6 +21,12 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// stripAPIPrefix removes the /api/v3 prefix that the gongfeng SDK
+// automatically appends to all request paths.
+func stripAPIPrefix(path string) string {
+	return strings.TrimPrefix(path, "/api/v3")
+}
+
 func newTestProvider(t *testing.T, srv *httptest.Server) *tencentcode.Provider {
 	t.Helper()
 	p, err := provider.NewProvider(provider.Config{
@@ -63,7 +69,8 @@ func TestPlatform(t *testing.T) {
 
 func TestTestConnection(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/user" {
+		path := stripAPIPrefix(r.URL.Path)
+		if path == "/user" {
 			writeJSON(w, map[string]string{"username": "testuser"})
 			return
 		}

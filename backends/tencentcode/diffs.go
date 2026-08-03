@@ -3,37 +3,27 @@ package tencentcode
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strconv"
 
+	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // GetCRDiff implements provider.DiffManager.
 func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*provider.MergeDiff, error) {
-	encoded := encodeProjectPath(owner, repo)
-	var changes struct {
-		Changes []struct {
-			OldPath     string `json:"old_path"`
-			NewPath     string `json:"new_path"`
-			Diff        string `json:"diff"`
-			NewFile     bool   `json:"new_file"`
-			RenamedFile bool   `json:"renamed_file"`
-			DeletedFile bool   `json:"deleted_file"`
-		} `json:"changes"`
+	pid := owner + "/" + repo
+	changes, _, err := p.client.MergeRequests.GetMergeRequestChanges(ctx, pid, number)
+	if err != nil {
+		return nil, sdkError("GetCRDiff", err)
 	}
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_requests/%d/changes", encoded, number), nil, &changes); err != nil {
-		return nil, err
-	}
-	files := make([]*provider.ChangedFile, 0, len(changes.Changes))
+	files := make([]*provider.ChangedFile, 0, len(changes.Files))
 	totalAdd, totalDel := 0, 0
-	for _, c := range changes.Changes {
-		add, del := provider.CountDiffLines(c.Diff)
-		totalAdd += add
-		totalDel += del
-		files = append(files, &provider.ChangedFile{
-			OldPath: c.OldPath, NewPath: c.NewPath, Diff: c.Diff,
-			Additions: add, Deletions: del,
-			IsNew: c.NewFile, IsDeleted: c.DeletedFile, IsRenamed: c.RenamedFile,
-		})
+	for _, d := range changes.Files {
+		cf := convertDiff(d)
+		totalAdd += cf.Additions
+		totalDel += cf.Deletions
+		files = append(files, cf)
 	}
 	return &provider.MergeDiff{Files: files, TotalAdd: totalAdd, TotalDel: totalDel}, nil
 }
@@ -49,26 +39,37 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number in
 
 // CreateNote implements provider.DiffManager.
 func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
-	encoded := encodeProjectPath(owner, repo)
-	payload := map[string]any{"body": body}
-	var resp struct {
-		ID int `json:"id"`
+	pid := owner + "/" + repo
+	opts := &gongfeng.CreateMergeRequestNoteOptions{
+		Body: gongfeng.Ptr(body),
 	}
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/merge_requests/%d/notes", encoded, number), payload, &resp); err != nil {
-		return "", err
+	note, _, err := p.client.Notes.CreateMergeRequestNote(ctx, pid, number, opts)
+	if err != nil {
+		return "", sdkError("CreateNote", err)
 	}
-	return fmt.Sprintf("%d", resp.ID), nil
+	return fmt.Sprintf("%d", note.ID), nil
 }
 
 // DeleteNote implements provider.DiffManager.
+// The gongfeng SDK does not expose a delete-note endpoint, so we use the
+// SDK client's NewRequest/Do for a raw API call.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
-	encoded := encodeProjectPath(owner, repo)
-	return p.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/merge_requests/%d/notes/%s", encoded, number, noteID), nil, nil)
+	path := fmt.Sprintf("projects/%s/merge_requests/%d/notes/%s", owner+"/"+repo, number, noteID)
+	req, err := p.client.NewRequest(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteNote", err)
+	}
+	if _, err := p.client.Do(req, nil); err != nil {
+		return sdkError("DeleteNote", err)
+	}
+	return nil
 }
 
 // CreateDiscussion implements provider.DiffManager.
+// The gongfeng SDK does not expose a discussions endpoint, so we use the
+// SDK client's NewRequest/Do for a raw API call.
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts provider.DiscussionOptions) (string, error) {
-	encoded := encodeProjectPath(owner, repo)
+	path := fmt.Sprintf("projects/%s/merge_requests/%d/discussions", owner+"/"+repo, number)
 	payload := map[string]any{"body": opts.Body}
 	if opts.FilePath != "" {
 		position := map[string]any{
@@ -93,13 +94,17 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 		}
 		payload["position"] = position
 	}
+	req, err := p.client.NewRequest(ctx, http.MethodPost, path, payload)
+	if err != nil {
+		return "", provider.Wrap(provider.PlatformTencentCode, "CreateDiscussion", err)
+	}
 	var resp struct {
 		ID int64 `json:"id"`
 	}
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/projects/%s/merge_requests/%d/discussions", encoded, number), payload, &resp); err != nil {
-		return "", err
+	if _, err := p.client.Do(req, &resp); err != nil {
+		return "", sdkError("CreateDiscussion", err)
 	}
-	return fmt.Sprintf("%d", resp.ID), nil
+	return strconv.FormatInt(resp.ID, 10), nil
 }
 
 // CreateReview implements provider.DiffManager.
@@ -107,16 +112,25 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 // Tencent 工蜂 has no native review object. We approximate one by posting
 // each inline comment as a discussion and the summary body as a note.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo string, number int, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	encoded := encodeProjectPath(owner, repo)
-	var mr tcMR
-	_ = p.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/merge_requests/%d", encoded, number), nil, &mr)
-
-	var baseSHA, startSHA, headSHA string
-	if mr.DiffRefs.BaseSHA != "" {
-		baseSHA = mr.DiffRefs.BaseSHA
-		startSHA = mr.DiffRefs.StartSHA
-		headSHA = mr.DiffRefs.HeadSHA
+	pid := owner + "/" + repo
+	// Fetch MR to get diff_refs via a raw API call (SDK MergeRequest type
+	// does not include DiffRefs).
+	var rawMR struct {
+		DiffRefs struct {
+			BaseSHA  string `json:"base_sha"`
+			StartSHA string `json:"start_sha"`
+			HeadSHA  string `json:"head_sha"`
+		} `json:"diff_refs"`
 	}
+	req, err := p.client.NewRequest(ctx, http.MethodGet,
+		fmt.Sprintf("projects/%s/merge_requests/%d", pid, number), nil)
+	if err == nil {
+		_, _ = p.client.Do(req, &rawMR)
+	}
+
+	baseSHA := rawMR.DiffRefs.BaseSHA
+	startSHA := rawMR.DiffRefs.StartSHA
+	headSHA := rawMR.DiffRefs.HeadSHA
 	if opts.CommitID != "" {
 		headSHA = opts.CommitID
 	}

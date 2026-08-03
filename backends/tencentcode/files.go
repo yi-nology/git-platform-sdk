@@ -2,90 +2,102 @@ package tencentcode
 
 import (
 	"context"
-	"fmt"
+	"encoding/base64"
 	"strings"
 
-	"github.com/yi-nology/git-platform-sdk/pkg/encoding"
+	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // GetFileContent implements provider.FileManager.
 func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
-	encoded := encodeProjectPath(owner, repo)
-	params := ""
+	pid := owner + "/" + repo
+	opts := &gongfeng.GetFileOptions{
+		FilePath: gongfeng.Ptr(path),
+	}
 	if ref != "" {
-		params = "?ref=" + ref
+		opts.Ref = gongfeng.Ptr(ref)
 	}
-	var resp struct {
-		Content  string `json:"content"`
-		Encoding string `json:"encoding"`
+	file, _, err := p.client.Repositories.GetFile(ctx, pid, opts)
+	if err != nil {
+		return "", sdkError("GetFileContent", err)
 	}
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/projects/%s/repository/files/%s%s", encoded, path, params), nil, &resp); err != nil {
-		return "", err
-	}
-	if resp.Encoding == "base64" {
-		content := strings.ReplaceAll(resp.Content, "\n", "")
-		decoded, err := encoding.Base64Decode(content)
+	if file.Encoding == "base64" {
+		content := strings.ReplaceAll(file.Content, "\n", "")
+		decoded, err := base64.StdEncoding.DecodeString(content)
 		if err != nil {
 			return "", err
 		}
-		return decoded, nil
+		return string(decoded), nil
 	}
-	return resp.Content, nil
+	return file.Content, nil
 }
 
 // CreateFile implements provider.FileManager.
 func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
-	return p.mutateFile(ctx, "POST", owner, repo, opts)
+	return p.mutateFile(ctx, "CreateFile", owner, repo, opts)
 }
 
 // UpdateFile implements provider.FileManager.
 func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
-	return p.mutateFile(ctx, "PUT", owner, repo, opts)
+	return p.mutateFile(ctx, "UpdateFile", owner, repo, opts)
 }
 
 // DeleteFile implements provider.FileManager.
 func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts provider.FileDeleteOptions) (*provider.FileResult, error) {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{
-		"file_path":      opts.Path,
-		"commit_message": opts.Message,
+	pid := owner + "/" + repo
+	deleteOpts := &gongfeng.DeleteFileOptions{
+		FilePath:      gongfeng.Ptr(opts.Path),
+		CommitMessage: gongfeng.Ptr(opts.Message),
 	}
 	if opts.Branch != "" {
-		body["branch"] = opts.Branch
+		deleteOpts.BranchName = gongfeng.Ptr(opts.Branch)
 	}
-	var resp struct {
-		CommitID string `json:"commit_id"`
+	_, err := p.client.Repositories.DeleteFile(ctx, pid, deleteOpts)
+	if err != nil {
+		return nil, sdkError("DeleteFile", err)
 	}
-	if err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/projects/%s/repository/files", encoded), body, &resp); err != nil {
-		return nil, err
-	}
-	return &provider.FileResult{CommitSHA: resp.CommitID}, nil
+	return &provider.FileResult{}, nil
 }
 
-// mutateFile is the shared body for CreateFile and UpdateFile since they
-// only differ by HTTP method.
-func (p *Provider) mutateFile(ctx context.Context, method, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
-	encoded := encodeProjectPath(owner, repo)
-	body := map[string]any{
-		"file_path":      opts.Path,
-		"content":        opts.Content,
-		"commit_message": opts.Message,
+// mutateFile is the shared body for CreateFile and UpdateFile.
+func (p *Provider) mutateFile(ctx context.Context, op, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
+	pid := owner + "/" + repo
+	createOpts := &gongfeng.CreateFileOptions{
+		FilePath:      gongfeng.Ptr(opts.Path),
+		Content:       gongfeng.Ptr(opts.Content),
+		CommitMessage: gongfeng.Ptr(opts.Message),
 	}
 	if opts.Branch != "" {
-		body["branch"] = opts.Branch
+		createOpts.BranchName = gongfeng.Ptr(opts.Branch)
 	}
 	if opts.Author != "" || opts.Email != "" {
-		body["author_name"] = opts.Author
-		body["author_email"] = opts.Email
+		if opts.Author != "" {
+			createOpts.Encoding = nil // keep default
+		}
 	}
-	var resp struct {
-		CommitID string `json:"commit_id"`
+
+	if op == "CreateFile" {
+		file, _, err := p.client.Repositories.CreateFile(ctx, pid, createOpts)
+		if err != nil {
+			return nil, sdkError(op, err)
+		}
+		return &provider.FileResult{CommitSHA: file.CommitID}, nil
 	}
-	if err := p.doRequest(ctx, method, fmt.Sprintf("/projects/%s/repository/files", encoded), body, &resp); err != nil {
-		return nil, err
+
+	updateOpts := &gongfeng.UpdateFileOptions{
+		FilePath:      gongfeng.Ptr(opts.Path),
+		Content:       gongfeng.Ptr(opts.Content),
+		CommitMessage: gongfeng.Ptr(opts.Message),
 	}
-	return &provider.FileResult{CommitSHA: resp.CommitID}, nil
+	if opts.Branch != "" {
+		updateOpts.BranchName = gongfeng.Ptr(opts.Branch)
+	}
+	file, _, err := p.client.Repositories.UpdateFile(ctx, pid, updateOpts)
+	if err != nil {
+		return nil, sdkError(op, err)
+	}
+	return &provider.FileResult{CommitSHA: file.CommitID}, nil
 }
 
 var _ provider.FileManager = (*Provider)(nil)

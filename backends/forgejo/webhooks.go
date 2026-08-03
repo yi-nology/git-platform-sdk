@@ -66,7 +66,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 	}
 	sig := r.Header.Get("X-Forgejo-Signature")
 	if sig == "" {
-		return provider.Wrapf(provider.PlatformForgejo, "ValidateWebhookSignature", "missing X-Forgejo-Signature header")
+		return provider.Wrapf(provider.PlatformForgejo, "ValidateWebhookSignature", "%w: missing X-Forgejo-Signature header", provider.ErrWebhookValidation)
 	}
 	body, _ := io.ReadAll(r.Body)
 	r.Body = io.NopCloser(bytes.NewReader(body))
@@ -74,7 +74,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 	mac.Write(body)
 	expected := hex.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(sig), []byte(expected)) {
-		return provider.Wrapf(provider.PlatformForgejo, "ValidateWebhookSignature", "invalid webhook signature")
+		return provider.Wrapf(provider.PlatformForgejo, "ValidateWebhookSignature", "%w: invalid webhook signature", provider.ErrWebhookValidation)
 	}
 	return nil
 }

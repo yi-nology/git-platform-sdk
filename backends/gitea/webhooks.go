@@ -66,7 +66,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 	}
 	sig := r.Header.Get("X-Gitea-Signature")
 	if sig == "" {
-		return provider.Wrapf(provider.PlatformGitea, "ValidateWebhookSignature", "missing X-Gitea-Signature header")
+		return provider.Wrapf(provider.PlatformGitea, "ValidateWebhookSignature", "%w: missing X-Gitea-Signature header", provider.ErrWebhookValidation)
 	}
 	body, _ := io.ReadAll(r.Body)
 	r.Body = io.NopCloser(bytes.NewReader(body))
@@ -74,7 +74,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 	mac.Write(body)
 	expected := hex.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(sig), []byte(expected)) {
-		return provider.Wrapf(provider.PlatformGitea, "ValidateWebhookSignature", "invalid webhook signature")
+		return provider.Wrapf(provider.PlatformGitea, "ValidateWebhookSignature", "%w: invalid webhook signature", provider.ErrWebhookValidation)
 	}
 	return nil
 }
