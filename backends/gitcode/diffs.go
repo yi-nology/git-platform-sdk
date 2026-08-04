@@ -122,7 +122,10 @@ func (p *Provider) createInlineComment(ctx context.Context, owner, repo string, 
 	_, err := p.client.CreatePullRequestInlineComment(ctx, owner, repo, number, gitcode.CreatePullRequestInlineCommentOptions{
 		Body: comment.Body, Path: comment.Path, Line: comment.Line, Side: side, CommitID: commitID,
 	})
-	return err
+	if err != nil {
+		return provider.Wrap(provider.PlatformGitCode, "createInlineComment", err)
+	}
+	return nil
 }
 
 func convertChangedFile(f *gitcode.PullRequestFile) *provider.ChangedFile {

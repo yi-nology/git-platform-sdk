@@ -2,7 +2,9 @@ package provider
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"reflect"
 	"testing"
 )
 
@@ -196,4 +198,58 @@ func containsSubstr(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestWrapStatusError(t *testing.T) {
+	inner := fmt.Errorf("not found")
+	err := WrapStatusError(inner, 404)
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+
+	se, ok := err.(*StatusError)
+	if !ok {
+		t.Fatalf("expected *StatusError, got %T", err)
+	}
+	if se.StatusCode() != 404 {
+		t.Errorf("expected status 404, got %d", se.StatusCode())
+	}
+	if se.Unwrap() != inner {
+		t.Error("expected Unwrap to return inner error")
+	}
+}
+
+func TestWrapStatusError_Nil(t *testing.T) {
+	err := WrapStatusError(nil, 404)
+	if err != nil {
+		t.Errorf("expected nil, got %v", err)
+	}
+}
+
+func TestWrapStatusError_InProviderError(t *testing.T) {
+	inner := WrapStatusError(fmt.Errorf("gone"), 410)
+	pe := Wrap(PlatformGitHub, "DeleteRepo", inner)
+
+	var perr *ProviderError
+	if !errors.As(pe, &perr) {
+		t.Fatal("expected ProviderError")
+	}
+	if perr.StatusCode != 410 {
+		t.Errorf("expected status 410, got %d", perr.StatusCode)
+	}
+	// 410 Gone is not a standard sentinel — verify it doesn't match NotFound.
+	if IsNotFound(pe) {
+		t.Error("410 Gone should not be classified as NotFound")
+	}
+}
+
+func TestStatusError_ImplementsStatusCoder(t *testing.T) {
+	se := &StatusError{Status: 429, Cause: fmt.Errorf("rate limited")}
+	var sc statusCoder
+	if !reflect.TypeOf(se).Implements(reflect.TypeOf(&sc).Elem()) {
+		t.Error("StatusError should implement statusCoder interface")
+	}
+	if se.StatusCode() != 429 {
+		t.Errorf("expected 429, got %d", se.StatusCode())
+	}
 }

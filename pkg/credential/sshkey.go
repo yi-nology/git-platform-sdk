@@ -85,15 +85,17 @@ func (h *SSHKeyHelper) CreateTempKeyFile(keyContent string) (string, error) {
 }
 
 // BuildSSHCommand returns a GIT_SSH_COMMAND value that uses the given key file
-// with host key checking disabled (suitable for CI/server environments).
+// with strict host key checking enabled (the secure default).
+// Use BuildSSHCommandInsecure for CI environments where known_hosts is unavailable.
 func (h *SSHKeyHelper) BuildSSHCommand(keyPath string) string {
-	return fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", keyPath)
+	return fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts", keyPath)
 }
 
-// BuildSecureSSHCommand returns a GIT_SSH_COMMAND value that uses the given key
-// file with strict host key checking enabled (requires known_hosts to be populated).
-func (h *SSHKeyHelper) BuildSecureSSHCommand(keyPath string) string {
-	return fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts", keyPath)
+// BuildSSHCommandInsecure returns a GIT_SSH_COMMAND value with host key
+// checking disabled. Only suitable for CI/server environments where
+// known_hosts cannot be populated. Do NOT use in production.
+func (h *SSHKeyHelper) BuildSSHCommandInsecure(keyPath string) string {
+	return fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", keyPath)
 }
 
 // CleanupTempFile removes a temporary key file. Safe to call with empty string.

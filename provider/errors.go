@@ -87,16 +87,22 @@ func Wrap(platform Platform, op string, err error) error {
 		return pe
 	}
 	pe := &ProviderError{Platform: platform, Op: op, Cause: err}
-	// Walk the cause chain looking for an HTTP status code. This lets Wrap
-	// produce a typed ProviderError when the input is a transport error
-	// (e.g. transport.Error with StatusCode()) or a third-party SDK error
-	// (e.g. *github.ErrorResponse which embeds *http.Response).
+	// Walk the cause chain looking for an HTTP status code. The check order
+	// prioritizes cheap interface checks before falling back to reflection.
 	for cur := err; cur != nil; {
+		// Fast path: statusCoder interface (covers transport.Error and StatusError).
 		if sc, ok := cur.(statusCoder); ok {
 			pe.StatusCode = sc.StatusCode()
 			pe.Cause = classifyStatusCode(pe.StatusCode)
 			break
 		}
+		// Fast path: explicit StatusError type.
+		if se, ok := cur.(*StatusError); ok {
+			pe.StatusCode = se.Status
+			pe.Cause = classifyStatusCode(se.Status)
+			break
+		}
+		// Slow path: reflection-based detection for third-party SDK errors.
 		if code, ok := httpStatusFromError(cur); ok {
 			pe.StatusCode = code
 			pe.Cause = classifyStatusCode(code)
@@ -129,15 +135,34 @@ func New(platform Platform, op string, status int, body string) error {
 	return pe
 }
 
-// NewProviderError is a compatibility alias for New.
-func NewProviderError(platform Platform, op string, status int, body string) error {
-	return New(platform, op, status, body)
+// StatusError wraps an error with an explicit HTTP status code. Use this in
+// platform backends when you need to attach a status code to an error from a
+// third-party SDK that doesn't implement the statusCoder interface. This avoids
+// the need for the reflection-based fallback in Wrap.
+//
+// Example:
+//
+//	err := someSDK.DoSomething()
+//	if err != nil {
+//	    return provider.WrapStatusError(err, 404)
+//	}
+type StatusError struct {
+	Status int
+	Cause  error
 }
 
-// WrapProviderError wraps an existing error as a ProviderError. The op
-// string is the operation name (e.g., "ListRepos").
-func WrapProviderError(platform Platform, op string, err error) error {
-	return Wrap(platform, op, err)
+func (e *StatusError) Error() string   { return e.Cause.Error() }
+func (e *StatusError) Unwrap() error   { return e.Cause }
+func (e *StatusError) StatusCode() int { return e.Status }
+
+// WrapStatusError wraps an error with an explicit HTTP status code.
+// This is the preferred way to attach status codes to third-party SDK errors
+// instead of relying on reflection-based detection.
+func WrapStatusError(err error, statusCode int) error {
+	if err == nil {
+		return nil
+	}
+	return &StatusError{Status: statusCode, Cause: err}
 }
 
 // statusCoder is the interface implemented by transport.Error. We avoid
@@ -146,17 +171,19 @@ type statusCoder interface {
 	StatusCode() int
 }
 
-// httpStatusFromError inspects err for an HTTP status code, supporting
-// multiple conventions used by third-party SDKs:
-//   - A StatusCode() int method (e.g. our own transport.Error)
-//   - A StatusCode int field (e.g. gitlab client-go's ErrorResponse)
-//   - A Response *http.Response field whose StatusCode is populated
-//     (e.g. go-github's ErrorResponse when the underlying http.Response
-//     is non-nil)
-//   - A status code embedded in the error message string, e.g.
-//     "returned 404: ..." (e.g. gitcode_api's plain fmt.Errorf responses).
+// httpStatusFromError inspects err for an HTTP status code. The lookup order
+// is designed for performance: cheap interface checks first, reflection only
+// as a last resort for third-party SDK errors.
 //
-// The first match wins. Returns (0, false) when no status can be extracted.
+// Priority order:
+//  1. statusCoder interface (transport.Error, StatusError)
+//  2. StatusError type (explicit wrapping by backends)
+//  3. Reflection: StatusCode int field (gitlab client-go ErrorResponse)
+//  4. Reflection: *http.Response field (go-github ErrorResponse)
+//  5. String parsing: "returned NNN", "HTTP NNN", "status NNN"
+//
+// Backends should prefer WrapStatusError or Wrap/New with explicit status
+// codes over relying on the reflection path.
 func httpStatusFromError(err error) (int, bool) {
 	if err == nil {
 		return 0, false
@@ -286,19 +313,33 @@ func classifyStatusCode(statusCode int) error {
 	}
 }
 
-// IsNotFound reports whether err is an ErrNotFound.
-//
-//nolint:staticcheck // intentional grouped export
-func IsNotFound(err error) bool       { return errors.Is(err, ErrNotFound) }
+// IsNotFound reports whether err wraps ErrNotFound (HTTP 404).
+func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
+
+// IsAuthentication reports whether err wraps ErrAuthentication (HTTP 401).
 func IsAuthentication(err error) bool { return errors.Is(err, ErrAuthentication) }
-func IsRateLimited(err error) bool    { return errors.Is(err, ErrRateLimited) }
-func IsForbidden(err error) bool      { return errors.Is(err, ErrForbidden) }
-func IsConflict(err error) bool       { return errors.Is(err, ErrConflict) }
+
+// IsRateLimited reports whether err wraps ErrRateLimited (HTTP 429).
+func IsRateLimited(err error) bool { return errors.Is(err, ErrRateLimited) }
+
+// IsForbidden reports whether err wraps ErrForbidden (HTTP 403).
+func IsForbidden(err error) bool { return errors.Is(err, ErrForbidden) }
+
+// IsConflict reports whether err wraps ErrConflict (HTTP 409).
+func IsConflict(err error) bool { return errors.Is(err, ErrConflict) }
+
+// IsNotImplemented reports whether err wraps ErrNotImplemented.
 func IsNotImplemented(err error) bool { return errors.Is(err, ErrNotImplemented) }
-func IsInvalidInput(err error) bool   { return errors.Is(err, ErrInvalidInput) }
+
+// IsInvalidInput reports whether err wraps ErrInvalidInput.
+func IsInvalidInput(err error) bool { return errors.Is(err, ErrInvalidInput) }
+
+// IsWebhookValidation reports whether err wraps ErrWebhookValidation.
 func IsWebhookValidation(err error) bool {
 	return errors.Is(err, ErrWebhookValidation)
 }
+
+// IsPlatformNotSupported reports whether err wraps ErrPlatformNotSupported.
 func IsPlatformNotSupported(err error) bool {
 	return errors.Is(err, ErrPlatformNotSupported)
 }

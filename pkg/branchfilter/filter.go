@@ -5,10 +5,14 @@ import (
 	"strings"
 )
 
+// BranchFilter matches branch names against a set of comma-separated glob
+// patterns. An empty filter matches all branches.
 type BranchFilter struct {
 	patterns []string
 }
 
+// New creates a BranchFilter from a comma-separated list of glob patterns
+// (e.g. "main,release-*,feature/*"). An empty string matches everything.
 func New(filterStr string) *BranchFilter {
 	if filterStr == "" {
 		return &BranchFilter{patterns: nil}
@@ -25,6 +29,8 @@ func New(filterStr string) *BranchFilter {
 	return &BranchFilter{patterns: patterns}
 }
 
+// Match reports whether branchName matches any of the filter's patterns.
+// Returns true (matches everything) when the filter has no patterns.
 func (f *BranchFilter) Match(branchName string) bool {
 	if len(f.patterns) == 0 {
 		return true
@@ -39,6 +45,7 @@ func (f *BranchFilter) Match(branchName string) bool {
 	return false
 }
 
+// FilterBranches returns only the branches that match the filter.
 func (f *BranchFilter) FilterBranches(branches []string) []string {
 	if len(f.patterns) == 0 {
 		return branches
@@ -53,10 +60,12 @@ func (f *BranchFilter) FilterBranches(branches []string) []string {
 	return result
 }
 
+// IsEmpty reports whether the filter has no patterns (matches everything).
 func (f *BranchFilter) IsEmpty() bool {
 	return len(f.patterns) == 0
 }
 
+// Patterns returns the raw glob patterns that were used to create this filter.
 func (f *BranchFilter) Patterns() []string {
 	return f.patterns
 }

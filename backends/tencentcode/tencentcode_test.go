@@ -52,8 +52,8 @@ func tcMRResponse(iid int, state, title, source, target string) map[string]any {
 		"labels":       []string{"bug"},
 		"merge_status": "can_be_merged",
 		"web_url":      fmt.Sprintf("https://git.code.tencent.com/o/r/merge_requests/%d", iid),
-		"created_at":   "2024-01-01T12:00:00+0800",
-		"updated_at":   "2024-01-01T12:00:00+0800",
+		"created_at":   "2024-01-01T12:00:00+08:00",
+		"updated_at":   "2024-01-01T12:00:00+08:00",
 	}
 }
 
@@ -150,7 +150,7 @@ func TestParseWebhookEvent_MergeRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
-	body := `{"object_kind":"merge_request","user":{"id":1,"username":"dev","name":"Dev"},"project":{"path_with_namespace":"owner/repo"},"object_attributes":{"iid":7,"title":"t","description":"d","state":"opened","source_branch":"f","target_branch":"main","action":"open","merge_status":"can_be_merged","url":"https://git.code.tencent.com/o/r/merge_requests/7","last_commit":{"id":"abc"},"created_at":"2024-01-01T12:00:00+0800","updated_at":"2024-01-01T12:00:00+0800"}}`
+	body := `{"object_kind":"merge_request","user":{"id":1,"username":"dev","name":"Dev"},"project":{"path_with_namespace":"owner/repo"},"object_attributes":{"iid":7,"title":"t","description":"d","state":"opened","source_branch":"f","target_branch":"main","action":"open","merge_status":"can_be_merged","url":"https://git.code.tencent.com/o/r/merge_requests/7","last_commit":{"id":"abc"},"created_at":"2024-01-01T12:00:00+08:00","updated_at":"2024-01-01T12:00:00+08:00"}}`
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	ne, err := p.ParseWebhookEvent(r, "")

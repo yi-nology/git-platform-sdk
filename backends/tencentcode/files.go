@@ -3,6 +3,7 @@ package tencentcode
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"strings"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
@@ -26,7 +27,7 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 		content := strings.ReplaceAll(file.Content, "\n", "")
 		decoded, err := base64.StdEncoding.DecodeString(content)
 		if err != nil {
-			return "", err
+			return "", sdkError("GetFileContent", fmt.Errorf("decode base64 content: %w", err))
 		}
 		return string(decoded), nil
 	}

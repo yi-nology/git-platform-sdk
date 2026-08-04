@@ -2,7 +2,6 @@ package tencentcode
 
 import (
 	"context"
-	"strings"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -18,9 +17,6 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 	}
 	if opts.Description != "" {
 		createOpts.Description = gongfeng.Ptr(opts.Description)
-	}
-	if len(opts.Labels) > 0 {
-		createOpts.Labels = gongfeng.Ptr(strings.Join(opts.Labels, ","))
 	}
 	mr, _, err := p.client.MergeRequests.CreateMergeRequest(ctx, pid, createOpts)
 	if err != nil {
@@ -129,16 +125,10 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
+//
+// Tencent Code's API no longer supports setting labels via UpdateMergeRequest.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
-	pid := owner + "/" + repo
-	updateOpts := &gongfeng.UpdateMergeRequestOptions{
-		Labels: gongfeng.Ptr(strings.Join(labels, ",")),
-	}
-	_, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, number, updateOpts)
-	if err != nil {
-		return sdkError("UpdateCRLabels", err)
-	}
-	return nil
+	return provider.Wrap(provider.PlatformTencentCode, "UpdateCRLabels", provider.ErrNotImplemented)
 }
 
 // ListCRComments implements provider.ChangeRequestManager.

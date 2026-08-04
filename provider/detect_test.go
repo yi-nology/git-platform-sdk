@@ -89,16 +89,13 @@ func TestDetectPlatform_HTTPS_GitLab(t *testing.T) {
 	}
 }
 
-func TestDetectPlatform_HTTP(t *testing.T) {
-	r, err := DetectPlatform("http://gitlab.local/group/repo.git")
-	if err != nil {
-		t.Fatal(err)
+func TestDetectPlatform_HTTP_SelfHosted_Unrecognized(t *testing.T) {
+	_, err := DetectPlatform("http://gitlab.local/group/repo.git")
+	if err == nil {
+		t.Error("expected error for unrecognized self-hosted instance")
 	}
-	if r.Platform != PlatformGitLab {
-		t.Errorf("expected GitLab (self-hosted), got %s", r.Platform)
-	}
-	if r.BaseURL != "https://gitlab.local/api/v4" {
-		t.Errorf("unexpected BaseURL: %s", r.BaseURL)
+	if !IsPlatformNotSupported(err) {
+		t.Errorf("expected ErrPlatformNotSupported, got %v", err)
 	}
 }
 
@@ -143,22 +140,22 @@ func TestDetectPlatform_InvalidHTTPPath(t *testing.T) {
 	}
 }
 
-func TestClassifyHost_DefaultSelfHosted(t *testing.T) {
-	platform, baseURL := classifyHost("git.mycompany.com")
-	if platform != PlatformGitLab {
-		t.Errorf("expected GitLab for self-hosted, got %s", platform)
+func TestClassifyHost_Unrecognized(t *testing.T) {
+	_, _, err := classifyHost("git.mycompany.com")
+	if err == nil {
+		t.Error("expected error for unrecognized host")
 	}
-	if baseURL != "https://git.mycompany.com/api/v4" {
-		t.Errorf("unexpected BaseURL: %s", baseURL)
+	if !IsPlatformNotSupported(err) {
+		t.Errorf("expected ErrPlatformNotSupported, got %v", err)
 	}
 }
 
-func TestDetectPlatform_SSH_SelfHosted(t *testing.T) {
-	r, err := DetectPlatform("git@git.mycompany.com:team/project.git")
-	if err != nil {
-		t.Fatal(err)
+func TestDetectPlatform_SSH_SelfHosted_Unrecognized(t *testing.T) {
+	_, err := DetectPlatform("git@git.mycompany.com:team/project.git")
+	if err == nil {
+		t.Error("expected error for unrecognized self-hosted SSH URL")
 	}
-	if r.Platform != PlatformGitLab {
-		t.Errorf("expected GitLab for self-hosted, got %s", r.Platform)
+	if !IsPlatformNotSupported(err) {
+		t.Errorf("expected ErrPlatformNotSupported, got %v", err)
 	}
 }

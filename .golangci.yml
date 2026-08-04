@@ -23,7 +23,7 @@ linters:
 
   settings:
     gocyclo:
-      min-complexity: 30
+      min-complexity: 15
     gocritic:
       enabled-tags:
         - diagnostic
@@ -65,14 +65,20 @@ linters:
         linters:
           - gocyclo
           - gocritic
-      # Webhook parsers use crypto/subtle legitimately
+      # Webhook parsers are inherently complex switch-based event routers
       - path: backends/.*/webhooks\.go
         linters:
           - gosec
-      # Transport retry uses math/rand for jitter
+          - gocyclo
+      # Transport retry uses math/rand for jitter and has inherent retry-loop complexity
       - path: transport/retry\.go
         linters:
           - gosec
+          - gocyclo
+      - path: transport/client\.go
+        linters:
+          - gocyclo
+        text: "retryingRoundTripper"
       # Backend httpTransport helpers create InsecureSkipVerify transports
       # when the user explicitly requests SkipTLS
       - path: backends/.*/(github|gitlab|gitea|forgejo)\.go
@@ -87,6 +93,14 @@ linters:
       - path: provider/webhook\.go
         linters:
           - gosec
+      # gitbackend has inherently complex git operations (merge, rebase, stash, fetch)
+      - path: gitbackend/gogit_.*\.go
+        linters:
+          - gocyclo
+      # SSH key type detection is inherently a multi-case switch
+      - path: pkg/credential/sshkey\.go
+        linters:
+          - gocyclo
 
 formatters:
   enable:
