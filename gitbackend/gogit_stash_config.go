@@ -100,7 +100,7 @@ func (b *GoGitBackend) StashSave(ctx context.Context, repoPath, message string) 
 		return newGitError("StashSave", repoPath, "", err)
 	}
 
-	treeHash, err := buildStashTree(repo.Storer, wt, idx)
+	treeHash, err := buildStashTree(repo.Storer, idx)
 	if err != nil {
 		return newGitError("StashSave", repoPath, "", err)
 	}
@@ -177,7 +177,7 @@ func (b *GoGitBackend) StashSave(ctx context.Context, repoPath, message string) 
 	return nil
 }
 
-func (b *GoGitBackend) StashApply(ctx context.Context, repoPath string, index int) error {
+func (b *GoGitBackend) StashApply(ctx context.Context, repoPath string, stashIdx int) error {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return newGitError("StashApply", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
@@ -188,9 +188,9 @@ func (b *GoGitBackend) StashApply(ctx context.Context, repoPath string, index in
 		return newGitError("StashApply", repoPath, "", err)
 	}
 
-	stashRef, err := repo.Storer.Reference(stashRefName(index))
+	stashRef, err := repo.Storer.Reference(stashRefName(stashIdx))
 	if err != nil {
-		return newGitError("StashApply", repoPath, "", fmt.Errorf("stash@{%d} not found", index))
+		return newGitError("StashApply", repoPath, "", fmt.Errorf("stash@{%d} not found", stashIdx))
 	}
 
 	stashCommit, err := repo.CommitObject(stashRef.Hash())
@@ -223,38 +223,36 @@ func (b *GoGitBackend) StashApply(ctx context.Context, repoPath string, index in
 		return newGitError("StashApply", repoPath, "", err)
 	}
 
-	if err := applyChanges(wt, stashTree, changes); err != nil {
-		return newGitError("StashApply", repoPath, "", err)
-	}
+	applyChanges(wt, stashTree, changes)
 
 	return nil
 }
 
-func (b *GoGitBackend) StashPop(ctx context.Context, repoPath string, index int) error {
-	if err := b.StashApply(ctx, repoPath, index); err != nil {
+func (b *GoGitBackend) StashPop(ctx context.Context, repoPath string, stashIdx int) error {
+	if err := b.StashApply(ctx, repoPath, stashIdx); err != nil {
 		return err
 	}
-	return b.StashDrop(ctx, repoPath, index)
+	return b.StashDrop(ctx, repoPath, stashIdx)
 }
 
-func (b *GoGitBackend) StashDrop(ctx context.Context, repoPath string, index int) error {
+func (b *GoGitBackend) StashDrop(ctx context.Context, repoPath string, stashIdx int) error {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return newGitError("StashDrop", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	_, err = repo.Storer.Reference(stashRefName(index))
+	_, err = repo.Storer.Reference(stashRefName(stashIdx))
 	if err != nil {
-		return newGitError("StashDrop", repoPath, "", fmt.Errorf("stash@{%d} not found", index))
+		return newGitError("StashDrop", repoPath, "", fmt.Errorf("stash@{%d} not found", stashIdx))
 	}
 
 	count := stashCount(repo.Storer)
-	if index >= count {
-		return newGitError("StashDrop", repoPath, "", fmt.Errorf("stash@{%d} not found", index))
+	if stashIdx >= count {
+		return newGitError("StashDrop", repoPath, "", fmt.Errorf("stash@{%d} not found", stashIdx))
 	}
 
 	// Shift stashes above the dropped index down by one.
-	for i := index; i < count-1; i++ {
+	for i := stashIdx; i < count-1; i++ {
 		ref, err := repo.Storer.Reference(stashRefName(i + 1))
 		if err != nil {
 			break
@@ -299,7 +297,7 @@ func isWorktreeClean(status git.Status) bool {
 }
 
 // applyChanges applies a set of tree-diff changes to the working tree and stages them.
-func applyChanges(wt *git.Worktree, stashTree *object.Tree, changes object.Changes) error {
+func applyChanges(wt *git.Worktree, stashTree *object.Tree, changes object.Changes) {
 	root := wt.Filesystem.Root()
 	for _, change := range changes {
 		action, err := change.Action()
@@ -335,7 +333,6 @@ func applyChanges(wt *git.Worktree, stashTree *object.Tree, changes object.Chang
 			_, _ = wt.Remove(change.From.Name)
 		}
 	}
-	return nil
 }
 
 // stashTreeNode represents a node in the tree being built for a stash commit.
@@ -348,7 +345,7 @@ type stashTreeNode struct {
 
 // buildStashTree builds a tree object from the go-git index and stores it.
 // This mirrors go-git's internal buildTreeHelper logic.
-func buildStashTree(s storage.Storer, wt *git.Worktree, idx *index.Index) (plumbing.Hash, error) {
+func buildStashTree(s storage.Storer, idx *index.Index) (plumbing.Hash, error) {
 	root := &stashTreeNode{
 		name:     "",
 		children: make(map[string]*stashTreeNode),

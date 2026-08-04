@@ -105,7 +105,7 @@ func httpTransport(skipTLS bool) http.RoundTripper {
 	if !skipTLS {
 		return http.DefaultTransport
 	}
-	return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // G402: user explicitly opted into SkipTLS
 }
 
 // chainTransport chains two round-trippers: outer is invoked first, then inner.

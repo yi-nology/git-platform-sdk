@@ -64,7 +64,7 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 		if nsErr == nil {
 			for _, ns := range namespaces {
 				if ns.Path == owner || ns.FullPath == owner {
-					createOpts.NamespaceID = gitlab.Ptr(int64(ns.ID))
+					createOpts.NamespaceID = gitlab.Ptr(ns.ID)
 					break
 				}
 			}

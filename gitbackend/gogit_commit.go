@@ -324,7 +324,7 @@ func rebaseStateFile(repoPath, name string) (string, error) {
 
 // writeRebaseStateFile writes a string to a rebase state file.
 func writeRebaseStateFile(repoPath, name, value string) error {
-	return os.WriteFile(filepath.Join(rebaseStateDir(repoPath), name), []byte(value), 0o644)
+	return os.WriteFile(filepath.Join(rebaseStateDir(repoPath), name), []byte(value), 0o600)
 }
 
 // applyRebaseCommit applies a single commit during a rebase (or rebase --continue).
