@@ -169,8 +169,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		}
 	case "create":
 		var createEvent struct {
-			Ref        string       `json:"ref"`
-			Sender     *gitcode.User `json:"sender"`
+			Ref        string              `json:"ref"`
+			Sender     *gitcode.User       `json:"sender"`
 			Repository *gitcode.Repository `json:"repository"`
 		}
 		if err := json.Unmarshal(body, &createEvent); err != nil {
@@ -189,8 +189,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		}
 	case "delete":
 		var deleteEvent struct {
-			Ref        string       `json:"ref"`
-			Sender     *gitcode.User `json:"sender"`
+			Ref        string              `json:"ref"`
+			Sender     *gitcode.User       `json:"sender"`
 			Repository *gitcode.Repository `json:"repository"`
 		}
 		if err := json.Unmarshal(body, &deleteEvent); err != nil {

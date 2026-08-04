@@ -9,7 +9,6 @@
 package tencentcode
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -193,20 +192,6 @@ func (p *Provider) doRequest(ctx context.Context, op, method, path string, body,
 		return sdkError(op, err)
 	}
 	return nil
-}
-
-// doRawRequest executes a request and returns the raw body bytes.
-// Used for archive downloads and blob retrieval.
-func (p *Provider) doRawRequest(ctx context.Context, op, method, path string) ([]byte, error) {
-	req, err := p.client.NewRequest(ctx, method, path, nil)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, op, err)
-	}
-	var buf bytes.Buffer
-	if _, err := p.client.Do(req, &buf); err != nil {
-		return nil, sdkError(op, err)
-	}
-	return buf.Bytes(), nil
 }
 
 // extractTotalCount returns the total item count from the SDK response,
