@@ -40,12 +40,8 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
 	pid := owner + "/" + repo
 	createOpts := &gongfeng.CreateReleaseOptions{
-		Tag:         gongfeng.Ptr(opts.TagName),
-		Title:       gongfeng.Ptr(opts.Title),
+		TagName:     gongfeng.Ptr(opts.TagName),
 		Description: gongfeng.Ptr(opts.Body),
-	}
-	if opts.Target != "" {
-		createOpts.StartPoint = gongfeng.Ptr(opts.Target)
 	}
 	release, _, err := p.client.Releases.CreateRelease(ctx, pid, createOpts)
 	if err != nil {

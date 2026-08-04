@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+// DetectResult holds the platform, owner, repo, and base API URL extracted
+// from a git remote URL by DetectPlatform.
 type DetectResult struct {
 	Platform Platform
 	Owner    string
@@ -13,6 +15,10 @@ type DetectResult struct {
 	BaseURL  string
 }
 
+// DetectPlatform parses a git remote URL (HTTPS, SSH, or ssh://) and returns
+// the detected platform, owner, repo name, and base API URL. Returns
+// ErrPlatformNotSupported for unrecognized hosts; use NewProvider with
+// explicit Config for self-hosted instances not in the known-host list.
 func DetectPlatform(remoteURL string) (*DetectResult, error) {
 	if remoteURL == "" {
 		return nil, fmt.Errorf("%w: empty remote URL", ErrInvalidInput)
@@ -42,7 +48,10 @@ func detectSSH(raw string) (*DetectResult, error) {
 	if len(pathParts) != 2 {
 		return nil, fmt.Errorf("invalid SSH path: %s", path)
 	}
-	platform, baseURL := classifyHost(host)
+	platform, baseURL, err := classifyHost(host)
+	if err != nil {
+		return nil, err
+	}
 	return &DetectResult{
 		Platform: platform,
 		Owner:    pathParts[0],
@@ -63,7 +72,10 @@ func detectSSHProtocol(raw string) (*DetectResult, error) {
 	if len(pathParts) != 2 {
 		return nil, fmt.Errorf("invalid SSH path: %s", path)
 	}
-	platform, baseURL := classifyHost(host)
+	platform, baseURL, err := classifyHost(host)
+	if err != nil {
+		return nil, err
+	}
 	return &DetectResult{
 		Platform: platform,
 		Owner:    pathParts[0],
@@ -84,7 +96,10 @@ func detectHTTP(raw string) (*DetectResult, error) {
 	if len(pathParts) != 2 {
 		return nil, fmt.Errorf("invalid HTTP path: %s", path)
 	}
-	platform, baseURL := classifyHost(host)
+	platform, baseURL, err := classifyHost(host)
+	if err != nil {
+		return nil, err
+	}
 	return &DetectResult{
 		Platform: platform,
 		Owner:    pathParts[0],
@@ -93,24 +108,24 @@ func detectHTTP(raw string) (*DetectResult, error) {
 	}, nil
 }
 
-func classifyHost(host string) (Platform, string) {
+func classifyHost(host string) (Platform, string, error) {
 	lower := strings.ToLower(host)
 	switch {
 	case strings.Contains(lower, "github.com"):
-		return PlatformGitHub, "https://api.github.com"
+		return PlatformGitHub, "https://api.github.com", nil
 	case strings.Contains(lower, "code.tencent.com"):
-		return PlatformTencentCode, "https://git.code.tencent.com/api/v3"
+		return PlatformTencentCode, "https://git.code.tencent.com/api/v3", nil
 	case strings.Contains(lower, "codeberg.org"):
-		return PlatformForgejo, "https://codeberg.org"
+		return PlatformForgejo, "https://codeberg.org", nil
 	case strings.Contains(lower, "gitlab.com"):
-		return PlatformGitLab, "https://gitlab.com/api/v4"
+		return PlatformGitLab, "https://gitlab.com/api/v4", nil
 	case strings.Contains(lower, "gitea.com"):
-		return PlatformGitea, "https://gitea.com/api/v1"
+		return PlatformGitea, "https://gitea.com/api/v1", nil
 	case strings.Contains(lower, "gitee.com"):
-		return PlatformGitee, "https://gitee.com/api/v5"
+		return PlatformGitee, "https://gitee.com/api/v5", nil
 	case strings.Contains(lower, "gitcode.com"):
-		return PlatformGitCode, "https://api.gitcode.com/api/v5"
+		return PlatformGitCode, "https://api.gitcode.com/api/v5", nil
 	default:
-		return PlatformGitLab, fmt.Sprintf("https://%s/api/v4", host)
+		return "", "", fmt.Errorf("%w: unrecognized host %q; use provider.NewProvider with explicit platform config instead of DetectPlatform", ErrPlatformNotSupported, host)
 	}
 }

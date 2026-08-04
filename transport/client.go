@@ -158,6 +158,8 @@ type Client struct {
 	// Transport is the underlying http.RoundTripper. nil falls back to
 	// http.DefaultTransport.
 	Transport http.RoundTripper
+	// Limiter provides proactive rate limiting. nil disables rate limiting.
+	Limiter *RateLimiter
 }
 
 // NewClient builds a Client with the given base URL and auth strategy. It is
@@ -213,6 +215,11 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 		return nil, fmt.Errorf("transport: empty method")
 	}
 
+	// Proactive rate limiting: wait before sending the request.
+	if c.Limiter != nil {
+		c.Limiter.Wait()
+	}
+
 	httpReq, err := c.buildRequest(ctx, req)
 	if err != nil {
 		return nil, err
@@ -237,7 +244,15 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 		"path", req.Path,
 		"status", resp.StatusCode,
 		"duration", duration,
+		"body_size", len(body),
 	)
+	if len(body) > 0 {
+		c.log().Debug("transport response body",
+			"method", req.Method,
+			"path", req.Path,
+			"body", truncateForLog(body, 2048),
+		)
+	}
 
 	if resp.StatusCode >= 400 {
 		c.log().Warn("transport request error",
@@ -379,10 +394,19 @@ func (c *Client) roundTripWithRetry(ctx context.Context, req *http.Request) (*ht
 		if err != nil {
 			return nil, nil, err
 		}
+		// Update rate limiter state from response headers.
+		if c.Limiter != nil {
+			c.Limiter.UpdateFromResponse(resp)
+		}
 		body, readErr := readAndClose(resp)
 		return resp, body, readErr
 	}
-	return c.Retry.Do(ctx, client, req, c.log())
+	resp, body, err := c.Retry.Do(ctx, client, req, c.log())
+	// Update rate limiter state from the final response.
+	if resp != nil && c.Limiter != nil {
+		c.Limiter.UpdateFromResponse(resp)
+	}
+	return resp, body, err
 }
 
 // RoundTripper exposes the auth/hooks/logging of this Client as a standard
@@ -408,10 +432,18 @@ type clientRoundTripper struct {
 // RoundTrip implements http.RoundTripper.
 func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
+	// Proactive rate limiting.
+	if rt.client.Limiter != nil {
+		rt.client.Limiter.Wait()
+	}
 	rt.client.roundTripRequest(req)
 	start := time.Now()
 	resp, err := rt.client.httpClient().Transport.RoundTrip(req)
 	duration := time.Since(start)
+	// Update rate limiter state from response headers.
+	if resp != nil && rt.client.Limiter != nil {
+		rt.client.Limiter.UpdateFromResponse(resp)
+	}
 	rt.client.Hooks.ExecuteResponse(ctx, req, resp, duration, err)
 	if err != nil {
 		rt.client.log().Error("transport roundtrip failed",
@@ -522,4 +554,13 @@ func readAndClose(resp *http.Response) ([]byte, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	return io.ReadAll(resp.Body)
+}
+
+// truncateForLog returns a string representation of body, capped at maxLen
+// bytes. Bodies exceeding the limit are truncated with "...".
+func truncateForLog(body []byte, maxLen int) string {
+	if len(body) <= maxLen {
+		return string(body)
+	}
+	return string(body[:maxLen]) + "... (truncated)"
 }

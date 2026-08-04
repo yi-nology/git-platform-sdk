@@ -103,12 +103,9 @@ func convertTag(t *gongfeng.Tag) *provider.TagInfo {
 // convertRelease maps a gongfeng.Release to a provider.ReleaseInfo.
 func convertRelease(r *gongfeng.Release) *provider.ReleaseInfo {
 	return &provider.ReleaseInfo{
-		ID:          int64(r.ID),
-		TagName:     r.Tag,
-		Title:       r.Title,
-		Body:        r.Description,
-		CreatedAt:   r.CreatedAt.Time,
-		PublishedAt: r.UpdatedAt.Time,
+		TagName:   r.TagName,
+		Body:      r.Description,
+		CreatedAt: r.CreatedAt.Time,
 	}
 }
 
@@ -129,9 +126,6 @@ func convertWebhook(w *gongfeng.Webhook) *provider.PlatformWebhook {
 	}
 	if w.NoteEvents {
 		events = append(events, "note")
-	}
-	if w.ReviewEvents {
-		events = append(events, "review")
 	}
 	return &provider.PlatformWebhook{
 		ID:     int64(w.ID),

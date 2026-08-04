@@ -1,6 +1,10 @@
 package transport
 
-import "log/slog"
+import (
+	"log/slog"
+	"os"
+	"strings"
+)
 
 // Logger is a minimal logging interface compatible with log/slog, zap,
 // zerolog, logrus, and most other Go logging libraries.
@@ -103,5 +107,23 @@ func (l LoggerFunc) Warn(msg string, kv ...any) {
 func (l LoggerFunc) Error(msg string, kv ...any) {
 	if l.ErrorFunc != nil {
 		l.ErrorFunc(msg, kv...)
+	}
+}
+
+// NewDebugLogger returns a Logger that writes to stderr at debug level.
+// It checks the GIT_PLATFORM_SDK_DEBUG environment variable: if set to
+// "1", "true", or "yes", debug-level messages are emitted. Otherwise
+// only info and above are shown.
+//
+// This is a convenience for troubleshooting; production code should
+// inject a structured logger (SlogLogger or a custom implementation).
+func NewDebugLogger() Logger {
+	level := slog.LevelInfo
+	switch strings.ToLower(os.Getenv("GIT_PLATFORM_SDK_DEBUG")) {
+	case "1", "true", "yes":
+		level = slog.LevelDebug
+	}
+	return SlogLogger{
+		Logger: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})),
 	}
 }

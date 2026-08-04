@@ -1,12 +1,108 @@
 # Git Platform SDK
 
-Go 语言的多平台 Git 统一 SDK，支持 GitHub、GitLab、Gitea、Forgejo、Gitee、GitCode、Tencent 工蜂 等平台。
+A unified Go SDK for interacting with 7 Git hosting platforms through a single interface.
+
+[English](#english) | [中文](#简介)
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/yi-nology/git-platform-sdk.svg)](https://pkg.go.dev/github.com/yi-nology/git-platform-sdk)
 [![CI](https://github.com/yi-nology/git-platform-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/yi-nology/git-platform-sdk/actions/workflows/ci.yml)
 [![Release](https://github.com/yi-nology/git-platform-sdk/actions/workflows/release.yml/badge.svg)](https://github.com/yi-nology/git-platform-sdk/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/yi-nology/git-platform-sdk?include_prereleases)](https://github.com/yi-nology/git-platform-sdk/releases)
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://go.dev/)
+
+## English
+
+### Overview
+
+`git-platform-sdk` provides a unified Go interface for 7 Git hosting platforms: **GitHub**, **GitLab**, **Gitea**, **Forgejo**, **Gitee**, **GitCode**, and **Tencent Code**. Write once, run against any platform.
+
+**Key features:**
+
+- **Unified transport layer** — shared auth/retry/hooks/logging pipeline across all platforms; third-party SDKs (go-github, gitlab client-go, etc.) plug in via `http.RoundTripper`
+- **Per-platform packages** — each backend is isolated in `backends/<platform>/`, split by responsibility (repos, CRs, webhooks, branches, commits, files, diffs, releases)
+- **Contract tests** — cross-platform test suite ensures consistent behavior
+- **Structured errors** — `ProviderError` auto-extracts HTTP status codes from 4 sources (StatusCode method/field, `*http.Response` field, error message string)
+- **Proactive rate limiting** — `RateLimiter` tracks `X-RateLimit-*` headers and throttles before hitting limits
+- **Secure by default** — SSH host key verification enabled, SHA-256 token hashing in cache keys, constant-time webhook signature comparison
+
+### Quick Start
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/yi-nology/git-platform-sdk/backends/all"
+    "github.com/yi-nology/git-platform-sdk/provider"
+)
+
+func main() {
+    p, err := provider.NewProvider(provider.Config{
+        Platform: provider.PlatformGitHub,
+        Token:    "ghp_...",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    repos, err := p.ListRepos(context.Background(), provider.ListRepoOptions{
+        Owner: "my-org",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, r := range repos {
+        fmt.Println(r.FullName)
+    }
+}
+```
+
+### Supported Platforms
+
+| Platform | Status | Coverage |
+|----------|--------|----------|
+| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
+| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release |
+| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
+| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
+| Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
+| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
+| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release + exclusive features |
+
+### Installation
+
+```bash
+go get github.com/yi-nology/git-platform-sdk
+```
+
+### Rate Limiting
+
+```go
+import "github.com/yi-nology/git-platform-sdk/transport"
+
+client := transport.NewClient("https://api.github.com", auth)
+client.Limiter = transport.NewRateLimiter(
+    transport.WithRPS(30),              // max 30 requests/sec
+    transport.WithThrottleThreshold(5), // slow down when < 5 remaining
+)
+```
+
+### SSH Security
+
+SSH commands default to **strict host key checking**. For CI environments:
+
+```go
+mgr := credential.NewManager()
+// Secure (default) — requires known_hosts
+cmd := mgr.BuildSSHCommand("/path/to/key")
+// Insecure (CI only) — disables host key checking
+cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
+```
+
+---
 
 ## 简介
 

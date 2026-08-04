@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/google/go-github/v69/github"
-	"golang.org/x/oauth2"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
@@ -159,16 +158,6 @@ func convertHooks(h *provider.Hooks) *transport.Hooks {
 		})
 	}
 	return out
-}
-
-// oauthToken is preserved for tests that need to build a go-github client
-// directly. It is not used by New above (the transport layer injects the
-// bearer token instead).
-//
-//nolint:unused // kept for test helpers
-func oauthToken(token string) *http.Client {
-	src := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	return &http.Client{Transport: &oauth2.Transport{Source: src}}
 }
 
 // Platform implements provider.Provider.

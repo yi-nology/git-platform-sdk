@@ -22,9 +22,6 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 		URL:        gongfeng.Ptr(opts.URL),
 		PushEvents: gongfeng.Ptr(true),
 	}
-	if opts.Secret != "" {
-		addOpts.Token = gongfeng.Ptr(opts.Secret)
-	}
 	if len(opts.Events) > 0 {
 		em := map[string]bool{}
 		for _, e := range opts.Events {
