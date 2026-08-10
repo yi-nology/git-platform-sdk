@@ -1,5 +1,7 @@
 package provider
 
+import "time"
+
 // This file consolidates every option/result type used by the Provider
 // sub-interfaces. The split between "options" (what callers pass in) and
 // "result types" (what platforms return) is intentional so consumers can
@@ -192,4 +194,139 @@ type CreateReleaseOptions struct {
 	Body       string `json:"body,omitempty"`
 	Draft      bool   `json:"draft,omitempty"`
 	Prerelease bool   `json:"prerelease,omitempty"`
+}
+
+// --- Issues ---
+
+// IssueState represents the state of an issue.
+type IssueState string
+
+const (
+	IssueStateOpen   IssueState = "open"
+	IssueStateClosed IssueState = "closed"
+)
+
+// Issue represents an issue on a platform.
+type Issue struct {
+	ID        int64      `json:"id"`
+	Number    int        `json:"number"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	State     IssueState `json:"state"`
+	Author    *CRUser    `json:"author,omitempty"`
+	Labels    []string   `json:"labels,omitempty"`
+	Assignees []string   `json:"assignees,omitempty"`
+	Milestone string     `json:"milestone,omitempty"`
+	WebURL    string     `json:"web_url,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	ClosedAt  *time.Time `json:"closed_at,omitempty"`
+}
+
+// IssueComment represents a comment on an issue.
+type IssueComment struct {
+	ID        int64     `json:"id"`
+	Body      string    `json:"body"`
+	Author    *CRUser   `json:"author,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// IssueLabel represents a label on a repository.
+type IssueLabel struct {
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color,omitempty"`
+}
+
+// ListIssuesOptions contains options for listing issues.
+type ListIssuesOptions struct {
+	Owner    string     `json:"owner"`
+	Repo     string     `json:"repo"`
+	State    IssueState `json:"state,omitempty"`
+	Assignee string     `json:"assignee,omitempty"`
+	Labels   string     `json:"labels,omitempty"`
+	Page     int        `json:"page,omitempty"`
+	PerPage  int        `json:"per_page,omitempty"`
+}
+
+// CreateIssueOptions contains options for creating an issue.
+type CreateIssueOptions struct {
+	Owner     string   `json:"owner"`
+	Repo      string   `json:"repo"`
+	Title     string   `json:"title"`
+	Body      string   `json:"body,omitempty"`
+	Assignees []string `json:"assignees,omitempty"`
+	Labels    []string `json:"labels,omitempty"`
+}
+
+// UpdateIssueOptions contains options for updating an issue.
+type UpdateIssueOptions struct {
+	Title     string     `json:"title,omitempty"`
+	Body      string     `json:"body,omitempty"`
+	State     IssueState `json:"state,omitempty"`
+	Assignees []string   `json:"assignees,omitempty"`
+	Labels    []string   `json:"labels,omitempty"`
+}
+
+// --- Search ---
+
+// SearchReposOptions contains options for searching repositories.
+type SearchReposOptions struct {
+	Query   string `json:"q"`
+	Sort    string `json:"sort,omitempty"`
+	Order   string `json:"order,omitempty"`
+	Page    int    `json:"page,omitempty"`
+	PerPage int    `json:"per_page,omitempty"`
+}
+
+// SearchIssuesOptions contains options for searching issues.
+type SearchIssuesOptions struct {
+	Query   string `json:"q"`
+	Repo    string `json:"repo,omitempty"`
+	State   string `json:"state,omitempty"`
+	Sort    string `json:"sort,omitempty"`
+	Order   string `json:"order,omitempty"`
+	Page    int    `json:"page,omitempty"`
+	PerPage int    `json:"per_page,omitempty"`
+}
+
+// SearchUsersOptions contains options for searching users.
+type SearchUsersOptions struct {
+	Query   string `json:"q"`
+	Sort    string `json:"sort,omitempty"`
+	Order   string `json:"order,omitempty"`
+	Page    int    `json:"page,omitempty"`
+	PerPage int    `json:"per_page,omitempty"`
+}
+
+// SearchRepoResult is a single result from a repository search.
+type SearchRepoResult struct {
+	FullName      string `json:"full_name"`
+	Description   string `json:"description,omitempty"`
+	WebURL        string `json:"web_url,omitempty"`
+	Stars         int    `json:"stars,omitempty"`
+	Forks         int    `json:"forks,omitempty"`
+	DefaultBranch string `json:"default_branch,omitempty"`
+	Private       bool   `json:"private,omitempty"`
+}
+
+// SearchIssueResult is a single result from an issue search.
+type SearchIssueResult struct {
+	Number    int        `json:"number"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body,omitempty"`
+	State     IssueState `json:"state"`
+	WebURL    string     `json:"web_url,omitempty"`
+	Labels    []string   `json:"labels,omitempty"`
+	Comments  int        `json:"comments,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// SearchUserResult is a single result from a user search.
+type SearchUserResult struct {
+	Login     string `json:"login"`
+	Name      string `json:"name,omitempty"`
+	AvatarURL string `json:"avatar_url,omitempty"`
+	WebURL    string `json:"web_url,omitempty"`
 }

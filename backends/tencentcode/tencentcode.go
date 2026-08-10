@@ -11,7 +11,6 @@ package tencentcode
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -207,6 +206,3 @@ func extractTotalCount(resp *gongfeng.Response, fallback int) int {
 func pid(owner, repo string) string {
 	return owner + "/" + repo
 }
-
-// avoid unused-import warnings.
-var _ = fmt.Sprintf

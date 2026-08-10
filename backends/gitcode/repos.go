@@ -2,8 +2,6 @@ package gitcode
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 
 	gitcode "github.com/yi-nology/gitcode_api"
 
@@ -170,10 +168,5 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 		Platform:      provider.PlatformGitCode,
 	}, nil
 }
-
-// ensure fmt + strconv are referenced to silence unused-import warnings
-// when the build excludes certain paths.
-var _ = fmt.Sprintf
-var _ = strconv.Atoi
 
 var _ provider.RepoManager = (*Provider)(nil)

@@ -7,7 +7,7 @@ require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/google/go-github/v69 v69.2.0
-	github.com/yi-nology/gitcode_api v0.3.0
+	github.com/yi-nology/gitcode_api v0.6.0
 	gitlab.com/gitlab-org/api/client-go/v2 v2.55.1
 	golang.org/x/crypto v0.54.0
 )

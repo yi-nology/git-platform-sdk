@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"sync"
@@ -64,7 +65,16 @@ func NewRateLimiter(opts ...RateLimiterOption) *RateLimiter {
 
 // Wait blocks until the next request is allowed. It considers both the
 // configured RPS cap and the adaptive throttling based on remaining quota.
+// Use WaitContext if you need cancellation support.
 func (rl *RateLimiter) Wait() {
+	_ = rl.WaitContext(context.Background())
+}
+
+// WaitContext blocks until the next request is allowed or the context is
+// cancelled. It returns ctx.Err() if the context is done before the wait
+// completes. It considers both the configured RPS cap and the adaptive
+// throttling based on remaining quota.
+func (rl *RateLimiter) WaitContext(ctx context.Context) error {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
@@ -74,7 +84,10 @@ func (rl *RateLimiter) Wait() {
 	if rl.rps > 0 {
 		interval := time.Duration(float64(time.Second) / rl.rps)
 		if elapsed := now.Sub(rl.lastReq); elapsed < interval {
-			time.Sleep(interval - elapsed)
+			delay := interval - elapsed
+			if err := rl.sleep(ctx, delay); err != nil {
+				return err
+			}
 			now = time.Now()
 		}
 	}
@@ -82,25 +95,42 @@ func (rl *RateLimiter) Wait() {
 	// 2. Minimum delay
 	if rl.minDelay > 0 {
 		if elapsed := now.Sub(rl.lastReq); elapsed < rl.minDelay {
-			time.Sleep(rl.minDelay - elapsed)
+			delay := rl.minDelay - elapsed
+			if err := rl.sleep(ctx, delay); err != nil {
+				return err
+			}
 			now = time.Now()
 		}
 	}
 
 	// 3. Adaptive throttle based on remaining quota
 	if rl.remaining > 0 && rl.remaining <= rl.threshold && !rl.resetAt.IsZero() {
-		// Spread remaining requests evenly until reset
 		timeUntilReset := time.Until(rl.resetAt)
 		if timeUntilReset > 0 {
 			delay := timeUntilReset / time.Duration(rl.remaining+1)
 			if delay > time.Second {
-				time.Sleep(delay)
+				if err := rl.sleep(ctx, delay); err != nil {
+					return err
+				}
 				now = time.Now()
 			}
 		}
 	}
 
 	rl.lastReq = now
+	return nil
+}
+
+// sleep waits for the given duration or until the context is cancelled.
+func (rl *RateLimiter) sleep(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // UpdateFromResponse reads X-RateLimit-* headers from the response to update
