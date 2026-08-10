@@ -47,14 +47,12 @@ func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts prov
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "DeleteFile", err)
 	}
-	sha := ""
 	commitSHA := ""
 	if result != nil {
 		if result.Commit != nil {
 			commitSHA = result.Commit.SHA
 		}
 	}
-	_ = sha
 	return &provider.FileResult{CommitSHA: commitSHA}, nil
 }
 

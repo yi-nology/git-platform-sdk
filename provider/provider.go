@@ -20,7 +20,7 @@ const (
 )
 
 // Provider is the unified interface for all Git hosting platforms.
-// It composes 8 focused sub-interfaces for high cohesion and low coupling.
+// It composes 10 focused sub-interfaces for high cohesion and low coupling.
 //
 // Consumers can depend on smaller interfaces (e.g., WebhookManager)
 // when they don't need full Provider capabilities.
@@ -38,6 +38,8 @@ type Provider interface {
 	CommitManager
 	FileManager
 	ReleaseManager
+	IssueManager
+	SearchManager
 }
 
 // PlatformBranch represents a branch on a platform.

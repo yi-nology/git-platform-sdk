@@ -97,13 +97,13 @@ func (rc *RetryConfig) Backoff(attempt int, resp *http.Response) time.Duration {
 // configured retry policy. The response body is fully read so it can be
 // replayed across attempts. The returned http.Response has a fresh body
 // reader attached so the caller can read it once and then receive io.EOF.
-func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Request, logger Logger) (*http.Response, []byte, error) {
+func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Request, logger Logger, maxBodySize int64) (*http.Response, []byte, error) {
 	if rc == nil || rc.MaxAttempts <= 0 {
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, nil, err
 		}
-		body, readErr := readAndClose(resp)
+		body, readErr := readAndClose(resp, maxBodySize)
 		return resp, body, readErr
 	}
 

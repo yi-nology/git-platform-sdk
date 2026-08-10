@@ -85,7 +85,10 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	if err := p.ValidateWebhookSignature(r, secret); err != nil {
 		return nil, err
 	}
-	body, _ := io.ReadAll(r.Body)
+	body, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ParseWebhookEvent", readErr)
+	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	var pl struct {

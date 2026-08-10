@@ -160,7 +160,14 @@ type Client struct {
 	Transport http.RoundTripper
 	// Limiter provides proactive rate limiting. nil disables rate limiting.
 	Limiter *RateLimiter
+	// MaxBodySize limits the response body size in bytes. 0 means no limit.
+	// A value of -1 uses the default limit (10 MB). This prevents OOM from
+	// malicious or misconfigured servers.
+	MaxBodySize int64
 }
+
+// DefaultMaxBodySize is the default maximum response body size (10 MB).
+const DefaultMaxBodySize = 10 * 1024 * 1024
 
 // NewClient builds a Client with the given base URL and auth strategy. It is
 // the only constructor that is expected to be used in production code; the
@@ -217,7 +224,9 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 
 	// Proactive rate limiting: wait before sending the request.
 	if c.Limiter != nil {
-		c.Limiter.Wait()
+		if err := c.Limiter.WaitContext(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	httpReq, err := c.buildRequest(ctx, req)
@@ -398,10 +407,10 @@ func (c *Client) roundTripWithRetry(ctx context.Context, req *http.Request) (*ht
 		if c.Limiter != nil {
 			c.Limiter.UpdateFromResponse(resp)
 		}
-		body, readErr := readAndClose(resp)
+		body, readErr := readAndClose(resp, c.effectiveMaxBodySize())
 		return resp, body, readErr
 	}
-	resp, body, err := c.Retry.Do(ctx, client, req, c.log())
+	resp, body, err := c.Retry.Do(ctx, client, req, c.log(), c.effectiveMaxBodySize())
 	// Update rate limiter state from the final response.
 	if resp != nil && c.Limiter != nil {
 		c.Limiter.UpdateFromResponse(resp)
@@ -434,7 +443,9 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	ctx := req.Context()
 	// Proactive rate limiting.
 	if rt.client.Limiter != nil {
-		rt.client.Limiter.Wait()
+		if err := rt.client.Limiter.WaitContext(ctx); err != nil {
+			return nil, err
+		}
 	}
 	rt.client.roundTripRequest(req)
 	start := time.Now()
@@ -546,13 +557,38 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	return nil, lastErr
 }
 
+// effectiveMaxBodySize returns the resolved max body size.
+// -1 means DefaultMaxBodySize, 0 means no limit, >0 is the explicit limit.
+func (c *Client) effectiveMaxBodySize() int64 {
+	switch {
+	case c.MaxBodySize < 0:
+		return DefaultMaxBodySize
+	case c.MaxBodySize == 0:
+		return 0
+	default:
+		return c.MaxBodySize
+	}
+}
+
 // readAndClose reads the full response body and closes it. The body is
 // returned as a byte slice so it can be replayed by the caller.
-func readAndClose(resp *http.Response) ([]byte, error) {
+// If maxBodySize > 0, the read is limited to that many bytes.
+func readAndClose(resp *http.Response, maxBodySize int64) ([]byte, error) {
 	if resp == nil {
 		return nil, nil
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if maxBodySize > 0 {
+		limited := io.LimitReader(resp.Body, maxBodySize+1)
+		body, err := io.ReadAll(limited)
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(body)) > maxBodySize {
+			return nil, fmt.Errorf("response body exceeds maximum size of %d bytes", maxBodySize)
+		}
+		return body, nil
+	}
 	return io.ReadAll(resp.Body)
 }
 
