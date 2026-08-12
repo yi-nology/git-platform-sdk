@@ -1,6 +1,9 @@
 package credential
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildAuthURL_HTTPSToken(t *testing.T) {
 	m := NewManager()
@@ -53,5 +56,34 @@ func TestBuildAuthURL_UnknownType(t *testing.T) {
 	expected := "https://github.com/owner/repo.git"
 	if result != expected {
 		t.Fatalf("expected %q, got %q", expected, result)
+	}
+}
+
+// TestBuildAuthURL_EscapesSpecialChars guards M6: characters that are special
+// in the userinfo component (@, :, /) must be percent-encoded so the URL stays
+// unambiguous and the secret does not leak into another component.
+func TestBuildAuthURL_EscapesSpecialChars(t *testing.T) {
+	m := NewManager()
+	// A token containing '@' previously produced "https://tok@en@host/...",
+	// shifting the userinfo boundary. It must now be percent-encoded.
+	result := m.BuildAuthURL("https://github.com/owner/repo.git", "http_token", "", "tok@en")
+	if !strings.Contains(result, "tok%40en@github.com") {
+		t.Fatalf("expected '@' escaped in userinfo, got %q", result)
+	}
+
+	// http_basic with a username containing ':' must encode the colon.
+	result = m.BuildAuthURL("https://github.com/owner/repo.git", "http_basic", "user:name", "pass")
+	// userinfo should render as user%3Aname:pass@github.com
+	if !strings.Contains(result, "user%3Aname:pass@github.com") {
+		t.Fatalf("expected ':' in username escaped, got %q", result)
+	}
+}
+
+func TestBuildAuthURL_NonHTTPSPassthrough(t *testing.T) {
+	m := NewManager()
+	// Non-http(s) schemes fall through unchanged even for token auth.
+	in := "git://github.com/owner/repo.git"
+	if got := m.BuildAuthURL(in, "http_token", "", "tok"); got != in {
+		t.Fatalf("expected passthrough for non-http(s), got %q", got)
 	}
 }

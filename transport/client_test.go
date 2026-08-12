@@ -7,9 +7,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+// roundTripFunc adapts a function into an http.RoundTripper for tests.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+// RoundTrip implements http.RoundTripper.
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestClient_Do_GET(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -212,5 +221,70 @@ func TestHooks_ResponseObserved(t *testing.T) {
 	_, _ = c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
 	if observedStatus != http.StatusTeapot {
 		t.Errorf("expected 418 observed, got %d", observedStatus)
+	}
+}
+
+// TestRetryingRoundTripper_PreservesBodyOnExhaustion guards the H1 fix: when
+// every attempt lands on a retryable status, the final response must still
+// carry a readable body (not a closed one) and, per the http.RoundTripper
+// contract, a nil error. Previously the body was closed without buffering and
+// the real HTTP status was masked by an EOF/"read on closed body" error from
+// the SDK decoder sitting on top.
+func TestRetryingRoundTripper_PreservesBodyOnExhaustion(t *testing.T) {
+	const wantBody = `{"message":"bad gateway"}`
+	var calls int32
+	inner := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		atomic.AddInt32(&calls, 1)
+		return &http.Response{
+			StatusCode: http.StatusBadGateway,
+			Body:       io.NopCloser(strings.NewReader(wantBody)),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	})
+	rt := &retryingRoundTripper{
+		inner:  inner,
+		cfg:    &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond},
+		logger: NoopLogger(),
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("expected nil error for a received 5xx response, got %v", err)
+	}
+	if resp == nil || resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("expected 502 response, got %+v", resp)
+	}
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Fatalf("expected 3 attempts, got %d", got)
+	}
+	gotBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		t.Fatalf("reading restored body: %v", readErr)
+	}
+	if string(gotBody) != wantBody {
+		t.Fatalf("body not preserved across retries: want %q, got %q", wantBody, string(gotBody))
+	}
+}
+
+// TestRetryingRoundTripper_NetworkErrorReturnsError confirms that a transport
+// error (no response received at all) still surfaces as a non-nil error.
+func TestRetryingRoundTripper_NetworkErrorReturnsError(t *testing.T) {
+	boom := errors.New("dial tcp: connection refused")
+	inner := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, boom
+	})
+	rt := &retryingRoundTripper{
+		inner:  inner,
+		cfg:    &RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond},
+		logger: NoopLogger(),
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+	resp, err := rt.RoundTrip(req)
+	if !errors.Is(err, boom) {
+		t.Fatalf("expected network error to surface, got resp=%v err=%v", resp, err)
+	}
+	if resp != nil {
+		t.Errorf("expected nil response on transport error, got %+v", resp)
 	}
 }

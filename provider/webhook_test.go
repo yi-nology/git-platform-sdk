@@ -16,6 +16,13 @@ func TestHMACSHA256Validator(t *testing.T) {
 	mac.Write(body)
 	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
+	// A signature forged with an empty key. Without the empty-secret guard
+	// this verifies successfully, which lets an attacker spoof predictable
+	// payloads (e.g. push events on public repos).
+	emptyMac := hmac.New(sha256.New, []byte(""))
+	emptyMac.Write(body)
+	emptyKeySig := "sha256=" + hex.EncodeToString(emptyMac.Sum(nil))
+
 	tests := []struct {
 		name    string
 		header  string
@@ -29,6 +36,8 @@ func TestHMACSHA256Validator(t *testing.T) {
 		{"wrong secret", sig, "other", body, true},
 		{"tampered body", sig, secret, []byte(`{"hello":"WORLD"}`), true},
 		{"malformed sig", "sha256=not-hex", secret, body, true},
+		{"empty secret", sig, "", body, true},
+		{"empty secret forgery", emptyKeySig, "", body, true},
 	}
 	v := HMACSHA256Validator{Header: "X-Hub-Signature-256"}
 	for _, tc := range tests {

@@ -151,8 +151,7 @@ func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Re
 			)
 			continue
 		}
-		body, readErr := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
+		body, readErr := readAndClose(resp, maxBodySize)
 		if readErr != nil {
 			return nil, nil, readErr
 		}

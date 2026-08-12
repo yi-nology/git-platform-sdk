@@ -2,7 +2,7 @@ package credential
 
 import (
 	"fmt"
-	"strings"
+	"net/url"
 )
 
 // Manager provides helpers for constructing authenticated git remote URLs
@@ -16,23 +16,31 @@ func NewManager() *Manager {
 
 // BuildAuthURL embeds credentials into a git remote URL. Supported authType
 // values: "http_basic" (user:pass), "http_token" (token only), "ssh" (passthrough).
+//
+// Credentials are interpolated via net/url so that characters with special
+// meaning in the userinfo component (@, :, /, #, ?, etc.) are percent-encoded.
+// Interpolating them raw produced malformed or ambiguous URLs and could leak
+// the secret into the wrong URL component.
 func (m *Manager) BuildAuthURL(remoteURL, authType, username, secret string) string {
-	switch authType {
-	case "http_basic", "http_token":
-		token := secret
-		if authType == "http_basic" && username != "" {
-			token = fmt.Sprintf("%s:%s", username, secret)
-		}
-		if strings.HasPrefix(remoteURL, "https://") {
-			return fmt.Sprintf("https://%s@%s", token, remoteURL[8:])
-		}
-		if strings.HasPrefix(remoteURL, "http://") {
-			return fmt.Sprintf("http://%s@%s", token, remoteURL[7:])
-		}
-	case "ssh":
+	if authType != "http_basic" && authType != "http_token" {
 		return remoteURL
 	}
-	return remoteURL
+	u, err := url.Parse(remoteURL)
+	if err != nil {
+		return remoteURL
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return remoteURL
+	}
+	switch {
+	case authType == "http_basic" && username != "":
+		u.User = url.UserPassword(username, secret)
+	default:
+		// http_token, or http_basic without a username: the secret goes into
+		// the userinfo alone.
+		u.User = url.User(secret)
+	}
+	return u.String()
 }
 
 // BuildSSHCommand returns a GIT_SSH_COMMAND value that uses the given key file

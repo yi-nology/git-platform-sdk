@@ -10,15 +10,19 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/ssh"
 )
 
 // SSHKeyHelper provides SSH key processing, temp file management,
 // and host key verification for git operations.
+//
+// An SSHKeyHelper is safe for concurrent use: the host-key store is guarded by
+// a mutex so multiple SSH connections can share one helper.
 type SSHKeyHelper struct {
+	mu       sync.RWMutex
 	hostKeys map[string]ssh.PublicKey
 }
 
@@ -107,15 +111,30 @@ func (h *SSHKeyHelper) CleanupTempFile(filePath string) {
 
 // AddHostKey registers a known public key for a host.
 func (h *SSHKeyHelper) AddHostKey(host string, key ssh.PublicKey) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.hostKeys[host] = key
 }
 
 // GetHostKeyCallback returns an ssh.HostKeyCallback that accepts new hosts
-// and verifies returning hosts against stored keys.
+// (trust-on-first-use) and verifies returning hosts against stored keys.
 func (h *SSHKeyHelper) GetHostKeyCallback() ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		h.mu.RLock()
+		knownKey, ok := h.hostKeys[hostname]
+		h.mu.RUnlock()
+		if ok {
+			if bytes.Equal(key.Marshal(), knownKey.Marshal()) {
+				return nil
+			}
+			return fmt.Errorf("host key mismatch for %s", hostname)
+		}
+		// Unknown host: trust-on-first-use. Re-check under the write lock so
+		// a concurrent connection cannot trigger a duplicate/mismatched write.
+		h.mu.Lock()
+		defer h.mu.Unlock()
 		if knownKey, ok := h.hostKeys[hostname]; ok {
-			if bytes.Equal(ssh.Marshal(key), ssh.Marshal(knownKey)) {
+			if bytes.Equal(key.Marshal(), knownKey.Marshal()) {
 				return nil
 			}
 			return fmt.Errorf("host key mismatch for %s", hostname)
@@ -212,21 +231,8 @@ func (h *SSHKeyHelper) ExtractPublicKeyFromPrivateKey(privateKey, passphrase str
 	if err == nil {
 		return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey()))), nil
 	}
-
-	tmpFile, tmpErr := h.CreateTempKeyFile(keyContent)
-	if tmpErr != nil {
-		return "", fmt.Errorf("failed to parse private key: %v", err)
-	}
-	defer h.CleanupTempFile(tmpFile)
-
-	args := []string{"-y", "-f", tmpFile}
-	if passphrase != "" {
-		args = []string{"-y", "-P", passphrase, "-f", tmpFile}
-	}
-	output, execErr := exec.Command("ssh-keygen", args...).Output()
-	if execErr != nil {
-		return "", fmt.Errorf("failed to parse private key: %v", err)
-	}
-
-	return strings.TrimSpace(string(output)), nil
+	// Do not fall back to shelling out to ssh-keygen: its only way to supply
+	// a passphrase (-P) is via argv, which leaks the secret to any local
+	// user through ps / /proc. Surface the in-process parse error instead.
+	return "", fmt.Errorf("failed to parse private key: %w", err)
 }

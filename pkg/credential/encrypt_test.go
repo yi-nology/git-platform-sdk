@@ -3,6 +3,8 @@ package credential
 import (
 	"os"
 	"testing"
+
+	"github.com/yi-nology/git-platform-sdk/pkg/encoding"
 )
 
 func TestCryptoManager_EncryptDecrypt(t *testing.T) {
@@ -54,7 +56,8 @@ func TestCryptoManager_EncryptDecrypt(t *testing.T) {
 }
 
 func TestCryptoManager_ShortKey_Derived(t *testing.T) {
-	// A short passphrase should be expanded via SHA-256 to 32 bytes.
+	// A short passphrase is stretched to a 32-byte AES key per ciphertext via
+	// argon2id with a random salt.
 	mgr := NewCryptoManagerFromKey("short")
 
 	encrypted, err := mgr.Encrypt("hello")
@@ -73,7 +76,7 @@ func TestCryptoManager_ShortKey_Derived(t *testing.T) {
 }
 
 func TestCryptoManager_LongKey_Derived(t *testing.T) {
-	// A long key should also be hashed to 32 bytes.
+	// A long passphrase is also stretched via argon2id.
 	longKey := "this-key-is-much-longer-than-32-bytes-and-should-be-hashed"
 	mgr := NewCryptoManagerFromKey(longKey)
 
@@ -205,39 +208,51 @@ func TestNewCryptoManager_FromEnv(t *testing.T) {
 	}
 }
 
-func TestDeriveKey_Exact32(t *testing.T) {
-	input := make([]byte, 32)
-	for i := range input {
-		input[i] = byte(i)
-	}
-	result := deriveKey(input)
-	if len(result) != 32 {
-		t.Fatalf("expected 32 bytes, got %d", len(result))
-	}
-	// Should be a copy, not alias
-	input[0] = 0xFF
-	if result[0] == 0xFF {
-		t.Fatal("deriveKey should return a copy, not alias the input")
+func TestDeriveKey_OutputLength(t *testing.T) {
+	salt := make([]byte, saltLen)
+	result := deriveKey([]byte("any-passphrase"), salt)
+	if len(result) != argonKeyLen {
+		t.Fatalf("expected %d bytes, got %d", argonKeyLen, len(result))
 	}
 }
 
-func TestDeriveKey_Short(t *testing.T) {
-	result := deriveKey([]byte("short"))
-	if len(result) != 32 {
-		t.Fatalf("expected 32 bytes, got %d", len(result))
+func TestDeriveKey_DeterministicSameSalt(t *testing.T) {
+	salt := make([]byte, saltLen)
+	salt[0] = 0x42
+	r1 := deriveKey([]byte("short"), salt)
+	r2 := deriveKey([]byte("short"), salt)
+	if len(r1) != len(r2) {
+		t.Fatalf("length mismatch: %d vs %d", len(r1), len(r2))
 	}
-	// Same input should produce same output
-	result2 := deriveKey([]byte("short"))
-	for i := range result {
-		if result[i] != result2[i] {
-			t.Fatal("deriveKey should be deterministic")
+	for i := range r1 {
+		if r1[i] != r2[i] {
+			t.Fatal("deriveKey should be deterministic for the same (material, salt)")
 		}
 	}
 }
 
+func TestDeriveKey_DifferentSaltProducesDifferentKey(t *testing.T) {
+	saltA := make([]byte, saltLen)
+	saltB := make([]byte, saltLen)
+	saltB[0] = 0x01
+	r1 := deriveKey([]byte("same-passphrase"), saltA)
+	r2 := deriveKey([]byte("same-passphrase"), saltB)
+	same := true
+	for i := range r1 {
+		if r1[i] != r2[i] {
+			same = false
+			break
+		}
+	}
+	if same {
+		t.Fatal("different salts should produce different keys for the same passphrase")
+	}
+}
+
 func TestDeriveKey_DifferentInputs(t *testing.T) {
-	r1 := deriveKey([]byte("aaa"))
-	r2 := deriveKey([]byte("bbb"))
+	salt := make([]byte, saltLen)
+	r1 := deriveKey([]byte("aaa"), salt)
+	r2 := deriveKey([]byte("bbb"), salt)
 	same := true
 	for i := range r1 {
 		if r1[i] != r2[i] {
@@ -247,5 +262,48 @@ func TestDeriveKey_DifferentInputs(t *testing.T) {
 	}
 	if same {
 		t.Fatal("different inputs should produce different keys")
+	}
+}
+
+// TestCryptoManager_DifferentCiphertextsHaveDifferentSalts verifies that
+// encrypting the same plaintext twice yields two ciphertexts that carry
+// distinct salts (and therefore distinct ciphertexts).
+func TestCryptoManager_DifferentCiphertextsHaveDifferentSalts(t *testing.T) {
+	mgr := NewCryptoManagerFromKey("passphrase")
+
+	c1, err := mgr.Encrypt("same")
+	if err != nil {
+		t.Fatalf("Encrypt #1 failed: %v", err)
+	}
+	c2, err := mgr.Encrypt("same")
+	if err != nil {
+		t.Fatalf("Encrypt #2 failed: %v", err)
+	}
+	if c1 == c2 {
+		t.Fatal("encrypting the same plaintext twice must yield different ciphertexts")
+	}
+}
+
+// TestCryptoManager_RejectsWrongVersion verifies the version guard: a
+// ciphertext whose leading version byte is not the current one is rejected
+// with a clear error rather than being fed to the cipher.
+func TestCryptoManager_RejectsWrongVersion(t *testing.T) {
+	mgr := NewCryptoManagerFromKey("passphrase")
+
+	ct, err := mgr.Encrypt("hello")
+	if err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
+	raw, err := encoding.Base64URLDecode(ct)
+	if err != nil {
+		t.Fatalf("base64 decode failed: %v", err)
+	}
+	b := []byte(raw)
+	b[0] = 0xFF // corrupt the version byte
+	tampered := encoding.Base64URLEncode(string(b))
+
+	_, err = mgr.Decrypt(tampered)
+	if err == nil {
+		t.Fatal("expected error for unsupported ciphertext version")
 	}
 }

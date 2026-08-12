@@ -505,6 +505,7 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 
 	var lastErr error
 	var lastResp *http.Response
+	var lastBody []byte
 	for attempt := 1; attempt <= rt.cfg.MaxAttempts; attempt++ {
 		if attempt > 1 {
 			delay := rt.cfg.Backoff(attempt-1, lastResp)
@@ -540,18 +541,37 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 		if !rt.cfg.ShouldRetry(resp.StatusCode) {
 			return resp, nil
 		}
+		// Buffer the body before closing so the final response returned to
+		// the caller still carries the upstream error payload. The previous
+		// implementation closed the body without buffering, so callers (and
+		// the SDK response decoders sitting on top of this RoundTripper)
+		// received a closed, empty body and could not see the real 5xx
+		// payload. Per the http.RoundTripper contract a received response —
+		// even a 5xx — is returned with a nil error; HTTP status handling is
+		// the caller's responsibility.
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			lastResp = nil
+			lastBody = nil
+			continue
+		}
 		lastResp = resp
-		lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+		lastBody = body
 		rt.logger.Warn("transport retry: retryable status",
 			"method", req.Method,
 			"url", req.URL.String(),
 			"status", resp.StatusCode,
 			"attempt", attempt,
 		)
-		_ = resp.Body.Close()
 	}
 
 	if lastResp != nil {
+		// Re-attach a fresh reader so the caller can read the final upstream
+		// response body once. No error: a received response is not a
+		// transport error.
+		lastResp.Body = io.NopCloser(bytes.NewReader(lastBody))
 		return lastResp, nil
 	}
 	return nil, lastErr
