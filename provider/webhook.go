@@ -117,6 +117,12 @@ func (h HMACSHA256Validator) Validate(r *http.Request, body []byte, secret strin
 	if header == "" {
 		return fmt.Errorf("%w: missing %s header", ErrWebhookValidation, h.Header)
 	}
+	if secret == "" {
+		// An empty key makes HMAC verification trivially forgeable for
+		// predictable payloads (e.g. push events on public repos), so refuse
+		// it up front, mirroring StaticTokenValidator.
+		return fmt.Errorf("%w: empty secret", ErrWebhookValidation)
+	}
 	expected, err := decodeSignature(header, "sha256")
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrWebhookValidation, err)
@@ -172,6 +178,9 @@ func (h *HmacValidator) Validate(r *http.Request, body []byte, secret string) er
 	header := r.Header.Get(h.Header)
 	if header == "" {
 		return fmt.Errorf("%w: missing %s header", ErrWebhookValidation, h.Header)
+	}
+	if secret == "" {
+		return fmt.Errorf("%w: empty secret", ErrWebhookValidation)
 	}
 	algo := h.Algorithm
 	if algo == "" {
