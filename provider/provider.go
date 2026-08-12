@@ -20,10 +20,17 @@ const (
 )
 
 // Provider is the unified interface for all Git hosting platforms.
-// It composes 10 focused sub-interfaces for high cohesion and low coupling.
+// It composes 8 focused sub-interfaces for high cohesion and low coupling.
 //
 // Consumers can depend on smaller interfaces (e.g., WebhookManager)
 // when they don't need full Provider capabilities.
+//
+// IssueManager and SearchManager are NOT part of Provider: only some platforms
+// support them. Consumers that need issues or search should type-assert against
+// the optional capability interfaces:
+//
+//	if ism, ok := p.(provider.IssueManager); ok { ... }
+//	if sm, ok := p.(provider.SearchManager); ok { ... }
 type Provider interface {
 	// Platform returns the platform type.
 	Platform() Platform
@@ -38,8 +45,6 @@ type Provider interface {
 	CommitManager
 	FileManager
 	ReleaseManager
-	IssueManager
-	SearchManager
 }
 
 // PlatformBranch represents a branch on a platform.

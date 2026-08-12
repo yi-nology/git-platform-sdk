@@ -19,13 +19,13 @@ package github
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/google/go-github/v69/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
 )
@@ -48,26 +48,18 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	transportClient := transport.NewClient(
-		defaultBaseURL(cfg.BaseURL),
+		backendutil.DefaultBaseURL(cfg.BaseURL, "https://api.github.com"),
 		transport.BearerToken{Token: cfg.Token},
 	)
 	transportClient.Logger = logger
 	// Set TLS-skipping transport on the transport client so that all
 	// HTTP requests (including retries) honour SkipTLS.
 	if cfg.SkipTLS {
-		transportClient.Transport = httpTransport(cfg.SkipTLS)
+		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
 	}
-	if cfg.RetryConfig != nil {
-		rc := transport.RetryConfig{
-			MaxAttempts: cfg.RetryConfig.MaxRetries + 1,
-			BaseDelay:   cfg.RetryConfig.BaseDelay,
-			MaxDelay:    cfg.RetryConfig.MaxDelay,
-			Statuses:    cfg.RetryConfig.RetryOn,
-		}
-		transportClient.Retry = &rc
-	}
+	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
 	if cfg.Hooks != nil {
-		transportClient.Hooks = convertHooks(cfg.Hooks)
+		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
 	}
 
 	// Underlying http.Client used by go-github. We wrap its transport with
@@ -75,8 +67,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	// through the auth/retry/hooks pipeline.
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
-		Transport: chainTransport(
-			httpTransport(cfg.SkipTLS),
+		Transport: backendutil.ChainTransport(
+			backendutil.HTTPTransport(cfg.SkipTLS),
 			transportClient.NewRetryingRoundTripper(),
 		),
 	}
@@ -95,74 +87,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	return &Provider{client: ghClient, logger: logger}, nil
-}
-
-func defaultBaseURL(base string) string {
-	if base == "" {
-		return "https://api.github.com"
-	}
-	return base
-}
-
-func httpTransport(skipTLS bool) http.RoundTripper {
-	if !skipTLS {
-		return http.DefaultTransport
-	}
-	return &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-}
-
-// chainTransport chains two round-trippers: outer is invoked first, then inner.
-func chainTransport(inner, outer http.RoundTripper) http.RoundTripper {
-	return &chainedTransport{inner: inner, outer: outer}
-}
-
-type chainedTransport struct {
-	inner http.RoundTripper
-	outer http.RoundTripper
-}
-
-func (c *chainedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if c.outer != nil {
-		// outer runs first; if it returns a response (real or wrapped), we
-		// hand it back. If it short-circuits with nil/nil, we fall back to
-		// the inner transport (the underlying connection).
-		if resp, err := c.outer.RoundTrip(req); resp != nil || err != nil {
-			return resp, err
-		}
-	}
-	return c.inner.RoundTrip(req)
-}
-
-// convertHooks adapts the legacy provider.Hooks into transport.Hooks. Only
-// the response hook is mapped today (request hooks go through buildRequest
-// in the transport layer and would require rebuilding the go-github request).
-func convertHooks(h *provider.Hooks) *transport.Hooks {
-	if h == nil {
-		return nil
-	}
-	out := &transport.Hooks{}
-	for _, rh := range h.Request {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddRequest(func(ctx context.Context, req *http.Request) error {
-			_ = rhCopy(ctx, req)
-			return nil
-		})
-	}
-	for _, rh := range h.Response {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddResponse(func(ctx context.Context, req *http.Request, resp *http.Response, d time.Duration, err error) {
-			rhCopy(ctx, req, resp, d, err)
-		})
-	}
-	return out
 }
 
 // Platform implements provider.Provider.

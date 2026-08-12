@@ -2,8 +2,6 @@ package github_test
 
 import (
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	sdkgithub "github.com/google/go-github/v69/github"
@@ -18,12 +16,9 @@ func TestGitHub_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "GitHub",
 		Platform: provider.PlatformGitHub,
-		NewProvider: func(t *testing.T, baseURL string) provider.Provider {
-			p, err := provider.NewProvider(provider.Config{
-				Platform: provider.PlatformGitHub,
-				BaseURL:  baseURL + "/api/v3",
-				Token:    "test",
-			})
+		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
+			cfg.BaseURL = cfg.BaseURL + "/api/v3"
+			p, err := provider.NewProvider(cfg)
 			if err != nil {
 				t.Fatalf("NewProvider: %v", err)
 			}
@@ -46,7 +41,3 @@ func githubNonEmptyList() string {
 	b, _ := json.Marshal(repos)
 	return string(b)
 }
-
-// Ensure httptest is referenced (used by the harness internally).
-var _ = httptest.NewServer
-var _ = http.StatusOK

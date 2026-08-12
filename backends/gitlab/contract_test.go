@@ -11,12 +11,8 @@ func TestGitLab_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "GitLab",
 		Platform: provider.PlatformGitLab,
-		NewProvider: func(t *testing.T, baseURL string) provider.Provider {
-			p, err := provider.NewProvider(provider.Config{
-				Platform: provider.PlatformGitLab,
-				BaseURL:  baseURL,
-				Token:    "test",
-			})
+		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
+			p, err := provider.NewProvider(cfg)
 			if err != nil {
 				t.Fatalf("NewProvider: %v", err)
 			}
