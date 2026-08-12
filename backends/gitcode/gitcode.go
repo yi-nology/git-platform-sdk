@@ -7,12 +7,12 @@ package gitcode
 
 import (
 	"context"
-	"crypto/tls"
 	"net/http"
 	"time"
 
 	gitcode "github.com/yi-nology/gitcode_api"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
 )
@@ -31,26 +31,18 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	transportClient := transport.NewClient(
-		defaultBaseURL(cfg.BaseURL),
+		backendutil.DefaultBaseURL(cfg.BaseURL, "https://api.gitcode.com/api/v5"),
 		transport.BearerToken{Token: cfg.Token},
 	)
 	transportClient.Logger = logger
 	// Set TLS-skipping transport on the transport client so that all
 	// HTTP requests (including retries) honour SkipTLS.
 	if cfg.SkipTLS {
-		transportClient.Transport = httpTransport(cfg.SkipTLS)
+		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
 	}
-	if cfg.RetryConfig != nil {
-		rc := transport.RetryConfig{
-			MaxAttempts: cfg.RetryConfig.MaxRetries + 1,
-			BaseDelay:   cfg.RetryConfig.BaseDelay,
-			MaxDelay:    cfg.RetryConfig.MaxDelay,
-			Statuses:    cfg.RetryConfig.RetryOn,
-		}
-		transportClient.Retry = &rc
-	}
+	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
 	if cfg.Hooks != nil {
-		transportClient.Hooks = convertHooks(cfg.Hooks)
+		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
 	}
 
 	// Build an http.Client whose transport flows through the unified
@@ -58,8 +50,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	// via SetHTTPClient.
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
-		Transport: chainTransport(
-			httpTransport(cfg.SkipTLS),
+		Transport: backendutil.ChainTransport(
+			backendutil.HTTPTransport(cfg.SkipTLS),
 			transportClient.NewRetryingRoundTripper(),
 		),
 	}
@@ -97,67 +89,4 @@ func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnection
 	result.CanWriteCR = result.CanListRepos
 	result.CanWebhook = result.CanListRepos
 	return result, nil
-}
-
-func defaultBaseURL(base string) string {
-	if base == "" {
-		return "https://api.gitcode.com/api/v5"
-	}
-	return base
-}
-
-func httpTransport(skipTLS bool) http.RoundTripper {
-	if !skipTLS {
-		return http.DefaultTransport
-	}
-	return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // G402: user explicitly opted into SkipTLS
-}
-
-// chainTransport chains two round-trippers: outer is invoked first, then inner.
-func chainTransport(inner, outer http.RoundTripper) http.RoundTripper {
-	return &chainedTransport{inner: inner, outer: outer}
-}
-
-type chainedTransport struct {
-	inner http.RoundTripper
-	outer http.RoundTripper
-}
-
-func (c *chainedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if c.outer != nil {
-		if resp, err := c.outer.RoundTrip(req); resp != nil || err != nil {
-			return resp, err
-		}
-	}
-	return c.inner.RoundTrip(req)
-}
-
-// convertHooks adapts the legacy provider.Hooks into transport.Hooks. Only
-// the response hook is mapped today (request hooks go through buildRequest
-// in the transport layer and would require rebuilding the gitcode request).
-func convertHooks(h *provider.Hooks) *transport.Hooks {
-	if h == nil {
-		return nil
-	}
-	out := &transport.Hooks{}
-	for _, rh := range h.Request {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddRequest(func(ctx context.Context, req *http.Request) error {
-			_ = rhCopy(ctx, req)
-			return nil
-		})
-	}
-	for _, rh := range h.Response {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddResponse(func(ctx context.Context, req *http.Request, resp *http.Response, d time.Duration, err error) {
-			rhCopy(ctx, req, resp, d, err)
-		})
-	}
-	return out
 }

@@ -11,12 +11,8 @@ func TestTencentCode_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "Tencent Code",
 		Platform: provider.PlatformTencentCode,
-		NewProvider: func(t *testing.T, baseURL string) provider.Provider {
-			p, err := provider.NewProvider(provider.Config{
-				Platform: provider.PlatformTencentCode,
-				BaseURL:  baseURL,
-				Token:    "test",
-			})
+		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
+			p, err := provider.NewProvider(cfg)
 			if err != nil {
 				t.Fatalf("NewProvider: %v", err)
 			}

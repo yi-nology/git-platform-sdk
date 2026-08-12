@@ -7,14 +7,13 @@ package gitea
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	gitea "code.gitea.io/sdk/gitea"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
 )
@@ -32,36 +31,24 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		logger = provider.NewNoopLogger()
 	}
 
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = "https://gitea.com"
-	}
-	baseURL = normalizeBaseURL(baseURL)
+	baseURL := backendutil.NormalizeBaseURL(backendutil.DefaultBaseURL(cfg.BaseURL, "https://gitea.com"))
 
 	transportClient := transport.NewClient(baseURL, transport.TokenHeader{Token: cfg.Token})
 	transportClient.Logger = logger
 	// Set TLS-skipping transport on the transport client so that all
 	// HTTP requests (including retries) honour SkipTLS.
 	if cfg.SkipTLS {
-		transportClient.Transport = httpTransport(cfg.SkipTLS)
+		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
 	}
-	if cfg.RetryConfig != nil {
-		rc := transport.RetryConfig{
-			MaxAttempts: cfg.RetryConfig.MaxRetries + 1,
-			BaseDelay:   cfg.RetryConfig.BaseDelay,
-			MaxDelay:    cfg.RetryConfig.MaxDelay,
-			Statuses:    cfg.RetryConfig.RetryOn,
-		}
-		transportClient.Retry = &rc
-	}
+	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
 	if cfg.Hooks != nil {
-		transportClient.Hooks = convertHooks(cfg.Hooks)
+		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
 	}
 
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
-		Transport: chainTransport(
-			httpTransport(cfg.SkipTLS),
+		Transport: backendutil.ChainTransport(
+			backendutil.HTTPTransport(cfg.SkipTLS),
 			transportClient.NewRetryingRoundTripper(),
 		),
 	}
@@ -71,66 +58,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		return nil, fmt.Errorf("gitea: failed to create client: %w", err)
 	}
 	return &Provider{client: client, logger: logger}, nil
-}
-
-// normalizeBaseURL strips any trailing slash and the /api/v1 suffix from
-// base URLs. The gitea SDK re-adds the suffix internally.
-func normalizeBaseURL(base string) string {
-	base = strings.TrimSuffix(base, "/")
-	base = strings.TrimSuffix(base, "/api/v1")
-	return base
-}
-
-func httpTransport(skipTLS bool) http.RoundTripper {
-	if !skipTLS {
-		return http.DefaultTransport
-	}
-	return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-}
-
-func chainTransport(inner, outer http.RoundTripper) http.RoundTripper {
-	return &chainedTransport{inner: inner, outer: outer}
-}
-
-type chainedTransport struct {
-	inner http.RoundTripper
-	outer http.RoundTripper
-}
-
-func (c *chainedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if c.outer != nil {
-		if resp, err := c.outer.RoundTrip(req); resp != nil || err != nil {
-			return resp, err
-		}
-	}
-	return c.inner.RoundTrip(req)
-}
-
-func convertHooks(h *provider.Hooks) *transport.Hooks {
-	if h == nil {
-		return nil
-	}
-	out := &transport.Hooks{}
-	for _, rh := range h.Request {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddRequest(func(ctx context.Context, req *http.Request) error {
-			_ = rhCopy(ctx, req)
-			return nil
-		})
-	}
-	for _, rh := range h.Response {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddResponse(func(ctx context.Context, req *http.Request, resp *http.Response, d time.Duration, err error) {
-			rhCopy(ctx, req, resp, d, err)
-		})
-	}
-	return out
 }
 
 // Platform implements provider.Provider.

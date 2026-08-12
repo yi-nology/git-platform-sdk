@@ -8,11 +8,10 @@ package gitee
 
 import (
 	"context"
-	"crypto/tls"
-	"net/http"
 	"strings"
 	"time"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
 )
@@ -38,68 +37,18 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	c := transport.NewClient(baseURL, transport.BearerToken{Token: cfg.Token})
-	c.Logger = toTransportLogger(logger)
+	c.Logger = backendutil.ToTransportLogger(logger)
 	c.Timeout = 30 * time.Second
 	// Set TLS-skipping transport on the transport client so that all
 	// HTTP requests (including retries) honour SkipTLS.
 	if cfg.SkipTLS {
-		c.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
+		c.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
 	}
-	if cfg.RetryConfig != nil {
-		rc := transport.RetryConfig{
-			MaxAttempts: cfg.RetryConfig.MaxRetries + 1,
-			BaseDelay:   cfg.RetryConfig.BaseDelay,
-			MaxDelay:    cfg.RetryConfig.MaxDelay,
-			Statuses:    cfg.RetryConfig.RetryOn,
-		}
-		c.Retry = &rc
-	}
+	c.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
 	if cfg.Hooks != nil {
-		c.Hooks = convertHooks(cfg.Hooks)
+		c.Hooks = backendutil.ConvertHooks(cfg.Hooks)
 	}
 	return &Provider{client: c, logger: logger}, nil
-}
-
-// toTransportLogger adapts provider.Logger to transport.Logger.
-func toTransportLogger(l provider.Logger) transport.Logger {
-	if l == nil {
-		return nil
-	}
-	return transport.LoggerFunc{
-		DebugFunc: func(msg string, kv ...any) { l.Debug(msg, kv...) },
-		InfoFunc:  func(msg string, kv ...any) { l.Info(msg, kv...) },
-		WarnFunc:  func(msg string, kv ...any) { l.Warn(msg, kv...) },
-		ErrorFunc: func(msg string, kv ...any) { l.Error(msg, kv...) },
-	}
-}
-
-func convertHooks(h *provider.Hooks) *transport.Hooks {
-	if h == nil {
-		return nil
-	}
-	out := &transport.Hooks{}
-	for _, rh := range h.Request {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddRequest(func(ctx context.Context, req *http.Request) error {
-			_ = rhCopy(ctx, req)
-			return nil
-		})
-	}
-	for _, rh := range h.Response {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddResponse(func(ctx context.Context, req *http.Request, resp *http.Response, d time.Duration, err error) {
-			rhCopy(ctx, req, resp, d, err)
-		})
-	}
-	return out
 }
 
 // Platform implements provider.Provider.

@@ -16,6 +16,8 @@ import (
 	"time"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
 )
@@ -40,9 +42,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 
 	// Build a transport.Client so we can leverage the retry/hooks/auth pipeline.
 	transportClient := transport.NewClient(baseURL+"/api/v3", transport.PrivateToken{Token: cfg.Token})
-	transportClient.Logger = toTransportLogger(logger)
+	transportClient.Logger = backendutil.ToTransportLogger(logger)
 	transportClient.Timeout = 30 * time.Second
 	if cfg.SkipTLS {
+		// Tencent 工蜂 requires TLS 1.2 with a specific cipher-suite
+		// allowlist, so we keep a bespoke transport here rather than using
+		// backendutil.HTTPTransport (which only flips InsecureSkipVerify).
 		transportClient.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
@@ -65,17 +70,9 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			},
 		}
 	}
-	if cfg.RetryConfig != nil {
-		rc := transport.RetryConfig{
-			MaxAttempts: cfg.RetryConfig.MaxRetries + 1,
-			BaseDelay:   cfg.RetryConfig.BaseDelay,
-			MaxDelay:    cfg.RetryConfig.MaxDelay,
-			Statuses:    cfg.RetryConfig.RetryOn,
-		}
-		transportClient.Retry = &rc
-	}
+	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
 	if cfg.Hooks != nil {
-		transportClient.Hooks = convertHooks(cfg.Hooks)
+		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
 	}
 
 	// Build an *http.Client whose Transport uses the transport layer's
@@ -99,46 +96,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	return &Provider{client: gfClient, transport: transportClient, logger: logger}, nil
-}
-
-// toTransportLogger adapts provider.Logger to transport.Logger.
-func toTransportLogger(l provider.Logger) transport.Logger {
-	if l == nil {
-		return nil
-	}
-	return transport.LoggerFunc{
-		DebugFunc: func(msg string, kv ...any) { l.Debug(msg, kv...) },
-		InfoFunc:  func(msg string, kv ...any) { l.Info(msg, kv...) },
-		WarnFunc:  func(msg string, kv ...any) { l.Warn(msg, kv...) },
-		ErrorFunc: func(msg string, kv ...any) { l.Error(msg, kv...) },
-	}
-}
-
-func convertHooks(h *provider.Hooks) *transport.Hooks {
-	if h == nil {
-		return nil
-	}
-	out := &transport.Hooks{}
-	for _, rh := range h.Request {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddRequest(func(ctx context.Context, req *http.Request) error {
-			_ = rhCopy(ctx, req)
-			return nil
-		})
-	}
-	for _, rh := range h.Response {
-		if rh == nil {
-			continue
-		}
-		rhCopy := rh
-		out.AddResponse(func(ctx context.Context, req *http.Request, resp *http.Response, d time.Duration, err error) {
-			rhCopy(ctx, req, resp, d, err)
-		})
-	}
-	return out
 }
 
 // sdkError wraps an error as a provider.ProviderError for the TencentCode platform.
