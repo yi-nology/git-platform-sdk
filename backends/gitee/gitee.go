@@ -8,6 +8,7 @@ package gitee
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"strings"
 	"time"
@@ -39,6 +40,13 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	c := transport.NewClient(baseURL, transport.BearerToken{Token: cfg.Token})
 	c.Logger = toTransportLogger(logger)
 	c.Timeout = 30 * time.Second
+	// Set TLS-skipping transport on the transport client so that all
+	// HTTP requests (including retries) honour SkipTLS.
+	if cfg.SkipTLS {
+		c.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
 	if cfg.RetryConfig != nil {
 		rc := transport.RetryConfig{
 			MaxAttempts: cfg.RetryConfig.MaxRetries + 1,

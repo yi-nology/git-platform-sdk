@@ -36,6 +36,11 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		transport.PrivateToken{Token: cfg.Token},
 	)
 	transportClient.Logger = logger
+	// Set TLS-skipping transport on the transport client so that all
+	// HTTP requests (including retries) honour SkipTLS.
+	if cfg.SkipTLS {
+		transportClient.Transport = httpTransport(cfg.SkipTLS)
+	}
 	if cfg.RetryConfig != nil {
 		rc := transport.RetryConfig{
 			MaxAttempts: cfg.RetryConfig.MaxRetries + 1,
