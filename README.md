@@ -264,6 +264,23 @@ func (h *WebhookHandler) HandleEvent(r *http.Request) error {
 }
 ```
 
+### 可选能力（Issues / Search）
+
+并非所有平台都支持 Issues 和 Search。这两个接口**不在** `Provider` 组合中，而是**可选能力接口**。只有真正支持的平台（目前为 GitCode）实现它们；其余平台不再假装支持。调用方通过类型断言判断：
+
+```go
+p, _ := provider.NewProvider(cfg)
+
+if ism, ok := p.(provider.IssueManager); ok {
+    issues, _, _ := ism.ListIssues(ctx, provider.ListIssuesOptions{Owner: "o", Repo: "r"})
+    // ...
+}
+if sm, ok := p.(provider.SearchManager); ok {
+    repos, _ := sm.SearchRepos(ctx, provider.SearchRepoOptions{Query: "keyword"})
+    // ...
+}
+```
+
 ### Tencent 工蜂专属能力
 
 Tencent 工蜂 backend 额外实现了 `TencentCodeExtras` 接口, 暴露工蜂独有的功能:

@@ -20,3 +20,6 @@ Thumbs.db
 # Local environment
 .env
 .env.local
+
+# ZCode workspace artifacts (plans, scratch) — not project source
+.zcode/
