@@ -2,7 +2,21 @@
 //
 // It builds on top of the official gitlab-org/api/client-go SDK and adds
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
-// provided by the parent project's transport package.
+// provided by the parent project's transport package. All Provider methods
+// are split across the per-responsibility files in this package:
+//
+//   - gitlab.go:  constructor + identity (Platform, TestConnection, Capabilities)
+//   - init.go:    provider registration with the global registry
+//   - repos.go:   ListRepos, GetRepo, CreateRepo, DeleteRepo, UpdateRepo, ForkRepo
+//   - crs.go:     Change requests (MRs): Create/Get/List/Close/Merge/Reopen/Update/Comments/Commits
+//   - webhooks.go: webhook CRUD + signature validation + event parsing
+//   - branches.go: ListBranches, CreateBranch, DeleteBranch
+//   - diffs.go:    GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion, CreateReview
+//   - commits.go:  GetCommit, ListCommits, CompareCommits, CreateCommitStatus
+//   - files.go:    GetFileContent, CreateFile, UpdateFile, DeleteFile
+//   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
+//   - labels.go:   repository label CRUD (LabelManager)
+//   - types.go:    internal GitLab-API types and conversion helpers
 package gitlab
 
 import (
@@ -68,11 +82,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 // Platform implements provider.Provider.
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitLab }
 
-// Capabilities implements provider.Provider. This backend does not yet
-// implement any optional capability interface; flip fields here as
-// capability backends land.
+// Capabilities implements provider.Provider. GitLab implements the optional
+// LabelManager interface (see labels.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{}
+	return provider.CapabilitySet{Labels: true}
 }
 
 // TestConnection implements provider.Provider.
