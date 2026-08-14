@@ -2,7 +2,22 @@
 //
 // It builds on top of the yi-nology/gitcode_api client SDK and adds
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
-// provided by the parent project's transport package.
+// provided by the parent project's transport package. All Provider methods
+// are split across the per-responsibility files in this package:
+//
+//   - gitcode.go:  constructor + identity (Platform, TestConnection, Capabilities)
+//   - init.go:     provider registration with the global registry
+//   - repos.go:    ListRepos, GetRepo, CreateRepo, DeleteRepo, UpdateRepo, ForkRepo
+//   - crs.go:      Change requests (PRs): Create/Get/List/Merge/Close/Reopen/Update/UpdateLabels/Comments/Commits
+//   - webhooks.go: webhook CRUD + signature validation + event parsing
+//   - branches.go: ListBranches, CreateBranch, DeleteBranch
+//   - diffs.go:    GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion, CreateReview
+//   - commits.go:  GetCommit, ListCommits, CompareCommits, CreateCommitStatus
+//   - files.go:    GetFileContent, CreateFile, UpdateFile, DeleteFile
+//   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
+//   - issues.go:   IssueManager: issue CRUD, comments, issue-scoped label ops
+//   - search.go:   SearchManager: SearchRepos, SearchIssues, SearchUsers
+//   - labels.go:   repository label CRUD (LabelManager)
 package gitcode
 
 import (
@@ -71,9 +86,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitCode }
 
 // Capabilities implements provider.Provider. GitCode implements the optional
-// IssueManager and SearchManager interfaces (see issues.go, search.go).
+// IssueManager, SearchManager, and LabelManager interfaces (see issues.go,
+// search.go, labels.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Issues: true, Search: true}
+	return provider.CapabilitySet{Issues: true, Search: true, Labels: true}
 }
 
 // TestConnection implements provider.Provider.
