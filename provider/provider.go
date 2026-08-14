@@ -19,6 +19,27 @@ const (
 	PlatformGitCode     Platform = "gitcode"
 )
 
+// CapabilitySet statically declares which optional capability interfaces a
+// Provider implements. Values are compile-time constants per backend; no
+// runtime probing is performed. Consumers should route on these flags
+// instead of probing with type assertions:
+//
+//	if p.Capabilities().Labels {
+//		lm := p.(provider.LabelManager)
+//		// ...
+//	}
+//
+// When a new optional capability interface is added to the SDK, add a field
+// here and update every backend's Capabilities method; the contract suite
+// enforces that declarations match implementations.
+type CapabilitySet struct {
+	Issues     bool // provider.IssueManager
+	Search     bool // provider.SearchManager
+	Labels     bool // provider.LabelManager
+	Milestones bool // provider.MilestoneManager (future phase)
+	Reviews    bool // provider.ReviewManager (future phase)
+}
+
 // Provider is the unified interface for all Git hosting platforms.
 // It composes 8 focused sub-interfaces for high cohesion and low coupling.
 //
@@ -31,11 +52,17 @@ const (
 //
 //	if ism, ok := p.(provider.IssueManager); ok { ... }
 //	if sm, ok := p.(provider.SearchManager); ok { ... }
+//
+//	Caps declares the same information programmatically: consumers can route
+//	on p.Capabilities() instead of probing with type assertions.
 type Provider interface {
 	// Platform returns the platform type.
 	Platform() Platform
 	// TestConnection verifies the connection and checks capabilities.
 	TestConnection(ctx context.Context) (*TestConnectionResult, error)
+	// Capabilities statically declares the optional capability interfaces
+	// this provider implements. See CapabilitySet.
+	Capabilities() CapabilitySet
 
 	RepoManager
 	ChangeRequestManager

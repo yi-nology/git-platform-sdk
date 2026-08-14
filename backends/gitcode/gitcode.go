@@ -70,6 +70,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 // Platform implements provider.Provider.
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitCode }
 
+// Capabilities implements provider.Provider. GitCode implements the optional
+// IssueManager and SearchManager interfaces (see issues.go, search.go).
+func (p *Provider) Capabilities() provider.CapabilitySet {
+	return provider.CapabilitySet{Issues: true, Search: true}
+}
+
 // TestConnection implements provider.Provider.
 func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnectionResult, error) {
 	user, err := p.client.GetCurrentUser(ctx)

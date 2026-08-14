@@ -54,6 +54,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("Retry_On5xx", func(t *testing.T) { testRetry(t, h) })
 	t.Run("Webhook_ValidateSignature", func(t *testing.T) { testWebhookSignature(t, h) })
 	t.Run("Context_Cancel", func(t *testing.T) { testContextCancel(t, h) })
+	t.Run("Capabilities_Consistency", func(t *testing.T) { testCapabilities(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

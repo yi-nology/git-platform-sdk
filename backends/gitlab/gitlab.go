@@ -68,6 +68,13 @@ func New(cfg provider.Config) (provider.Provider, error) {
 // Platform implements provider.Provider.
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitLab }
 
+// Capabilities implements provider.Provider. This backend does not yet
+// implement any optional capability interface; flip fields here as
+// capability backends land.
+func (p *Provider) Capabilities() provider.CapabilitySet {
+	return provider.CapabilitySet{}
+}
+
 // TestConnection implements provider.Provider.
 func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnectionResult, error) {
 	user, _, err := p.client.Users.CurrentUser(gitlab.WithContext(ctx))
