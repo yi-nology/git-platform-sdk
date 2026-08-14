@@ -29,3 +29,26 @@ func TestGitea_Contract(t *testing.T) {
 		NonEmptyListResponse: `[{"id":1,"full_name":"owner/repo","name":"repo","owner":{"username":"owner"},"default_branch":"main"}]`,
 	})
 }
+
+// TestGitea_LabelsContract runs the label-management contract suite against
+// the Gitea backend.
+func TestGitea_LabelsContract(t *testing.T) {
+	contracttest.RunLabelsSuite(t, contracttest.LabelsHarness{
+		Name:     "Gitea",
+		Platform: provider.PlatformGitea,
+		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
+			// The Gitea SDK requires /api/v1/version on client init; wrap
+			// the mock server the same way the main harness does.
+			wrapper := contracttest.VersionProxy(cfg.BaseURL, `{"version":"1.22.0"}`)
+			t.Cleanup(wrapper.Close)
+			cfg.BaseURL = wrapper.URL
+			p, err := gitea.New(cfg)
+			if err != nil {
+				t.Fatalf("gitea.New: %v", err)
+			}
+			return p
+		},
+		ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
+		MutateResponse: `{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}`,
+	})
+}
