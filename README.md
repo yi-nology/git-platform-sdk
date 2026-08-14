@@ -64,12 +64,12 @@ func main() {
 
 | Platform | Status | Coverage |
 |----------|--------|----------|
-| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
-| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release |
-| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
-| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
-| Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
-| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release |
+| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
+| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels |
+| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
+| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
+| Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
+| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
 | Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release + exclusive features |
 
 ### Installation
@@ -119,12 +119,12 @@ cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
 
 | 平台 | 状态 | API 覆盖 | 默认 API |
 |------|------|----------|----------|
-| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://api.github.com` |
-| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release | `https://gitlab.com/api/v4` |
-| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://gitea.com/api/v1` |
-| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://codeberg.org` |
-| Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://gitee.com/api/v5` |
-| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release | `https://api.gitcode.com/api/v5` |
+| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://api.github.com` |
+| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels | `https://gitlab.com/api/v4` |
+| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://gitea.com/api/v1` |
+| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://codeberg.org` |
+| Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://gitee.com/api/v5` |
+| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://api.gitcode.com/api/v5` |
 | Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
 
 ## 安装
@@ -264,22 +264,32 @@ func (h *WebhookHandler) HandleEvent(r *http.Request) error {
 }
 ```
 
-### 可选能力（Issues / Search）
+### 可选能力(Issues / Search / Labels)
 
-并非所有平台都支持 Issues 和 Search。这两个接口**不在** `Provider` 组合中，而是**可选能力接口**。只有真正支持的平台（目前为 GitCode）实现它们；其余平台不再假装支持。调用方通过类型断言判断：
+并非所有平台都支持全部可选能力。这些接口**不在** `Provider` 组合中,调用方通过
+`Capabilities()` 声明式判断(或直接类型断言):
 
 ```go
 p, _ := provider.NewProvider(cfg)
+caps := p.Capabilities()
 
-if ism, ok := p.(provider.IssueManager); ok {
+if caps.Issues {
+    ism := p.(provider.IssueManager)
     issues, _, _ := ism.ListIssues(ctx, provider.ListIssuesOptions{Owner: "o", Repo: "r"})
     // ...
 }
-if sm, ok := p.(provider.SearchManager); ok {
-    repos, _ := sm.SearchRepos(ctx, provider.SearchRepoOptions{Query: "keyword"})
+if caps.Labels {
+    lm := p.(provider.LabelManager)
+    labels, _ := lm.ListLabels(ctx, "o", "r", provider.ListLabelsOptions{})
     // ...
 }
 ```
+
+| 能力 | 接口 | 支持平台 |
+|------|------|----------|
+| Issues | `IssueManager` | GitCode |
+| Search | `SearchManager` | GitCode |
+| Labels | `LabelManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
 
 ### Tencent 工蜂专属能力
 

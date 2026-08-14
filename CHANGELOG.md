@@ -38,6 +38,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   base URL, so the harness can inject a retry config. Backends' `contract_test.go`
   were updated accordingly.
 
+- **`Provider` interface gains `Capabilities() CapabilitySet`.** Custom
+  implementations of `provider.Provider` outside this module must add the
+  method. All seven built-in backends declare their capabilities statically;
+  the contract suite enforces that declarations match implementations.
+
 ### Security
 
 - **Credential KDF upgraded to argon2id with a per-ciphertext random salt**
@@ -94,5 +99,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Declarative capability introspection: `Provider.Capabilities()`.**
+  Returns a static `CapabilitySet{Issues, Search, Labels, Milestones,
+  Reviews}` so consumers can route on declared capabilities instead of
+  probing with type assertions. No runtime detection is performed.
+- **`LabelManager` optional interface (repository-level label CRUD).**
+  `ListLabels` / `CreateLabel` / `UpdateLabel` / `DeleteLabel`, addressed by
+  label name with colors canonicalized to 6-digit hex without `#`. Backends
+  whose APIs address labels by numeric ID (GitLab, Gitea, Forgejo) resolve
+  names internally. Implemented by GitHub, GitLab, Gitea, Forgejo, Gitee,
+  and GitCode; a new cross-platform `RunLabelsSuite` contract suite enforces
+  behavior. GitCode's label API has no description field, so
+  `Label.Description` is always empty there.
 - `LICENSE` (MIT), `CHANGELOG.md`, `CONTRIBUTING.md`, and an `examples/`
   directory.
