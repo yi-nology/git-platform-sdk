@@ -44,7 +44,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 // UpdateLabel implements provider.LabelManager. Forgejo addresses labels by
 // numeric ID, so the label is resolved by name first.
 func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
-	id, err := p.resolveLabelID(owner, repo, name)
+	id, err := p.resolveLabelID("UpdateLabel", owner, repo, name)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 
 // DeleteLabel implements provider.LabelManager.
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
-	id, err := p.resolveLabelID(owner, repo, name)
+	id, err := p.resolveLabelID("DeleteLabel", owner, repo, name)
 	if err != nil {
 		return err
 	}
@@ -82,21 +82,23 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 // and delete endpoints address labels by ID while the SDK's surface
 // addresses them by name. Only the first 100 labels are scanned; repositories
 // with more labels than that are not supported by this resolution path yet.
-// The forgejo SDK offers no per-call context, so no ctx parameter is taken
-// (unlike the GitLab backend's equivalent helper).
-func (p *Provider) resolveLabelID(owner, repo, name string) (int64, error) {
+// op is the public operation the resolution serves; failures surface under
+// that op rather than under this unexported helper's name. The forgejo SDK
+// offers no per-call context, so no ctx parameter is taken (unlike the
+// GitLab backend's equivalent helper).
+func (p *Provider) resolveLabelID(op, owner, repo, name string) (int64, error) {
 	labels, _, err := p.client.ListRepoLabels(owner, repo, forgejo.ListLabelsOptions{
 		ListOptions: forgejo.ListOptions{PageSize: 100},
 	})
 	if err != nil {
-		return 0, provider.Wrap(provider.PlatformForgejo, "resolveLabelID", err)
+		return 0, provider.Wrap(provider.PlatformForgejo, op, err)
 	}
 	for _, l := range labels {
 		if l.Name == name {
 			return l.ID, nil
 		}
 	}
-	return 0, provider.New(provider.PlatformForgejo, "resolveLabelID", http.StatusNotFound, fmt.Sprintf("label %q not found", name))
+	return 0, provider.New(provider.PlatformForgejo, op, http.StatusNotFound, fmt.Sprintf("label %q not found", name))
 }
 
 // convertLabel maps a forgejo.Label to a provider.Label. Forgejo colors may

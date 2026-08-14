@@ -38,5 +38,8 @@ func TestGitCode_LabelsContract(t *testing.T) {
 		},
 		ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917"}]`,
 		MutateResponse: `{"id":1,"name":"bug","color":"#4cc917"}`,
+		// The gitcode SDK's ListIssueLabels exposes no page/page-size
+		// parameters, so the backend cannot forward pagination on the wire.
+		IgnoresListPagination: true,
 	})
 }

@@ -47,7 +47,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 // UpdateLabel implements provider.LabelManager. GitLab addresses labels by
 // numeric ID, so the label is resolved by name first.
 func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
-	id, err := p.resolveLabelID(ctx, owner, repo, name)
+	id, err := p.resolveLabelID(ctx, "UpdateLabel", owner, repo, name)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 
 // DeleteLabel implements provider.LabelManager.
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
-	id, err := p.resolveLabelID(ctx, owner, repo, name)
+	id, err := p.resolveLabelID(ctx, "DeleteLabel", owner, repo, name)
 	if err != nil {
 		return err
 	}
@@ -84,19 +84,21 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 // delete endpoints address labels by ID while the SDK's surface addresses
 // them by name. Only the first 100 labels are scanned; repositories with
 // more labels than that are not supported by this resolution path yet.
-func (p *Provider) resolveLabelID(ctx context.Context, owner, repo, name string) (int64, error) {
+// op is the public operation the resolution serves; failures surface under
+// that op rather than under this unexported helper's name.
+func (p *Provider) resolveLabelID(ctx context.Context, op, owner, repo, name string) (int64, error) {
 	labels, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
 		&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{PerPage: 100}},
 		gitlab.WithContext(ctx))
 	if err != nil {
-		return 0, provider.Wrap(provider.PlatformGitLab, "resolveLabelID", err)
+		return 0, provider.Wrap(provider.PlatformGitLab, op, err)
 	}
 	for _, l := range labels {
 		if l.Name == name {
 			return l.ID, nil
 		}
 	}
-	return 0, provider.New(provider.PlatformGitLab, "resolveLabelID", http.StatusNotFound, fmt.Sprintf("label %q not found", name))
+	return 0, provider.New(provider.PlatformGitLab, op, http.StatusNotFound, fmt.Sprintf("label %q not found", name))
 }
 
 // convertLabel maps a gitlab.Label to a provider.Label. GitLab colors carry

@@ -264,10 +264,10 @@ func (h *WebhookHandler) HandleEvent(r *http.Request) error {
 }
 ```
 
-### 可选能力(Issues / Search / Labels)
+### 可选能力（Issues / Search / Labels）
 
-并非所有平台都支持全部可选能力。这些接口**不在** `Provider` 组合中,调用方通过
-`Capabilities()` 声明式判断(或直接类型断言):
+并非所有平台都支持全部可选能力。这些接口**不在** `Provider` 组合中，调用方通过
+`Capabilities()` 声明式判断（或直接类型断言）：
 
 ```go
 p, _ := provider.NewProvider(cfg)
