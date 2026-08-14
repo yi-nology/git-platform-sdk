@@ -3,7 +3,23 @@
 // Gitee's REST API is similar to GitHub's, but with a different auth model
 // (bearer token in the Authorization header) and some path differences. This
 // package uses the unified transport.Client directly rather than wrapping
-// a third-party SDK, since Gitee does not ship an official Go SDK.
+// a third-party SDK, since Gitee does not ship an official Go SDK. All
+// Provider methods are split across the per-responsibility files in this
+// package:
+//
+//   - gitee.go:   constructor + identity (Platform, TestConnection, Capabilities)
+//   - init.go:    provider registration with the global registry
+//   - methods.go: doRequest/doRequestWithHeaders JSON HTTP helpers
+//   - repos.go:   ListRepos, GetRepo, CreateRepo, DeleteRepo, UpdateRepo, ForkRepo
+//   - crs.go:     Change requests (PRs): Create/Get/List/Merge/Close/Reopen/Update/UpdateLabels/Comments/Commits
+//   - webhooks.go: webhook CRUD + signature validation + event parsing
+//   - branches.go: ListBranches, CreateBranch, DeleteBranch
+//   - diffs.go:   GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion, CreateReview
+//   - commits.go: GetCommit, ListCommits, CompareCommits, CreateCommitStatus
+//   - files.go:   GetFileContent, CreateFile, UpdateFile, DeleteFile
+//   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
+//   - labels.go:  repository label CRUD (LabelManager)
+//   - types.go:   internal Gitee-API types and conversion helpers
 package gitee
 
 import (
@@ -54,11 +70,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 // Platform implements provider.Provider.
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee }
 
-// Capabilities implements provider.Provider. This backend does not yet
-// implement any optional capability interface; flip fields here as
-// capability backends land.
+// Capabilities implements provider.Provider. Gitee implements the optional
+// LabelManager interface (see labels.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{}
+	return provider.CapabilitySet{Labels: true}
 }
 
 // TestConnection implements provider.Provider.
