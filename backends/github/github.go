@@ -14,6 +14,7 @@
 //   - commits.go:  GetCommit, ListCommits, CompareCommits, CreateCommitStatus
 //   - files.go:    GetFileContent, CreateFile, UpdateFile, DeleteFile
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
+//   - labels.go:   repository label CRUD (LabelManager)
 //   - types.go:    internal GitHub-API types and conversion helpers
 package github
 
@@ -92,11 +93,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 // Platform implements provider.Provider.
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitHub }
 
-// Capabilities implements provider.Provider. This backend does not yet
-// implement any optional capability interface; flip fields here as
-// capability backends land.
+// Capabilities implements provider.Provider. GitHub implements the optional
+// LabelManager interface (see labels.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{}
+	return provider.CapabilitySet{Labels: true}
 }
 
 // TestConnection implements provider.Provider.

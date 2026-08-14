@@ -25,11 +25,15 @@ func testCapabilities(t *testing.T, h Harness) {
 
 	_, issuesImpl := p.(provider.IssueManager)
 	_, searchImpl := p.(provider.SearchManager)
+	_, labelsImpl := p.(provider.LabelManager)
 
 	if caps.Issues != issuesImpl {
 		t.Errorf("Capabilities().Issues = %v, but IssueManager type assertion = %v; declaration and implementation have drifted", caps.Issues, issuesImpl)
 	}
 	if caps.Search != searchImpl {
 		t.Errorf("Capabilities().Search = %v, but SearchManager type assertion = %v; declaration and implementation have drifted", caps.Search, searchImpl)
+	}
+	if caps.Labels != labelsImpl {
+		t.Errorf("Capabilities().Labels = %v, but LabelManager type assertion = %v; declaration and implementation have drifted", caps.Labels, labelsImpl)
 	}
 }

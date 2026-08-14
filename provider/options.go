@@ -269,6 +269,40 @@ type UpdateIssueOptions struct {
 	Labels    []string   `json:"labels,omitempty"`
 }
 
+// --- Labels ---
+
+// Label represents a repository label. Color is canonicalized to 6-digit hex
+// without a leading '#' (e.g. "ff0000"); backends add the '#' when a platform
+// requires it (GitLab, Gitea, Forgejo) and strip it on the way in.
+type Label struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Color       string `json:"color,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ListLabelsOptions contains options for listing repository labels.
+type ListLabelsOptions struct {
+	Page    int `json:"page,omitempty"`
+	PerPage int `json:"per_page,omitempty"`
+}
+
+// CreateLabelOptions contains options for creating a repository label.
+// Color uses the canonical 6-digit hex form without '#' (e.g. "ff0000").
+type CreateLabelOptions struct {
+	Name        string `json:"name"`
+	Color       string `json:"color"`
+	Description string `json:"description,omitempty"`
+}
+
+// UpdateLabelOptions contains options for updating a repository label.
+// Nil fields are left unchanged.
+type UpdateLabelOptions struct {
+	NewName     *string `json:"new_name,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	Description *string `json:"description,omitempty"`
+}
+
 // --- Search ---
 
 // SearchReposOptions contains options for searching repositories.
