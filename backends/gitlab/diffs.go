@@ -2,9 +2,7 @@ package gitlab
 
 import (
 	"context"
-	"fmt"
 	"strconv"
-	"time"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
@@ -102,81 +100,6 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 		return "", provider.Wrap(provider.PlatformGitLab, "CreateDiscussion", err)
 	}
 	return disc.ID, nil
-}
-
-// CreateReview implements provider.DiffManager.
-//
-// GitLab has no native "review" object. We approximate one by:
-//  1. Posting the summary body as a Note (if non-empty).
-//  2. Posting each inline comment as a Discussion.
-//  3. Setting a commit status with the verdict (if CommitID is set).
-//
-// The returned ID is a synthetic identifier; the Comments slice reports the
-// per-comment discussion IDs and any errors.
-func (p *Provider) CreateReview(ctx context.Context, owner, repo string, number int, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	pid := pidOf(owner, repo)
-
-	var baseSHA, startSHA, headSHA string
-	mr, _, err := p.client.MergeRequests.GetMergeRequest(pid, int64(number), nil, gitlab.WithContext(ctx))
-	if err == nil && mr != nil {
-		headSHA = mrHeadSHA(mr)
-		baseSHA = mr.DiffRefs.BaseSha
-		startSHA = mr.DiffRefs.StartSha
-	}
-
-	if opts.Body != "" {
-		if _, err := p.CreateNote(ctx, owner, repo, number, opts.Body); err != nil {
-			return nil, fmt.Errorf("create summary note: %w", err)
-		}
-	}
-
-	if opts.CommitID != "" {
-		state := "success"
-		if opts.Event == "REQUEST_CHANGES" {
-			state = "failed"
-		}
-		_ = p.CreateCommitStatus(ctx, owner, repo, opts.CommitID, provider.CommitStatusOptions{
-			State:       state,
-			Context:     "review-service",
-			Description: opts.Body,
-		})
-	}
-
-	commentResults := make([]provider.ReviewCommentResult, 0, len(opts.Comments))
-	for _, c := range opts.Comments {
-		discOpts := provider.DiscussionOptions{
-			Body:     c.Body,
-			FilePath: c.Path,
-			BaseSHA:  baseSHA,
-			StartSHA: startSHA,
-			HeadSHA:  headSHA,
-		}
-		if c.Side == "LEFT" && c.Line > 0 {
-			discOpts.OldLine = c.Line
-		} else if c.Line > 0 {
-			discOpts.NewLine = c.Line
-		}
-		if c.StartLine > 0 && c.EndLine > c.StartLine {
-			discOpts.StartNewLine = c.StartLine
-			discOpts.NewLine = c.EndLine
-		}
-
-		discID, discErr := p.CreateDiscussion(ctx, owner, repo, number, discOpts)
-		cr := provider.ReviewCommentResult{
-			Path:       c.Path,
-			Line:       c.Line,
-			ExternalID: discID,
-		}
-		if discErr != nil {
-			cr.Error = discErr.Error()
-		}
-		commentResults = append(commentResults, cr)
-	}
-
-	return &provider.ReviewResult{
-		ID:       fmt.Sprintf("gl-review-%d-%d", number, time.Now().UnixNano()),
-		Comments: commentResults,
-	}, nil
 }
 
 var _ provider.DiffManager = (*Provider)(nil)

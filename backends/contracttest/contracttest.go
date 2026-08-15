@@ -50,6 +50,9 @@ type Harness struct {
 	// Issues, when non-nil, auto-mounts the issue-management suite inside
 	// Run, with the same bidirectional drift checks as Labels.
 	Issues *IssuesHarnessConfig
+	// Reviews, when non-nil, auto-mounts the review-management suite inside
+	// Run, with the same bidirectional drift checks as Labels and Issues.
+	Reviews *ReviewsHarnessConfig
 }
 
 // Run executes the full contract suite against h. Each subtest is independent.
@@ -65,6 +68,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("Capabilities_Consistency", func(t *testing.T) { testCapabilities(t, h) })
 	t.Run("LabelsSuite", func(t *testing.T) { testLabelsSuite(t, h) })
 	t.Run("IssuesSuite", func(t *testing.T) { testIssuesSuite(t, h) })
+	t.Run("ReviewsSuite", func(t *testing.T) { testReviewsSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

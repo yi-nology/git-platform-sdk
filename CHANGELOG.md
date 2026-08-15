@@ -24,8 +24,36 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `MilestoneRef.Number` is the same identifier as returned by the platform
   (milestone number on GitHub, milestone ID on GitLab, Gitea, Forgejo, and
   GitCode).
+- **`CreateReview` moved from `DiffManager` to the new optional
+  `ReviewManager` capability interface, and `DiffManager` is slimmed to five
+  methods** (`GetCRDiff`, `GetCRFiles`, `CreateNote`, `DeleteNote`,
+  `CreateDiscussion`). `ReviewManager.CreateReview` keeps its shape except
+  that the change request number is now addressed as `number string` (same
+  string-addressing scheme as `IssueManager`). The synthetic
+  `CreateReview` approximations on GitLab (note + discussions + commit
+  status), Gitee (notes), TencentCode (discussions + note), and GitCode
+  (review endpoint with inline-comment fallback) are gone with the
+  migration: reviews are now a declared capability implemented against
+  platforms that expose a real review API. Route with
+  `p.Capabilities().Reviews` and type-assert `provider.ReviewManager`
+  instead of calling `DiffManager.CreateReview`.
 
 ### Added
+
+- **New optional `ReviewManager` capability interface** with five methods:
+  `CreateReview`, `ListReviews`, `GetReview`, `RequestReviewers`,
+  `DismissReview` (change requests addressed by string number, individual
+  reviews by numeric platform ID), plus the `Review` model and normalized
+  `ReviewState` constants (`approved`, `changes_requested`, `commented`,
+  `pending`). **The GitHub backend implements it and declares
+  `Capabilities().Reviews`**, backed by go-github's
+  `PullRequestsService` review endpoints; UPPERCASE wire states are
+  normalized to the lowercase constants. A cross-platform reviews contract
+  suite (`contracttest.RunReviewsSuite`, auto-mounted via
+  `Harness.Reviews`) verifies list parsing/state normalization, single
+  review fetch, create/request-reviewers wire bodies, and non-GET
+  dismissal, with the same bidirectional capability-declaration drift
+  checks as the labels and issues suites.
 
 - **The gitee backend now declares `Capabilities().Issues`.** The
   IssueManager implementation is fully migrated onto the go-gitee SDK —

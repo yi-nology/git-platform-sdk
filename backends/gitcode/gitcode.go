@@ -11,7 +11,7 @@
 //   - crs.go:      Change requests (PRs): Create/Get/List/Merge/Close/Reopen/Update/UpdateLabels/Comments/Commits
 //   - webhooks.go: webhook CRUD + signature validation + event parsing
 //   - branches.go: ListBranches, CreateBranch, DeleteBranch
-//   - diffs.go:    GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion, CreateReview
+//   - diffs.go:    GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion
 //   - commits.go:  GetCommit, ListCommits, CompareCommits, CreateCommitStatus
 //   - files.go:    GetFileContent, CreateFile, UpdateFile, DeleteFile
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive

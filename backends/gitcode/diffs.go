@@ -71,63 +71,6 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 	return string(comment.ID), nil
 }
 
-// CreateReview implements provider.DiffManager.
-func (p *Provider) CreateReview(ctx context.Context, owner, repo string, number int, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	review, err := p.client.CreatePullRequestReview(ctx, owner, repo, number, opts.Body, opts.Event)
-	if err != nil {
-		return p.createReviewFallback(ctx, owner, repo, number, opts)
-	}
-	result := &provider.ReviewResult{ID: fmt.Sprintf("%d", review.ID)}
-	user := review.User
-	if user == nil {
-		user = review.Author
-	}
-	if user != nil {
-		authorID, _ := strconv.ParseInt(string(user.ID), 10, 64)
-		result.User = &provider.CRUser{
-			ID: authorID, Username: user.Login, AvatarURL: user.AvatarURL,
-		}
-	}
-	for _, c := range opts.Comments {
-		if err := p.createInlineComment(ctx, owner, repo, number, c, opts.CommitID); err != nil && p.logger != nil {
-			p.logger.Warn("inline comment failed", "path", c.Path, "line", c.Line, "error", err)
-		}
-	}
-	return result, nil
-}
-
-func (p *Provider) createReviewFallback(ctx context.Context, owner, repo string, number int, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	var lastErr error
-	for _, c := range opts.Comments {
-		if err := p.createInlineComment(ctx, owner, repo, number, c, opts.CommitID); err != nil {
-			lastErr = err
-		}
-	}
-	if opts.Body != "" {
-		if _, err := p.CreateNote(ctx, owner, repo, number, opts.Body); err != nil {
-			lastErr = err
-		}
-	}
-	if lastErr != nil && len(opts.Comments) == 0 {
-		return nil, lastErr
-	}
-	return &provider.ReviewResult{}, nil
-}
-
-func (p *Provider) createInlineComment(ctx context.Context, owner, repo string, number int, comment provider.ReviewComment, commitID string) error {
-	side := comment.Side
-	if side == "" {
-		side = "RIGHT"
-	}
-	_, err := p.client.CreatePullRequestInlineComment(ctx, owner, repo, number, gitcode.CreatePullRequestInlineCommentOptions{
-		Body: comment.Body, Path: comment.Path, Line: comment.Line, Side: side, CommitID: commitID,
-	})
-	if err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "createInlineComment", err)
-	}
-	return nil
-}
-
 func convertChangedFile(f *gitcode.PullRequestFile) *provider.ChangedFile {
 	patch := ""
 	if f.Patch != nil {

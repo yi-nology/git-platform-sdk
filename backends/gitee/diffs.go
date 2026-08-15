@@ -2,9 +2,7 @@ package gitee
 
 import (
 	"context"
-	"fmt"
 	"strconv"
-	"time"
 
 	gitee "gitee.com/openeuler/go-gitee/gitee"
 
@@ -70,43 +68,6 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number in
 // option. We post the body as a regular PR comment.
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts provider.DiscussionOptions) (string, error) {
 	return p.CreateNote(ctx, owner, repo, number, opts.Body)
-}
-
-// CreateReview implements provider.DiffManager.
-//
-// Gitee does not expose a review endpoint in its public REST API, so we
-// approximate one by posting the summary body as a note and each inline
-// comment as a separate PR comment. The returned ID is a synthetic
-// timestamp-based identifier.
-func (p *Provider) CreateReview(ctx context.Context, owner, repo string, number int, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	if opts.Body != "" {
-		if _, err := p.CreateNote(ctx, owner, repo, number, opts.Body); err != nil {
-			return nil, err
-		}
-	}
-	results := make([]provider.ReviewCommentResult, 0, len(opts.Comments))
-	for _, c := range opts.Comments {
-		body := c.Body
-		if c.Path != "" {
-			body = fmt.Sprintf("**%s**\n\n%s", c.Path, c.Body)
-		}
-		id, err := p.CreateNote(ctx, owner, repo, number, body)
-		results = append(results, provider.ReviewCommentResult{
-			Path:       c.Path,
-			Line:       c.Line,
-			ExternalID: id,
-			Error: func() string {
-				if err != nil {
-					return err.Error()
-				}
-				return ""
-			}(),
-		})
-	}
-	return &provider.ReviewResult{
-		ID:       fmt.Sprintf("ge-review-%d-%d", number, time.Now().UnixNano()),
-		Comments: results,
-	}, nil
 }
 
 var _ provider.DiffManager = (*Provider)(nil)

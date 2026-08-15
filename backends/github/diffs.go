@@ -100,54 +100,5 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 	return strconv.FormatInt(c.GetID(), 10), nil
 }
 
-// CreateReview implements provider.DiffManager.
-func (p *Provider) CreateReview(ctx context.Context, owner, repo string, number int, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	reviewRequest := &github.PullRequestReviewRequest{
-		CommitID: github.Ptr(opts.CommitID),
-		Body:     github.Ptr(opts.Body),
-		Event:    github.Ptr(opts.Event),
-	}
-	for _, c := range opts.Comments {
-		rc := &github.DraftReviewComment{
-			Path: github.Ptr(c.Path),
-			Body: github.Ptr(c.Body),
-		}
-		if c.StartLine > 0 && c.EndLine > c.StartLine {
-			rc.StartLine = github.Ptr(c.StartLine)
-			rc.Line = github.Ptr(c.EndLine)
-			if c.Side != "" {
-				rc.Side = github.Ptr(c.Side)
-			} else {
-				rc.Side = github.Ptr("RIGHT")
-			}
-			if c.StartLine != c.EndLine {
-				rc.StartSide = github.Ptr("RIGHT")
-			}
-		} else if c.Line > 0 {
-			rc.Line = github.Ptr(c.Line)
-			if c.Side != "" {
-				rc.Side = github.Ptr(c.Side)
-			} else {
-				rc.Side = github.Ptr("RIGHT")
-			}
-		}
-		reviewRequest.Comments = append(reviewRequest.Comments, rc)
-	}
-	review, _, err := p.client.PullRequests.CreateReview(ctx, owner, repo, number, reviewRequest)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateReview", err)
-	}
-	result := &provider.ReviewResult{
-		ID: strconv.FormatInt(review.GetID(), 10),
-	}
-	if review.GetHTMLURL() != "" {
-		result.HTMLURL = review.GetHTMLURL()
-	}
-	if review.GetUser() != nil {
-		result.User = convertUser(review.GetUser())
-	}
-	return result, nil
-}
-
 // compile-time guard
 var _ provider.DiffManager = (*Provider)(nil)

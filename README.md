@@ -243,7 +243,7 @@ type Provider interface {
     ChangeRequestManager // CreateCR, GetCR, ListCRs, MergeCR, CloseCR, ReopenCR, UpdateCR, ...
     WebhookManager       // CreateWebhook, DeleteWebhook, ListWebhooks, ParseWebhookEvent, ...
     BranchManager        // ListBranches, CreateBranch, DeleteBranch
-    DiffManager          // GetCRDiff, GetCRFiles, CreateNote, DeleteNote, CreateDiscussion, CreateReview
+    DiffManager          // GetCRDiff, GetCRFiles, CreateNote, DeleteNote, CreateDiscussion
     CommitManager        // GetCommit, ListCommits, CompareCommits, CreateCommitStatus
     FileManager          // GetFileContent, CreateFile, UpdateFile, DeleteFile
     ReleaseManager       // ListTags, ListReleases, CreateRelease, GetArchive

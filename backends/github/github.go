@@ -10,12 +10,13 @@
 //   - crs.go:     Change requests (PRs): Create/Get/List/Close/Merge/Reopen/Update/Comments/Commits
 //   - webhooks.go: webhook CRUD + signature validation + event parsing
 //   - branches.go: ListBranches, CreateBranch, DeleteBranch
-//   - diffs.go:    GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion, CreateReview
+//   - diffs.go:    GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion
 //   - commits.go:  GetCommit, ListCommits, CompareCommits, CreateCommitStatus
 //   - files.go:    GetFileContent, CreateFile, UpdateFile, DeleteFile
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
 //   - labels.go:   repository label CRUD (LabelManager)
 //   - issues.go:   issue CRUD, comments, and issue labels (IssueManager)
+//   - reviews.go:  PR review list/get/create/dismiss/request-reviewers (ReviewManager)
 //   - types.go:    internal GitHub-API types and conversion helpers
 package github
 
@@ -95,10 +96,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitHub }
 
 // Capabilities implements provider.Provider. GitHub implements the optional
-// LabelManager interface (see labels.go) and the IssueManager interface
-// (see issues.go).
+// LabelManager interface (see labels.go), the IssueManager interface
+// (see issues.go), and the ReviewManager interface (see reviews.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true}
 }
 
 // TestConnection implements provider.Provider.

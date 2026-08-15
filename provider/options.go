@@ -111,6 +111,26 @@ type ReviewCommentResult struct {
 	Error      string `json:"error,omitempty"`
 }
 
+// ReviewState is the normalized state of a code review.
+type ReviewState string
+
+const (
+	ReviewStateApproved         ReviewState = "approved"
+	ReviewStateChangesRequested ReviewState = "changes_requested"
+	ReviewStateCommented        ReviewState = "commented"
+	ReviewStatePending          ReviewState = "pending"
+)
+
+// Review represents a code review on a change request (the ReviewManager
+// view; ReviewResult above is the create-call response).
+type Review struct {
+	ID          int64       `json:"id"`
+	User        string      `json:"user"`
+	State       ReviewState `json:"state"`
+	Body        string      `json:"body"`
+	SubmittedAt time.Time   `json:"submitted_at"`
+}
+
 // CommitStatusOptions contains options for creating a commit status.
 type CommitStatusOptions struct {
 	State       string `json:"state"`
