@@ -44,13 +44,13 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo string, number int)
 }
 
 // CreateIssue implements provider.IssueManager.
-// opts.Milestone is ignored: gitcode_api v0.6.0 exposes no milestone write parameter.
 func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
 	createOpts := gitcode.CreateIssueOptions{
 		Title:     opts.Title,
 		Body:      opts.Body,
 		Assignees: opts.Assignees,
 		Labels:    opts.Labels,
+		Milestone: int64(opts.Milestone),
 	}
 	issue, err := p.client.CreateIssue(ctx, opts.Owner, opts.Repo, createOpts)
 	if err != nil {
@@ -60,13 +60,13 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 }
 
 // UpdateIssue implements provider.IssueManager.
-// opts.Milestone is ignored: gitcode_api v0.6.0 exposes no milestone write parameter.
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number int, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
 	updateOpts := gitcode.UpdateIssueOptions{
 		Title:     opts.Title,
 		Body:      opts.Body,
 		Assignees: opts.Assignees,
 		Labels:    opts.Labels,
+		Milestone: int64(opts.Milestone),
 	}
 	if opts.State != "" {
 		updateOpts.State = gitcode.IssueState(opts.State)
