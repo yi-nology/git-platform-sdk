@@ -165,22 +165,11 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo string, numbe
 	return nil
 }
 
-// RemoveIssueLabel implements provider.IssueManager. GitLab has no
-// remove-single-label endpoint: the issue's labels are fetched, the target
-// filtered out, and the full set written back.
+// RemoveIssueLabel implements provider.IssueManager via remove_labels.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo string, number int, name string) error {
-	issue, _, err := p.client.Issues.GetIssue(pidOf(owner, repo), int64(number), gitlab.WithContext(ctx))
-	if err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "RemoveIssueLabel", err)
-	}
-	remaining := make(gitlab.LabelOptions, 0, len(issue.Labels))
-	for _, l := range issue.Labels {
-		if l != name {
-			remaining = append(remaining, l)
-		}
-	}
-	_, _, err = p.client.Issues.UpdateIssue(pidOf(owner, repo), int64(number),
-		&gitlab.UpdateIssueOptions{Labels: &remaining}, gitlab.WithContext(ctx))
+	rl := gitlab.LabelOptions{name}
+	_, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), int64(number),
+		&gitlab.UpdateIssueOptions{RemoveLabels: &rl}, gitlab.WithContext(ctx))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitLab, "RemoveIssueLabel", err)
 	}
