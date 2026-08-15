@@ -2,7 +2,6 @@ package gitee
 
 import (
 	"context"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -21,21 +20,6 @@ func (p *Provider) doRequest(ctx context.Context, method, path string, body, res
 		Result: result,
 	})
 	return err
-}
-
-// doRequestWithHeaders is the same as doRequest but returns the response
-// headers. Used for paginated endpoints that expose X-Total-Count.
-func (p *Provider) doRequestWithHeaders(ctx context.Context, method, path string, body, result any) (http.Header, error) {
-	resp, err := p.raw().DoJSON(ctx, &transport.Request{
-		Method: method,
-		Path:   path,
-		Body:   body,
-		Result: result,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resp.Header, nil
 }
 
 // esc escapes a single URL path segment. Variable segments interpolated into

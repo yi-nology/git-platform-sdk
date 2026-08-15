@@ -7,7 +7,8 @@
 // are not usable through the SDK — either missing entirely (e.g.
 // DELETE /repos/{owner}/{repo}/branches/{branch}) or generated with a broken
 // signature (the user-repos list methods decode into a single Project instead
-// of an array) — and keep using the retained transport.Client via
+// of an array; the commit and compare models type live objects/arrays as
+// plain strings) — and keep using the retained transport.Client via
 // Provider.raw(). All Provider methods are split across the
 // per-responsibility files in this package:
 //

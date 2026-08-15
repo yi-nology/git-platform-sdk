@@ -3,20 +3,25 @@ package gitee
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
+
+	gitee "gitee.com/openeuler/go-gitee/gitee"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // GetCRDiff implements provider.DiffManager.
 func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*provider.MergeDiff, error) {
-	var files []giteePRFile
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/files", esc(owner), esc(repo), number), nil, &files); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetCRDiff", err)
+	files, resp, err := p.client.PullRequestsApi.GetV5ReposOwnerRepoPullsNumberFiles(ctx, esc(owner), esc(repo), toInt32(number), &gitee.GetV5ReposOwnerRepoPullsNumberFilesOpts{
+		AccessToken: p.accessToken(),
+	})
+	if err != nil {
+		return nil, p.sdkErr("GetCRDiff", resp, err)
 	}
 	diff := &provider.MergeDiff{}
-	for _, f := range files {
-		diff.Files = append(diff.Files, f.toChangedFile())
+	for i := range files {
+		diff.Files = append(diff.Files, convertPRFile(files[i]))
 	}
 	diff.TotalAdd, diff.TotalDel = provider.SumDiffStats(diff.Files)
 	diff.RawDiff = provider.BuildRawDiff(diff.Files)
@@ -34,21 +39,27 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number in
 
 // CreateNote implements provider.DiffManager.
 func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
-	reqBody := map[string]any{"body": body}
-	var resp struct {
-		ID int64 `json:"id"`
+	comment, resp, err := p.client.PullRequestsApi.PostV5ReposOwnerRepoPullsNumberComments(ctx, esc(owner), esc(repo), toInt32(number), gitee.PullRequestCommentPostParam{
+		AccessToken: p.token,
+		Body:        body,
+	})
+	if err != nil {
+		return "", p.sdkErr("CreateNote", resp, err)
 	}
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/pulls/%d/comments", esc(owner), esc(repo), number), reqBody, &resp); err != nil {
-		return "", provider.Wrap(provider.PlatformGitee, "CreateNote", err)
-	}
-	return fmt.Sprintf("%d", resp.ID), nil
+	return strconv.FormatInt(int64(comment.Id), 10), nil
 }
 
 // DeleteNote implements provider.DiffManager.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
-	err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/pulls/comments/%s", esc(owner), esc(repo), esc(noteID)), nil, nil)
+	id, err := strconv.Atoi(noteID)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteNote", err)
+		return provider.Wrapf(provider.PlatformGitee, "DeleteNote", "invalid note id %q", noteID)
+	}
+	resp, err := p.client.PullRequestsApi.DeleteV5ReposOwnerRepoPullsCommentsId(ctx, esc(owner), esc(repo), toInt32(id), &gitee.DeleteV5ReposOwnerRepoPullsCommentsIdOpts{
+		AccessToken: p.accessToken(),
+	})
+	if err != nil {
+		return p.sdkErr("DeleteNote", resp, err)
 	}
 	return nil
 }

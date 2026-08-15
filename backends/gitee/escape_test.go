@@ -71,8 +71,9 @@ func TestGitee_PathEscaping(t *testing.T) {
 }
 
 // TestGitee_QueryValueEscaping verifies that string query values appended to
-// list endpoints (source/target branch, sha, since, until) are
-// query-escaped and decode back to the original values server-side.
+// list endpoints (source/target branch via the SDK's head/base params, sha,
+// since, until) are query-escaped and decode back to the original values
+// server-side.
 func TestGitee_QueryValueEscaping(t *testing.T) {
 	var mu sync.Mutex
 	var queries []url.Values
@@ -101,11 +102,11 @@ func TestGitee_QueryValueEscaping(t *testing.T) {
 	if len(queries) != 2 {
 		t.Fatalf("expected 2 recorded requests, got %d", len(queries))
 	}
-	if got := queries[0].Get("source_branch"); got != "fea ture#1" {
-		t.Errorf("source_branch decoded to %q, want %q", got, "fea ture#1")
+	if got := queries[0].Get("head"); got != "fea ture#1" {
+		t.Errorf("head decoded to %q, want %q", got, "fea ture#1")
 	}
-	if got := queries[0].Get("target_branch"); got != "mai?n" {
-		t.Errorf("target_branch decoded to %q, want %q", got, "mai?n")
+	if got := queries[0].Get("base"); got != "mai?n" {
+		t.Errorf("base decoded to %q, want %q", got, "mai?n")
 	}
 	if got := queries[1].Get("sha"); got != "bra nch" {
 		t.Errorf("sha decoded to %q, want %q", got, "bra nch")
