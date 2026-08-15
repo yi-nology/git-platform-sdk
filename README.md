@@ -64,12 +64,12 @@ func main() {
 
 | Platform | Status | Coverage |
 |----------|--------|----------|
-| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
-| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
-| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
-| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
-| Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
-| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
+| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
+| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
+| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
+| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
+| Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Search |
+| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
 | Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release + exclusive features |
 
 ### Installation
@@ -119,12 +119,12 @@ cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
 
 | 平台 | 状态 | API 覆盖 | 默认 API |
 |------|------|----------|----------|
-| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://api.github.com` |
-| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://gitlab.com/api/v4` |
-| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://gitea.com/api/v1` |
-| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://codeberg.org` |
-| Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://gitee.com/api/v5` |
-| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://api.gitcode.com/api/v5` |
+| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://api.github.com` |
+| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://gitlab.com/api/v4` |
+| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://gitea.com/api/v1` |
+| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://codeberg.org` |
+| Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Search | `https://gitee.com/api/v5` |
+| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://api.gitcode.com/api/v5` |
 | Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
 
 ## 安装
@@ -246,7 +246,7 @@ type Provider interface {
     DiffManager          // GetCRDiff, GetCRFiles, CreateNote, DeleteNote, CreateDiscussion
     CommitManager        // GetCommit, ListCommits, CompareCommits, CreateCommitStatus
     FileManager          // GetFileContent, CreateFile, UpdateFile, DeleteFile
-    ReleaseManager       // ListTags, ListReleases, CreateRelease, GetArchive
+    ReleaseManager       // ListTags, ListReleases, CreateRelease, GetReleaseByTag, UpdateRelease, DeleteRelease, GetArchive
 }
 ```
 
@@ -264,7 +264,7 @@ func (h *WebhookHandler) HandleEvent(r *http.Request) error {
 }
 ```
 
-### 可选能力（Issues / Search / Labels）
+### 可选能力（Issues / Search / Labels / Milestones / Reviews）
 
 并非所有平台都支持全部可选能力。这些接口**不在** `Provider` 组合中，调用方通过
 `Capabilities()` 声明式判断（或直接类型断言）：
@@ -287,9 +287,34 @@ if caps.Labels {
 
 | 能力 | 接口 | 支持平台 |
 |------|------|----------|
-| Issues | `IssueManager` | GitCode / GitHub / GitLab / Gitea / Forgejo / Gitee |
-| Search | `SearchManager` | GitCode |
+| Issues | `IssueManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
+| Search | `SearchManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
 | Labels | `LabelManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
+| Milestones | `MilestoneManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
+| Reviews | `ReviewManager` | GitHub / GitLab / Gitea / Forgejo / GitCode |
+
+说明：
+
+- **Gitee 不声明 Reviews**: Gitee API 只有 PR 审查人员（Testers）指派，没有
+  review 列表/创建/驳回端点，不满足能力门槛（spec §4.6），整接口不做。
+- **Release 加厚属于核心接口而非可选能力**: `ReleaseManager` 新增
+  `GetReleaseByTag` / `UpdateRelease` / `DeleteRelease`（一律按 tag 寻址），
+  7 个平台全部实现。
+
+### 已知限制
+
+- **Gitee `ChangeRequest.Draft` 恒为 `false`**: 线上 PR 载荷有原生 `draft`
+  布尔字段，但 go-gitee SDK 的 `PullRequest` 模型缺该字段（上游 swagger 遗漏），
+  SDK 补齐前无法如实返回。
+- **GitLab Reviews 是 approvals 汇总映射**（已登记，spec §4.6）: GitLab 没有
+  逐条 review 对象，`ListReviews`/`GetReview` 走 MR 审批状态并按审批人合成
+  `approved` 汇总条目（ID 均为 MR IID）；`RequestReviewers` 为登记忽略
+  （`reviewer_ids` 需 username→ID 解析，SDK 无此面）。
+- **Gitea / Forgejo 的 `REQUEST_CHANGES`/`COMMENT` 评审需要 body 或行内评论**:
+  两平台 SDK 的客户端校验拒绝空 body 且无评论的非 APPROVE 评审（APPROVE 豁免）。
+- **Milestone 寻址语义随平台不同**: `MilestoneRef.Number` / `Milestone.Number`
+  在 GitHub 上是 milestone number，在 GitLab/Gitea/Forgejo/GitCode 上是 milestone
+  ID，在 Gitee 上是里程碑序号（载荷 `number` 字段）；跨平台传递 ID 不可移植。
 
 ### Tencent 工蜂专属能力
 
@@ -440,7 +465,7 @@ git-platform-sdk/
 │   ├── gitea/                   # Gitea (gitea SDK + transport 包装)
 │   ├── forgejo/                 # Forgejo (forgejo SDK + transport 包装)
 │   ├── gitcode/                 # GitCode (gitcode_api SDK)
-│   ├── gitee/                   # Gitee (直接使用 transport.Client)
+│   ├── gitee/                   # Gitee (go-gitee SDK + transport 包装, 个别写端点登记 raw 绕行)
 │   ├── tencentcode/             # Tencent 工蜂 (transport.Client + Extras)
 │   ├── all/                     # 一行 blank import 注册所有平台
 │   └── contracttest/            # 跨平台契约测试套件

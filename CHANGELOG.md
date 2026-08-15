@@ -68,18 +68,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reports the API's `total_count`; GitLab rides the typed search scopes
   (`projects`/`issues`/`users`), routing `SearchIssuesOptions.Repo` to the
   project-scoped issue search (its search API has no state/sort/order
-  parameters — registered ignore); Gitea and Forgejo ride the global
-  keyword searches (`/repos/search`, `/repos/issues/search` restricted to
-  real issues via the type filter, `/users/search`) with `Repo` applied as
-  a client-side filter on hit metadata (registered mapping); Gitee rides
+  parameters — registered ignore); Gitea and Forgejo ride the keyword
+  searches (`/repos/search`, `/repos/issues/search` restricted to real
+  issues via the type filter, `/users/search`), routing
+  `SearchIssuesOptions.Repo` to the SDK's `ListRepoIssues`
+  (`/repos/{owner}/{repo}/issues`) so repo scoping is exact and server-side
+  across pages — totals included — with a malformed repo string failing
+  fast instead of silently matching nothing; Gitee rides
   `/v5/search/{repositories,issues,users}` with native repo/state
   parameters. A cross-platform search contract suite
   (`contracttest.RunSearchSuite`, auto-mounted via `Harness.Search` with
   the same bidirectional capability-drift checks as the labels/issues/
   reviews/milestones suites) verifies repo parsing (`full_name`
   `owner/repo`), issue parsing (title plus string number feeding
-  `GetIssue(number string)`), user parsing (`login`), and that the keyword
-  reaches the wire.
+  `GetIssue(number string)`), user parsing (`login`), that the keyword
+  reaches the wire, and that repo-scoped issue search takes a wire route
+  reflecting the repo.
 - **Tag-addressed release get/update/delete on every platform.** The core
   `ReleaseManager` interface gains `GetReleaseByTag`, `UpdateRelease`, and
   `DeleteRelease` plus `UpdateReleaseOptions` (`Name`/`Body`/`Draft`/
@@ -135,6 +139,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   contract suite gained an `IgnoresRequestReviewers` harness flag (in the
   spirit of `IgnoresListPagination`) asserting such registered ignores
   stay silent on the wire.
+
+- **The Gitea and Forgejo backends implement `ReviewManager` and declare
+  `Capabilities().Reviews`**, covering all five methods against real
+  endpoints — zero registered stubs, so the spec's one-stub allowance went
+  unused. `ListReviews`/`GetReview` ride `ListPullReviews`/`GetPullReview`;
+  `CreateReview` is a single `CreatePullReview` call carrying the verdict in
+  the `event` field (the server finalizes immediately — the two-step
+  create-then-submit shape exists only for pending drafts and would double
+  the round trips); `RequestReviewers` rides `CreateReviewRequests` and
+  `DismissReview` rides `DismissPullReview` (both need server ≥1.14, and
+  `DismissPullReview` was spike-verified real, clearing the matrix's last
+  open verification cell for these platforms). One SDK-side behavior to
+  know: the client-side validation rejects a review that carries neither a
+  body nor inline comments unless the verdict is APPROVE, so
+  `REQUEST_CHANGES`/`COMMENT` reviews need a body.
 
 - **The GitCode backend implements `ReviewManager` and declares
   `Capabilities().Reviews`**, restoring the review capability dropped
@@ -209,6 +228,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   note for a future phase: the gongfeng SDK actually ships a complete
   GitLab-shaped `MilestonesService` (list/get/create/edit/delete), so the
   capability is implementable there if ever prioritized.
+
+### Changed
+
+- **The gitee backend is rebuilt on the go-gitee SDK**
+  (`gitee.com/openeuler/go-gitee`): repos, branches, CRs, commits, diffs,
+  files, labels, releases, webhooks, and issues now ride the generated
+  client through the shared transport pipeline, replacing the hand-rolled
+  REST plumbing (URL escaping became the SDK's job, retiring the backend's
+  manual escapers). Known gap: **Gitee's `ChangeRequest.Draft` is always
+  `false`** — the live PR payload carries a `draft` boolean but the SDK's
+  `PullRequest` model omits the field (upstream swagger omission); it
+  returns to wire-accurate once go-gitee models the field. A handful of
+  write endpoints keep doc-registered raw detours where the generated
+  client is unusable (multipart bodies posted as `application/json`,
+  mis-typed models that swallow decode errors into empty results): issue
+  create, webhook create/list, label create/update, milestone
+  create/update, release create/update/delete/get-by-tag, and branch
+  delete (no SDK method exists for the latter).
 
 ### Security
 
