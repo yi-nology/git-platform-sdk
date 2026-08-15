@@ -21,6 +21,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   path forwarded the SDK's canonical `#`-free form, breaking color changes
   against the real API.
 
+### Tests
+
+- The label-management contract suite is now auto-mounted from the main
+  `contracttest.Harness` via the optional `Labels` field: `Run` enforces that
+  a platform declaring `Capabilities().Labels` wires the suite (and vice
+  versa), replacing the six hand-written `TestX_LabelsContract` functions.
+
 ## [v0.38.0] - 2026-08-15
 
 ### ⚠️ Breaking changes

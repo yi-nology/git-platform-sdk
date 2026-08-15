@@ -42,6 +42,11 @@ type Harness struct {
 	// NonEmptyListResponse is the JSON body the mock returns for a non-empty
 	// list, with at least one item that maps to a valid repo.
 	NonEmptyListResponse string
+	// Labels, when non-nil, auto-mounts the label-management suite inside
+	// Run. Run enforces both directions: a platform declaring
+	// Capabilities().Labels must provide this config, and a config must not
+	// be provided by a platform that does not declare the capability.
+	Labels *LabelsHarnessConfig
 }
 
 // Run executes the full contract suite against h. Each subtest is independent.
@@ -55,6 +60,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("Webhook_ValidateSignature", func(t *testing.T) { testWebhookSignature(t, h) })
 	t.Run("Context_Cancel", func(t *testing.T) { testContextCancel(t, h) })
 	t.Run("Capabilities_Consistency", func(t *testing.T) { testCapabilities(t, h) })
+	t.Run("LabelsSuite", func(t *testing.T) { testLabelsSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

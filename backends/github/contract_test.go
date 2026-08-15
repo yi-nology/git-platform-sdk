@@ -26,6 +26,10 @@ func TestGitHub_Contract(t *testing.T) {
 		},
 		EmptyListResponse:    "[]",
 		NonEmptyListResponse: githubNonEmptyList(),
+		Labels: &contracttest.LabelsHarnessConfig{
+			ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			MutateResponse: `{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}`,
+		},
 	})
 }
 
@@ -40,23 +44,4 @@ func githubNonEmptyList() string {
 	}
 	b, _ := json.Marshal(repos)
 	return string(b)
-}
-
-// TestGitHub_LabelsContract runs the label-management contract suite against
-// the GitHub backend.
-func TestGitHub_LabelsContract(t *testing.T) {
-	contracttest.RunLabelsSuite(t, contracttest.LabelsHarness{
-		Name:     "GitHub",
-		Platform: provider.PlatformGitHub,
-		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
-			cfg.BaseURL = cfg.BaseURL + "/api/v3"
-			p, err := provider.NewProvider(cfg)
-			if err != nil {
-				t.Fatalf("NewProvider: %v", err)
-			}
-			return p
-		},
-		ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
-		MutateResponse: `{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}`,
-	})
 }

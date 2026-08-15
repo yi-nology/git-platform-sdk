@@ -20,23 +20,9 @@ func TestGitLab_Contract(t *testing.T) {
 		},
 		EmptyListResponse:    "[]",
 		NonEmptyListResponse: `[{"id":1,"name":"repo","path_with_namespace":"owner/repo","http_url_to_repo":"https://gitlab.com/owner/repo.git","default_branch":"main","visibility":"public"}]`,
-	})
-}
-
-// TestGitLab_LabelsContract runs the label-management contract suite against
-// the GitLab backend.
-func TestGitLab_LabelsContract(t *testing.T) {
-	contracttest.RunLabelsSuite(t, contracttest.LabelsHarness{
-		Name:     "GitLab",
-		Platform: provider.PlatformGitLab,
-		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
-			p, err := provider.NewProvider(cfg)
-			if err != nil {
-				t.Fatalf("NewProvider: %v", err)
-			}
-			return p
+		Labels: &contracttest.LabelsHarnessConfig{
+			ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			MutateResponse: `{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}`,
 		},
-		ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
-		MutateResponse: `{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}`,
 	})
 }

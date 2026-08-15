@@ -14,6 +14,48 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
+// LabelsHarnessConfig carries the fixtures a backend's main Harness needs to
+// auto-mount the label-management suite via Harness.Labels. Name, Platform,
+// and NewProvider are reused from the enclosing Harness.
+type LabelsHarnessConfig struct {
+	// ListResponse is the JSON array the mock returns for GET requests. Its
+	// first item must have name "bug" and color "#4cc917".
+	ListResponse string
+	// MutateResponse is the JSON object the mock returns for POST/PATCH/PUT
+	// requests. It must have name "bug" and color "#4cc917".
+	MutateResponse string
+	// IgnoresListPagination opts the backend out of the wire-level
+	// pagination assertion (see LabelsHarness.IgnoresListPagination).
+	IgnoresListPagination bool
+}
+
+// testLabelsSuite auto-mounts RunLabelsSuite from a main Harness, enforcing
+// that the declared capability and the wired fixtures agree in both
+// directions.
+func testLabelsSuite(t *testing.T, h Harness) {
+	srv := httptest.NewServer(stubHandler(h))
+	defer srv.Close()
+	p := h.NewProvider(t, baseCfg(h, srv.URL))
+	declared := p.Capabilities().Labels
+	switch {
+	case h.Labels == nil && !declared:
+		t.Skipf("%s declares no Labels capability", h.Name)
+	case h.Labels == nil:
+		t.Errorf("%s declares Capabilities().Labels but its Harness provides no Labels config — the labels suite is not wired", h.Name)
+	case !declared:
+		t.Errorf("%s Harness provides a Labels config but the platform does not declare Capabilities().Labels", h.Name)
+	default:
+		RunLabelsSuite(t, LabelsHarness{
+			Name:                  h.Name,
+			Platform:              h.Platform,
+			NewProvider:           h.NewProvider,
+			ListResponse:          h.Labels.ListResponse,
+			MutateResponse:        h.Labels.MutateResponse,
+			IgnoresListPagination: h.Labels.IgnoresListPagination,
+		})
+	}
+}
+
 // LabelsHarness bundles the inputs needed to run the label-management
 // contract suite against a backend that implements provider.LabelManager.
 type LabelsHarness struct {

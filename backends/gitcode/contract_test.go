@@ -20,26 +20,12 @@ func TestGitCode_Contract(t *testing.T) {
 		},
 		EmptyListResponse:    `[]`,
 		NonEmptyListResponse: `[{"id":1,"name":"repo","full_name":"owner/repo","owner":{"login":"owner"},"default_branch":"main"}]`,
-	})
-}
-
-// TestGitCode_LabelsContract runs the label-management contract suite
-// against the GitCode backend.
-func TestGitCode_LabelsContract(t *testing.T) {
-	contracttest.RunLabelsSuite(t, contracttest.LabelsHarness{
-		Name:     "GitCode",
-		Platform: provider.PlatformGitCode,
-		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
-			p, err := provider.NewProvider(cfg)
-			if err != nil {
-				t.Fatalf("NewProvider: %v", err)
-			}
-			return p
+		Labels: &contracttest.LabelsHarnessConfig{
+			ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917"}]`,
+			MutateResponse: `{"id":1,"name":"bug","color":"#4cc917"}`,
+			// The gitcode SDK's ListIssueLabels exposes no page/page-size
+			// parameters, so the backend cannot forward pagination on the wire.
+			IgnoresListPagination: true,
 		},
-		ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917"}]`,
-		MutateResponse: `{"id":1,"name":"bug","color":"#4cc917"}`,
-		// The gitcode SDK's ListIssueLabels exposes no page/page-size
-		// parameters, so the backend cannot forward pagination on the wire.
-		IgnoresListPagination: true,
 	})
 }
