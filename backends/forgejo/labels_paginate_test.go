@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yi-nology/git-platform-sdk/backends/contracttest"
@@ -17,7 +18,16 @@ import (
 // label that sits on page 2, past the 100-label first page.
 func TestForgejo_ResolveLabelID_Paginates(t *testing.T) {
 	page1 := buildLabelsPage(100, "l")
+	var mu sync.Mutex
+	var methods []string
+	var pages []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		methods = append(methods, r.Method)
+		if r.Method == http.MethodGet {
+			pages = append(pages, r.URL.Query().Get("page"))
+		}
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Query().Get("page") == "2":
@@ -40,6 +50,17 @@ func TestForgejo_ResolveLabelID_Paginates(t *testing.T) {
 	lm := p.(provider.LabelManager)
 	if _, err := lm.UpdateLabel(context.Background(), "owner", "repo", "target", provider.UpdateLabelOptions{NewName: &newName}); err != nil {
 		t.Fatalf("UpdateLabel should resolve %q on page 2, got: %v", "target", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if got := len(methods); got != 3 {
+		t.Fatalf("expected exactly 3 requests (2 list GETs + 1 update), got %d: %v", got, methods)
+	}
+	if len(pages) != 2 || pages[0] != "" && pages[0] != "1" || pages[1] != "2" {
+		t.Errorf("expected list GETs for pages 1 and 2 only, got %v", pages)
+	}
+	if methods[2] == http.MethodGet {
+		t.Errorf("expected the final request to be the update verb, got GET")
 	}
 }
 
