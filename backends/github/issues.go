@@ -2,12 +2,33 @@ package github
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/google/go-github/v69/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
+
+// issueNumber parses the SDK's string issue number into GitHub's int form.
+// op is the public operation the parse serves; failures surface under it.
+func issueNumber(op, number string) (int, error) {
+	n, err := strconv.Atoi(number)
+	if err != nil {
+		return 0, provider.Wrapf(provider.PlatformGitHub, op, "invalid issue number %q", number)
+	}
+	return n, nil
+}
+
+// milestoneNumber parses the SDK's string milestone identifier (GitHub
+// milestone numbers) into GitHub's int form.
+func milestoneNumber(op, milestone string) (int, error) {
+	m, err := strconv.Atoi(milestone)
+	if err != nil {
+		return 0, provider.Wrapf(provider.PlatformGitHub, op, "invalid milestone number %q", milestone)
+	}
+	return m, nil
+}
 
 // ListIssues implements provider.IssueManager.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
@@ -34,8 +55,12 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 }
 
 // GetIssue implements provider.IssueManager.
-func (p *Provider) GetIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
-	issue, _, err := p.client.Issues.Get(ctx, owner, repo, number)
+func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
+	n, err := issueNumber("GetIssue", number)
+	if err != nil {
+		return nil, err
+	}
+	issue, _, err := p.client.Issues.Get(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "GetIssue", err)
 	}
@@ -54,8 +79,12 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	if len(opts.Labels) > 0 {
 		req.Labels = &opts.Labels
 	}
-	if opts.Milestone != 0 {
-		req.Milestone = github.Ptr(opts.Milestone)
+	if opts.Milestone != "" {
+		m, err := milestoneNumber("CreateIssue", opts.Milestone)
+		if err != nil {
+			return nil, err
+		}
+		req.Milestone = github.Ptr(m)
 	}
 	issue, _, err := p.client.Issues.Create(ctx, opts.Owner, opts.Repo, req)
 	if err != nil {
@@ -65,7 +94,11 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 }
 
 // UpdateIssue implements provider.IssueManager.
-func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number int, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
+func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
+	n, err := issueNumber("UpdateIssue", number)
+	if err != nil {
+		return nil, err
+	}
 	req := &github.IssueRequest{}
 	if opts.Title != "" {
 		req.Title = github.Ptr(opts.Title)
@@ -79,10 +112,14 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number i
 	if len(opts.Labels) > 0 {
 		req.Labels = &opts.Labels
 	}
-	if opts.Milestone != 0 {
-		req.Milestone = github.Ptr(opts.Milestone)
+	if opts.Milestone != "" {
+		m, err := milestoneNumber("UpdateIssue", opts.Milestone)
+		if err != nil {
+			return nil, err
+		}
+		req.Milestone = github.Ptr(m)
 	}
-	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, number, req)
+	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, n, req)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateIssue", err)
 	}
@@ -90,8 +127,12 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number i
 }
 
 // CloseIssue implements provider.IssueManager.
-func (p *Provider) CloseIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
-	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, number, &github.IssueRequest{State: github.Ptr("closed")})
+func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
+	n, err := issueNumber("CloseIssue", number)
+	if err != nil {
+		return nil, err
+	}
+	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, n, &github.IssueRequest{State: github.Ptr("closed")})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CloseIssue", err)
 	}
@@ -99,8 +140,12 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo string, number in
 }
 
 // ReopenIssue implements provider.IssueManager.
-func (p *Provider) ReopenIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
-	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, number, &github.IssueRequest{State: github.Ptr("open")})
+func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
+	n, err := issueNumber("ReopenIssue", number)
+	if err != nil {
+		return nil, err
+	}
+	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, n, &github.IssueRequest{State: github.Ptr("open")})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ReopenIssue", err)
 	}
@@ -108,8 +153,12 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo string, number i
 }
 
 // ListIssueComments implements provider.IssueManager.
-func (p *Provider) ListIssueComments(ctx context.Context, owner, repo string, number int) ([]*provider.IssueComment, error) {
-	comments, _, err := p.client.Issues.ListComments(ctx, owner, repo, number, nil)
+func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
+	n, err := issueNumber("ListIssueComments", number)
+	if err != nil {
+		return nil, err
+	}
+	comments, _, err := p.client.Issues.ListComments(ctx, owner, repo, n, nil)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListIssueComments", err)
 	}
@@ -121,8 +170,12 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo string, nu
 }
 
 // CreateIssueComment implements provider.IssueManager.
-func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo string, number int, body string) (*provider.IssueComment, error) {
-	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, number, &github.IssueComment{Body: github.Ptr(body)})
+func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
+	n, err := issueNumber("CreateIssueComment", number)
+	if err != nil {
+		return nil, err
+	}
+	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, n, &github.IssueComment{Body: github.Ptr(body)})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateIssueComment", err)
 	}
@@ -143,16 +196,24 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 }
 
 // AddIssueLabels implements provider.IssueManager.
-func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
-	if _, _, err := p.client.Issues.AddLabelsToIssue(ctx, owner, repo, number, labels); err != nil {
+func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	n, err := issueNumber("AddIssueLabels", number)
+	if err != nil {
+		return err
+	}
+	if _, _, err := p.client.Issues.AddLabelsToIssue(ctx, owner, repo, n, labels); err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "AddIssueLabels", err)
 	}
 	return nil
 }
 
 // RemoveIssueLabel implements provider.IssueManager.
-func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo string, number int, name string) error {
-	if _, err := p.client.Issues.RemoveLabelForIssue(ctx, owner, repo, number, name); err != nil {
+func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
+	n, err := issueNumber("RemoveIssueLabel", number)
+	if err != nil {
+		return err
+	}
+	if _, err := p.client.Issues.RemoveLabelForIssue(ctx, owner, repo, n, name); err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "RemoveIssueLabel", err)
 	}
 	return nil
@@ -165,11 +226,11 @@ func convertIssue(i *github.Issue) *provider.Issue {
 	}
 	var milestone *provider.MilestoneRef
 	if i.Milestone != nil {
-		milestone = &provider.MilestoneRef{Number: i.Milestone.GetNumber(), Title: i.Milestone.GetTitle()}
+		milestone = &provider.MilestoneRef{Number: strconv.Itoa(i.Milestone.GetNumber()), Title: i.Milestone.GetTitle()}
 	}
 	issue := &provider.Issue{
 		ID:        i.GetID(),
-		Number:    i.GetNumber(),
+		Number:    strconv.Itoa(i.GetNumber()),
 		Title:     i.GetTitle(),
 		Body:      i.GetBody(),
 		Author:    convertUser(i.GetUser()),

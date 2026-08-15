@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,11 +13,10 @@ import (
 
 // This file implements the full provider.IssueManager surface over Gitee's
 // native REST endpoints, but the capability is deliberately NOT declared in
-// Capabilities() (see gitee.go): every current Gitee repo returns
-// alphanumeric string issue numbers (e.g. "IAINVA"), which the int-typed
-// IssueManager can neither decode nor address. The implementation stays
-// compile-guarded and spike-ready; re-declare Issues after the
-// issue-addressing spike redesigns the interface around string identifiers.
+// Capabilities() (see gitee.go): its verification against live Gitee and the
+// contract fixtures is pending the SDK migration. The string-typed issue
+// numbers now match Gitee's alphanumeric identifiers (e.g. "IAINVA")
+// natively. The implementation stays compile-guarded and spike-ready.
 
 // giteeUser mirrors Gitee's user JSON shape.
 type giteeUser struct {
@@ -30,9 +30,10 @@ type giteeMilestone struct {
 	Title string `json:"title"`
 }
 
-// giteeIssue mirrors Gitee's v5 issue JSON shape.
+// giteeIssue mirrors Gitee's v5 issue JSON shape. Number is Gitee's
+// alphanumeric issue identifier as a string.
 type giteeIssue struct {
-	Number    int             `json:"number"`
+	Number    string          `json:"number"`
 	Title     string          `json:"title"`
 	Body      string          `json:"body"`
 	State     string          `json:"state"`
@@ -78,10 +79,11 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	return result, len(result), nil
 }
 
-// GetIssue implements provider.IssueManager.
-func (p *Provider) GetIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
+// GetIssue implements provider.IssueManager. Gitee addresses issues by
+// their alphanumeric string number directly.
+func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
 	var issue giteeIssue
-	path := fmt.Sprintf("/repos/%s/%s/issues/%d", esc(owner), esc(repo), number)
+	path := fmt.Sprintf("/repos/%s/%s/issues/%s", esc(owner), esc(repo), esc(number))
 	if err := p.doRequest(ctx, "GET", path, nil, &issue); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetIssue", err)
 	}
@@ -100,8 +102,12 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	if len(opts.Assignees) > 0 {
 		body["assignees"] = strings.Join(opts.Assignees, ",")
 	}
-	if opts.Milestone != 0 {
-		body["milestone"] = opts.Milestone
+	if opts.Milestone != "" {
+		m, err := strconv.Atoi(opts.Milestone)
+		if err != nil {
+			return nil, provider.Wrapf(provider.PlatformGitee, "CreateIssue", "invalid milestone number %q", opts.Milestone)
+		}
+		body["milestone"] = m
 	}
 	var issue giteeIssue
 	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/issues", esc(opts.Owner), esc(opts.Repo)), body, &issue); err != nil {
@@ -111,7 +117,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 }
 
 // UpdateIssue implements provider.IssueManager.
-func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number int, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
+func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
 	body := map[string]any{}
 	if opts.Title != "" {
 		body["title"] = opts.Title
@@ -128,32 +134,36 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number i
 	if len(opts.Labels) > 0 {
 		body["labels"] = strings.Join(opts.Labels, ",")
 	}
-	if opts.Milestone != 0 {
-		body["milestone"] = opts.Milestone
+	if opts.Milestone != "" {
+		m, err := strconv.Atoi(opts.Milestone)
+		if err != nil {
+			return nil, provider.Wrapf(provider.PlatformGitee, "UpdateIssue", "invalid milestone number %q", opts.Milestone)
+		}
+		body["milestone"] = m
 	}
 	var issue giteeIssue
-	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/issues/%d", esc(owner), esc(repo), number), body, &issue); err != nil {
+	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/issues/%s", esc(owner), esc(repo), esc(number)), body, &issue); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // CloseIssue implements provider.IssueManager.
-func (p *Provider) CloseIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
+func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
 	return p.patchIssueState(ctx, owner, repo, number, "closed", "CloseIssue")
 }
 
 // ReopenIssue implements provider.IssueManager.
-func (p *Provider) ReopenIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
+func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
 	return p.patchIssueState(ctx, owner, repo, number, "open", "ReopenIssue")
 }
 
 // patchIssueState flips an issue's state via PATCH, forwarding the caller's
 // context. op is the public operation this patch serves; failures surface
 // under that op.
-func (p *Provider) patchIssueState(ctx context.Context, owner, repo string, number int, state, op string) (*provider.Issue, error) {
+func (p *Provider) patchIssueState(ctx context.Context, owner, repo, number, state, op string) (*provider.Issue, error) {
 	var issue giteeIssue
-	path := fmt.Sprintf("/repos/%s/%s/issues/%d", esc(owner), esc(repo), number)
+	path := fmt.Sprintf("/repos/%s/%s/issues/%s", esc(owner), esc(repo), esc(number))
 	if err := p.doRequest(ctx, "PATCH", path, map[string]any{"state": state}, &issue); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, op, err)
 	}
@@ -161,9 +171,9 @@ func (p *Provider) patchIssueState(ctx context.Context, owner, repo string, numb
 }
 
 // ListIssueComments implements provider.IssueManager.
-func (p *Provider) ListIssueComments(ctx context.Context, owner, repo string, number int) ([]*provider.IssueComment, error) {
+func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	var comments []giteeIssueComment
-	path := fmt.Sprintf("/repos/%s/%s/issues/%d/comments", esc(owner), esc(repo), number)
+	path := fmt.Sprintf("/repos/%s/%s/issues/%s/comments", esc(owner), esc(repo), esc(number))
 	if err := p.doRequest(ctx, "GET", path, nil, &comments); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListIssueComments", err)
 	}
@@ -175,9 +185,9 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo string, nu
 }
 
 // CreateIssueComment implements provider.IssueManager.
-func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo string, number int, body string) (*provider.IssueComment, error) {
+func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
 	var comment giteeIssueComment
-	path := fmt.Sprintf("/repos/%s/%s/issues/%d/comments", esc(owner), esc(repo), number)
+	path := fmt.Sprintf("/repos/%s/%s/issues/%s/comments", esc(owner), esc(repo), esc(number))
 	if err := p.doRequest(ctx, "POST", path, map[string]any{"body": body}, &comment); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateIssueComment", err)
 	}
@@ -198,8 +208,8 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 }
 
 // AddIssueLabels implements provider.IssueManager.
-func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
-	path := fmt.Sprintf("/repos/%s/%s/issues/%d/labels", esc(owner), esc(repo), number)
+func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	path := fmt.Sprintf("/repos/%s/%s/issues/%s/labels", esc(owner), esc(repo), esc(number))
 	body := map[string]any{"labels": strings.Join(labels, ",")}
 	if err := p.doRequest(ctx, "POST", path, body, nil); err != nil {
 		return provider.Wrap(provider.PlatformGitee, "AddIssueLabels", err)
@@ -208,8 +218,8 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo string, numbe
 }
 
 // RemoveIssueLabel implements provider.IssueManager.
-func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo string, number int, name string) error {
-	path := fmt.Sprintf("/repos/%s/%s/issues/%d/labels/%s", esc(owner), esc(repo), number, esc(name))
+func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
+	path := fmt.Sprintf("/repos/%s/%s/issues/%s/labels/%s", esc(owner), esc(repo), esc(number), esc(name))
 	if err := p.doRequest(ctx, "DELETE", path, nil, nil); err != nil {
 		return provider.Wrap(provider.PlatformGitee, "RemoveIssueLabel", err)
 	}
@@ -233,7 +243,7 @@ func convertIssue(i giteeIssue) *provider.Issue {
 		issue.Assignees = append(issue.Assignees, a.Login)
 	}
 	if i.Milestone != nil {
-		issue.Milestone = &provider.MilestoneRef{Number: i.Milestone.ID, Title: i.Milestone.Title}
+		issue.Milestone = &provider.MilestoneRef{Number: strconv.Itoa(i.Milestone.ID), Title: i.Milestone.Title}
 	}
 	issue.CreatedAt, issue.UpdatedAt = i.CreatedAt, i.UpdatedAt
 	return issue

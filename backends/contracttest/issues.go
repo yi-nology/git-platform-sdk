@@ -127,7 +127,7 @@ func assertIssueListNormalized(t *testing.T, im provider.IssueManager) {
 	if issues[0].State != provider.IssueStateOpen {
 		t.Errorf("expected state open, got %q", issues[0].State)
 	}
-	if issues[0].Milestone == nil || issues[0].Milestone.Number != 1 || issues[0].Milestone.Title != "v1" {
+	if issues[0].Milestone == nil || issues[0].Milestone.Number != "1" || issues[0].Milestone.Title != "v1" {
 		t.Errorf("expected milestone ref {1, v1}, got %+v", issues[0].Milestone)
 	}
 }
@@ -135,7 +135,7 @@ func assertIssueListNormalized(t *testing.T, im provider.IssueManager) {
 // assertIssueGet checks that GetIssue returns the fixture issue.
 func assertIssueGet(t *testing.T, im provider.IssueManager) {
 	t.Helper()
-	issue, err := im.GetIssue(context.Background(), "owner", "repo", 1)
+	issue, err := im.GetIssue(context.Background(), "owner", "repo", "1")
 	if err != nil {
 		t.Fatalf("GetIssue: %v", err)
 	}
@@ -159,7 +159,7 @@ func assertIssueCreateWire(t *testing.T, im provider.IssueManager, requests *[]r
 func assertIssueUpdateWire(t *testing.T, im provider.IssueManager, requests *[]recordedRequest) {
 	t.Helper()
 	title := "bug-2"
-	if _, err := im.UpdateIssue(context.Background(), "owner", "repo", 1, provider.UpdateIssueOptions{Title: title}); err != nil {
+	if _, err := im.UpdateIssue(context.Background(), "owner", "repo", "1", provider.UpdateIssueOptions{Title: title}); err != nil {
 		t.Fatalf("UpdateIssue: %v", err)
 	}
 	if !sawMethod(*requests, http.MethodPatch, http.MethodPut) {
@@ -171,10 +171,10 @@ func assertIssueUpdateWire(t *testing.T, im provider.IssueManager, requests *[]r
 // assertIssueCloseReopen checks that both state transitions succeed.
 func assertIssueCloseReopen(t *testing.T, im provider.IssueManager) {
 	t.Helper()
-	if _, err := im.CloseIssue(context.Background(), "owner", "repo", 1); err != nil {
+	if _, err := im.CloseIssue(context.Background(), "owner", "repo", "1"); err != nil {
 		t.Fatalf("CloseIssue: %v", err)
 	}
-	if _, err := im.ReopenIssue(context.Background(), "owner", "repo", 1); err != nil {
+	if _, err := im.ReopenIssue(context.Background(), "owner", "repo", "1"); err != nil {
 		t.Fatalf("ReopenIssue: %v", err)
 	}
 }
@@ -182,14 +182,14 @@ func assertIssueCloseReopen(t *testing.T, im provider.IssueManager) {
 // assertIssueComments checks comment listing (body) and creation (wire body).
 func assertIssueComments(t *testing.T, im provider.IssueManager, requests *[]recordedRequest) {
 	t.Helper()
-	comments, err := im.ListIssueComments(context.Background(), "owner", "repo", 1)
+	comments, err := im.ListIssueComments(context.Background(), "owner", "repo", "1")
 	if err != nil || len(comments) == 0 {
 		t.Fatalf("ListIssueComments: comments=%d err=%v", len(comments), err)
 	}
 	if comments[0].Body != "a comment" {
 		t.Errorf("expected comment body %q, got %q", "a comment", comments[0].Body)
 	}
-	if _, err := im.CreateIssueComment(context.Background(), "owner", "repo", 1, "a comment"); err != nil {
+	if _, err := im.CreateIssueComment(context.Background(), "owner", "repo", "1", "a comment"); err != nil {
 		t.Fatalf("CreateIssueComment: %v", err)
 	}
 	assertBodyHas(t, requests, http.MethodPost, "body", "a comment")
@@ -207,10 +207,10 @@ func assertIssueLabelOps(t *testing.T, im provider.IssueManager, requests *[]rec
 	if labels[0].Color != "4cc917" {
 		t.Errorf("expected normalized color 4cc917, got %q", labels[0].Color)
 	}
-	if err := im.AddIssueLabels(context.Background(), "owner", "repo", 1, []string{"bug"}); err != nil {
+	if err := im.AddIssueLabels(context.Background(), "owner", "repo", "1", []string{"bug"}); err != nil {
 		t.Fatalf("AddIssueLabels: %v", err)
 	}
-	if err := im.RemoveIssueLabel(context.Background(), "owner", "repo", 1, "bug"); err != nil {
+	if err := im.RemoveIssueLabel(context.Background(), "owner", "repo", "1", "bug"); err != nil {
 		t.Fatalf("RemoveIssueLabel: %v", err)
 	}
 	if !sawLabelRemoval(*requests) {

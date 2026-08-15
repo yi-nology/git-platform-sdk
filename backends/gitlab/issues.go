@@ -2,12 +2,34 @@ package gitlab
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
+
+// issueNumber parses the SDK's string issue number into GitLab's int64 IID
+// form. op is the public operation the parse serves; failures surface under
+// it.
+func issueNumber(op, number string) (int64, error) {
+	n, err := strconv.ParseInt(number, 10, 64)
+	if err != nil {
+		return 0, provider.Wrapf(provider.PlatformGitLab, op, "invalid issue number %q", number)
+	}
+	return n, nil
+}
+
+// milestoneNumber parses the SDK's string milestone identifier (GitLab
+// milestone IDs) into GitLab's int64 form.
+func milestoneNumber(op, milestone string) (int64, error) {
+	m, err := strconv.ParseInt(milestone, 10, 64)
+	if err != nil {
+		return 0, provider.Wrapf(provider.PlatformGitLab, op, "invalid milestone number %q", milestone)
+	}
+	return m, nil
+}
 
 // ListIssues implements provider.IssueManager.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
@@ -39,8 +61,12 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 }
 
 // GetIssue implements provider.IssueManager.
-func (p *Provider) GetIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
-	issue, _, err := p.client.Issues.GetIssue(pidOf(owner, repo), int64(number), gitlab.WithContext(ctx))
+func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
+	n, err := issueNumber("GetIssue", number)
+	if err != nil {
+		return nil, err
+	}
+	issue, _, err := p.client.Issues.GetIssue(pidOf(owner, repo), n, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "GetIssue", err)
 	}
@@ -59,8 +85,12 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		lo := gitlab.LabelOptions(opts.Labels)
 		createOpts.Labels = &lo
 	}
-	if opts.Milestone != 0 {
-		createOpts.MilestoneID = gitlab.Ptr(int64(opts.Milestone))
+	if opts.Milestone != "" {
+		m, err := milestoneNumber("CreateIssue", opts.Milestone)
+		if err != nil {
+			return nil, err
+		}
+		createOpts.MilestoneID = gitlab.Ptr(m)
 	}
 	issue, _, err := p.client.Issues.CreateIssue(pidOf(opts.Owner, opts.Repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -71,7 +101,11 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 
 // UpdateIssue implements provider.IssueManager.
 // opts.Assignees is ignored (see CreateIssue).
-func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number int, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
+func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
+	n, err := issueNumber("UpdateIssue", number)
+	if err != nil {
+		return nil, err
+	}
 	updateOpts := &gitlab.UpdateIssueOptions{}
 	if opts.Title != "" {
 		updateOpts.Title = gitlab.Ptr(opts.Title)
@@ -90,10 +124,14 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number i
 		lo := gitlab.LabelOptions(opts.Labels)
 		updateOpts.Labels = &lo
 	}
-	if opts.Milestone != 0 {
-		updateOpts.MilestoneID = gitlab.Ptr(int64(opts.Milestone))
+	if opts.Milestone != "" {
+		m, err := milestoneNumber("UpdateIssue", opts.Milestone)
+		if err != nil {
+			return nil, err
+		}
+		updateOpts.MilestoneID = gitlab.Ptr(m)
 	}
-	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), int64(number), updateOpts, gitlab.WithContext(ctx))
+	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), n, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateIssue", err)
 	}
@@ -101,8 +139,12 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number i
 }
 
 // CloseIssue implements provider.IssueManager via the state_event API.
-func (p *Provider) CloseIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
-	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), int64(number),
+func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
+	n, err := issueNumber("CloseIssue", number)
+	if err != nil {
+		return nil, err
+	}
+	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), n,
 		&gitlab.UpdateIssueOptions{StateEvent: gitlab.Ptr("close")}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CloseIssue", err)
@@ -111,8 +153,12 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo string, number in
 }
 
 // ReopenIssue implements provider.IssueManager via the state_event API.
-func (p *Provider) ReopenIssue(ctx context.Context, owner, repo string, number int) (*provider.Issue, error) {
-	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), int64(number),
+func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
+	n, err := issueNumber("ReopenIssue", number)
+	if err != nil {
+		return nil, err
+	}
+	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), n,
 		&gitlab.UpdateIssueOptions{StateEvent: gitlab.Ptr("reopen")}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ReopenIssue", err)
@@ -122,21 +168,29 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo string, number i
 
 // ListIssueComments implements provider.IssueManager. GitLab models issue
 // comments as notes.
-func (p *Provider) ListIssueComments(ctx context.Context, owner, repo string, number int) ([]*provider.IssueComment, error) {
-	notes, _, err := p.client.Notes.ListIssueNotes(pidOf(owner, repo), int64(number), nil, gitlab.WithContext(ctx))
+func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
+	n, err := issueNumber("ListIssueComments", number)
+	if err != nil {
+		return nil, err
+	}
+	notes, _, err := p.client.Notes.ListIssueNotes(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListIssueComments", err)
 	}
 	result := make([]*provider.IssueComment, 0, len(notes))
-	for _, n := range notes {
-		result = append(result, convertIssueComment(n))
+	for _, note := range notes {
+		result = append(result, convertIssueComment(note))
 	}
 	return result, nil
 }
 
 // CreateIssueComment implements provider.IssueManager.
-func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo string, number int, body string) (*provider.IssueComment, error) {
-	note, _, err := p.client.Notes.CreateIssueNote(pidOf(owner, repo), int64(number),
+func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
+	n, err := issueNumber("CreateIssueComment", number)
+	if err != nil {
+		return nil, err
+	}
+	note, _, err := p.client.Notes.CreateIssueNote(pidOf(owner, repo), n,
 		&gitlab.CreateIssueNoteOptions{Body: gitlab.Ptr(body)}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CreateIssueComment", err)
@@ -159,9 +213,13 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 }
 
 // AddIssueLabels implements provider.IssueManager via add_labels.
-func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
+func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	n, err := issueNumber("AddIssueLabels", number)
+	if err != nil {
+		return err
+	}
 	lo := gitlab.LabelOptions(labels)
-	_, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), int64(number),
+	_, _, err = p.client.Issues.UpdateIssue(pidOf(owner, repo), n,
 		&gitlab.UpdateIssueOptions{AddLabels: &lo}, gitlab.WithContext(ctx))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitLab, "AddIssueLabels", err)
@@ -170,9 +228,13 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo string, numbe
 }
 
 // RemoveIssueLabel implements provider.IssueManager via remove_labels.
-func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo string, number int, name string) error {
+func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
+	n, err := issueNumber("RemoveIssueLabel", number)
+	if err != nil {
+		return err
+	}
 	rl := gitlab.LabelOptions{name}
-	_, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), int64(number),
+	_, _, err = p.client.Issues.UpdateIssue(pidOf(owner, repo), n,
 		&gitlab.UpdateIssueOptions{RemoveLabels: &rl}, gitlab.WithContext(ctx))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitLab, "RemoveIssueLabel", err)
@@ -203,7 +265,7 @@ func convertIssue(i *gitlab.Issue) *provider.Issue {
 	}
 	issue := &provider.Issue{
 		ID:     i.ID,
-		Number: int(i.IID),
+		Number: strconv.FormatInt(i.IID, 10),
 		Title:  i.Title,
 		Body:   i.Description,
 		Labels: append([]string(nil), i.Labels...),
@@ -217,7 +279,7 @@ func convertIssue(i *gitlab.Issue) *provider.Issue {
 		issue.State = provider.IssueStateClosed
 	}
 	if i.Milestone != nil {
-		issue.Milestone = &provider.MilestoneRef{Number: int(i.Milestone.ID), Title: i.Milestone.Title}
+		issue.Milestone = &provider.MilestoneRef{Number: strconv.FormatInt(i.Milestone.ID, 10), Title: i.Milestone.Title}
 	}
 	for _, a := range i.Assignees {
 		issue.Assignees = append(issue.Assignees, a.Username)

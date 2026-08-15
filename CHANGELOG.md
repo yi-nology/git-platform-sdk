@@ -6,6 +6,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ⚠️ Breaking changes
+
+- **`IssueManager` methods now address issues by string number.** The eight
+  number-taking methods (`GetIssue`, `UpdateIssue`, `CloseIssue`,
+  `ReopenIssue`, `ListIssueComments`, `CreateIssueComment`, `AddIssueLabels`,
+  `RemoveIssueLabel`) changed `number int` → `number string`, and
+  `Issue.Number` changed `int` → `string`. Numeric platforms (GitHub, GitLab,
+  Gitea, Forgejo, GitCode) parse internally and return a wrapped
+  `invalid issue number` error on non-numeric input; Gitee's alphanumeric
+  identifiers (e.g. "IAINVA") are now natively representable. Pass `"1"`
+  where `1` was passed before.
+- **`CreateIssueOptions.Milestone`/`UpdateIssueOptions.Milestone` changed
+  `int` → `string`, and `MilestoneRef.Number` changed `int` → `string`.**
+  The option carries the platform's milestone addressing identifier as a
+  string (`""` = don't set on create / leave unchanged on update);
+  `MilestoneRef.Number` is the same identifier as returned by the platform
+  (milestone number on GitHub, milestone ID on GitLab, Gitea, Forgejo, and
+  GitCode).
+
 ## [v0.39.0] - 2026-08-15
 
 ### ⚠️ Breaking changes
