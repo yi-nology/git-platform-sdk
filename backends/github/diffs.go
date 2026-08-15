@@ -10,11 +10,15 @@ import (
 )
 
 // GetCRDiff implements provider.DiffManager.
-func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*provider.MergeDiff, error) {
+func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
+	n, err := prNumber("GetCRDiff", number)
+	if err != nil {
+		return nil, err
+	}
 	diff := &provider.MergeDiff{}
 	page := 1
 	for {
-		files, _, err := p.client.PullRequests.ListFiles(ctx, owner, repo, number, &github.ListOptions{
+		files, _, err := p.client.PullRequests.ListFiles(ctx, owner, repo, n, &github.ListOptions{
 			Page:    page,
 			PerPage: 100,
 		})
@@ -48,7 +52,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int
 }
 
 // GetCRFiles implements provider.DiffManager.
-func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*provider.ChangedFile, error) {
+func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*provider.ChangedFile, error) {
 	diff, err := p.GetCRDiff(ctx, owner, repo, number)
 	if err != nil {
 		return nil, err
@@ -57,8 +61,12 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number in
 }
 
 // CreateNote implements provider.DiffManager.
-func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
-	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, number, &github.IssueComment{
+func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
+	n, err := prNumber("CreateNote", number)
+	if err != nil {
+		return "", err
+	}
+	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, n, &github.IssueComment{
 		Body: github.Ptr(body),
 	})
 	if err != nil {
@@ -67,8 +75,13 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number in
 	return strconv.FormatInt(comment.GetID(), 10), nil
 }
 
-// DeleteNote implements provider.DiffManager.
-func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
+// DeleteNote implements provider.DiffManager. The note itself is addressed
+// by its numeric platform ID; the change-request number is only validated,
+// as GitHub's delete-comment endpoint does not take it.
+func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
+	if _, err := prNumber("DeleteNote", number); err != nil {
+		return err
+	}
 	id, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
 		return provider.Wrapf(provider.PlatformGitHub, "DeleteNote", "invalid note ID %q: %v", noteID, err)
@@ -81,7 +94,11 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number in
 }
 
 // CreateDiscussion implements provider.DiffManager.
-func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts provider.DiscussionOptions) (string, error) {
+func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
+	n, err := prNumber("CreateDiscussion", number)
+	if err != nil {
+		return "", err
+	}
 	comment := &github.PullRequestComment{
 		Body: github.Ptr(opts.Body),
 		Path: github.Ptr(opts.FilePath),
@@ -93,7 +110,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 		comment.Line = github.Ptr(opts.OldLine)
 		comment.Side = github.Ptr("LEFT")
 	}
-	c, _, err := p.client.PullRequests.CreateComment(ctx, owner, repo, number, comment)
+	c, _, err := p.client.PullRequests.CreateComment(ctx, owner, repo, n, comment)
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitHub, "CreateDiscussion", err)
 	}

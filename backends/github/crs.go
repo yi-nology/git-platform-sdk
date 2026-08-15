@@ -2,11 +2,23 @@ package github
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/google/go-github/v69/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
+
+// prNumber parses the SDK's string change-request number into GitHub's int
+// form. op is the public operation the parse serves; failures surface
+// under it.
+func prNumber(op, number string) (int, error) {
+	n, err := strconv.Atoi(number)
+	if err != nil {
+		return 0, provider.Wrapf(provider.PlatformGitHub, op, "invalid pull request number %q", number)
+	}
+	return n, nil
+}
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
@@ -24,8 +36,12 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
-	pr, _, err := p.client.PullRequests.Get(ctx, owner, repo, number)
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("GetCR", number)
+	if err != nil {
+		return nil, err
+	}
+	pr, _, err := p.client.PullRequests.Get(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "GetCR", err)
 	}
@@ -65,12 +81,16 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+	n, err := prNumber("MergeCR", number)
+	if err != nil {
+		return nil, err
+	}
 	mergeOpts := &github.PullRequestOptions{}
 	if opts.Squash {
 		mergeOpts.MergeMethod = "squash"
 	}
-	_, _, err := p.client.PullRequests.Merge(ctx, owner, repo, number, opts.MergeCommitMessage, mergeOpts)
+	_, _, err = p.client.PullRequests.Merge(ctx, owner, repo, n, opts.MergeCommitMessage, mergeOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "MergeCR", err)
 	}
@@ -78,8 +98,12 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, 
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
-	pr, _, err := p.client.PullRequests.Edit(ctx, owner, repo, number, &github.PullRequest{
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("CloseCR", number)
+	if err != nil {
+		return nil, err
+	}
+	pr, _, err := p.client.PullRequests.Edit(ctx, owner, repo, n, &github.PullRequest{
 		State: github.Ptr("closed"),
 	})
 	if err != nil {
@@ -89,8 +113,12 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) 
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
-	result, _, err := p.client.PullRequests.Edit(ctx, owner, repo, number, &github.PullRequest{
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("ReopenCR", number)
+	if err != nil {
+		return nil, err
+	}
+	result, _, err := p.client.PullRequests.Edit(ctx, owner, repo, n, &github.PullRequest{
 		State: github.Ptr("open"),
 	})
 	if err != nil {
@@ -100,7 +128,11 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int)
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+	n, err := prNumber("UpdateCR", number)
+	if err != nil {
+		return nil, err
+	}
 	pr := &github.PullRequest{}
 	if opts.Title != "" {
 		pr.Title = github.Ptr(opts.Title)
@@ -111,7 +143,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 	if opts.TargetBranch != "" {
 		pr.Base = &github.PullRequestBranch{Ref: github.Ptr(opts.TargetBranch)}
 	}
-	result, _, err := p.client.PullRequests.Edit(ctx, owner, repo, number, pr)
+	result, _, err := p.client.PullRequests.Edit(ctx, owner, repo, n, pr)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateCR", err)
 	}
@@ -119,8 +151,12 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
-	_, _, err := p.client.Issues.AddLabelsToIssue(ctx, owner, repo, number, labels)
+func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	n, err := prNumber("UpdateCRLabels", number)
+	if err != nil {
+		return err
+	}
+	_, _, err = p.client.Issues.AddLabelsToIssue(ctx, owner, repo, n, labels)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "UpdateCRLabels", err)
 	}
@@ -128,8 +164,12 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, numbe
 }
 
 // ListCRComments implements provider.ChangeRequestManager.
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*provider.CRComment, error) {
-	comments, _, err := p.client.PullRequests.ListComments(ctx, owner, repo, number, nil)
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
+	n, err := prNumber("ListCRComments", number)
+	if err != nil {
+		return nil, err
+	}
+	comments, _, err := p.client.PullRequests.ListComments(ctx, owner, repo, n, nil)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRComments", err)
 	}
@@ -150,8 +190,12 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, numbe
 }
 
 // ListCRCommits implements provider.ChangeRequestManager.
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*provider.CRCommit, error) {
-	commits, _, err := p.client.PullRequests.ListCommits(ctx, owner, repo, number, nil)
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
+	n, err := prNumber("ListCRCommits", number)
+	if err != nil {
+		return nil, err
+	}
+	commits, _, err := p.client.PullRequests.ListCommits(ctx, owner, repo, n, nil)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRCommits", err)
 	}

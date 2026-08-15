@@ -12,7 +12,7 @@ import (
 
 // ListReviews implements provider.ReviewManager.
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	index, err := issueNumber("ListReviews", number)
+	index, err := prNumber("ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 
 // GetReview implements provider.ReviewManager.
 func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	index, err := issueNumber("GetReview", number)
+	index, err := prNumber("GetReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 // GitHub-style values: APPROVE and REQUEST_CHANGES map to the forgejo states
 // of the same names; anything else (COMMENT included) becomes COMMENT.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	index, err := issueNumber("CreateReview", number)
+	index, err := prNumber("CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 // CreateReviewRequests, which posts the reviewer logins under the same
 // "reviewers" wire key as GitHub.
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	index, err := issueNumber("RequestReviewers", number)
+	index, err := prNumber("RequestReviewers", number)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 // DismissReview implements provider.ReviewManager via DismissPullReview
 // (POST .../reviews/{id}/dismissals with the dismissal message).
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	index, err := issueNumber("DismissReview", number)
+	index, err := prNumber("DismissReview", number)
 	if err != nil {
 		return err
 	}

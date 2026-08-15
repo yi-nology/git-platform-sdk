@@ -102,10 +102,12 @@ const (
 	CRStateClosed CRState = "closed"
 )
 
-// ChangeRequest represents a pull request or merge request.
+// ChangeRequest represents a pull request or merge request. Number is the
+// platform's change-request identifier as a string (numeric on every
+// current platform), mirroring Issue.Number.
 type ChangeRequest struct {
 	ID           int64   `json:"id"`
-	Number       int     `json:"number"`
+	Number       string  `json:"number"`
 	Title        string  `json:"title"`
 	Description  string  `json:"description"`
 	State        CRState `json:"state"`

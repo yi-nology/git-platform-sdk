@@ -6,6 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ⚠️ Breaking changes
+
+- **`ChangeRequestManager` and `DiffManager` methods now address change
+  requests by string number.** The thirteen number-taking methods (`GetCR`,
+  `MergeCR`, `CloseCR`, `ReopenCR`, `UpdateCR`, `UpdateCRLabels`,
+  `ListCRComments`, `ListCRCommits`, `GetCRDiff`, `GetCRFiles`,
+  `CreateNote`, `DeleteNote`, `CreateDiscussion`) changed `number int` →
+  `number string`, closing out the entity-addressing alignment (same scheme
+  as `IssueManager`/`ReviewManager`). All seven platforms parse internally
+  and return a wrapped `invalid pull request number` error on non-numeric
+  input. Pass `"1"` where `1` was passed before.
+- **`ChangeRequest.Number` changed `int` → `string`.** The model field now
+  carries the platform's change-request identifier as a string, mirroring
+  `Issue.Number`; all backends' converters and webhook event constructors
+  format it via `strconv`.
+
 ### Added
 
 - **Tencent Code 工蜂 now declares the optional `Milestones` capability.**

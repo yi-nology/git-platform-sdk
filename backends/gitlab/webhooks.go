@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -164,7 +165,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		)
 		event.CR = &provider.ChangeRequest{
 			ID:           pl.ObjectAttributes.IID,
-			Number:       int(pl.ObjectAttributes.IID),
+			Number:       strconv.FormatInt(pl.ObjectAttributes.IID, 10),
 			Title:        pl.ObjectAttributes.Title,
 			Description:  pl.ObjectAttributes.Description,
 			State:        state,
@@ -194,7 +195,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			event.Action = "note"
 			event.CR = &provider.ChangeRequest{
 				ID:     pl.ObjectAttributes.IID,
-				Number: int(pl.ObjectAttributes.IID),
+				Number: strconv.FormatInt(pl.ObjectAttributes.IID, 10),
 			}
 		}
 	}

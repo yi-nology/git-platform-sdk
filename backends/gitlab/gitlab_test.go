@@ -115,8 +115,8 @@ func TestCreateCR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cr.Number != 7 {
-		t.Errorf("expected 7, got %d", cr.Number)
+	if cr.Number != "7" {
+		t.Errorf("expected 7, got %q", cr.Number)
 	}
 	if cr.State != provider.CRStateOpened {
 		t.Errorf("expected opened, got %s", cr.State)
@@ -251,7 +251,7 @@ func TestParseWebhookEvent_MergeRequest(t *testing.T) {
 	if ne.Type != "cr.open" {
 		t.Errorf("expected cr.open, got %s", ne.Type)
 	}
-	if ne.CR == nil || ne.CR.Number != 7 {
+	if ne.CR == nil || ne.CR.Number != "7" {
 		t.Errorf("expected CR with number 7, got %+v", ne.CR)
 	}
 	if ne.Repo == nil || ne.Repo.ID != 99 {

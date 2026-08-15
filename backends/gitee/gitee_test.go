@@ -142,8 +142,8 @@ func TestCreateCR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cr.Number != 7 {
-		t.Errorf("expected 7, got %d", cr.Number)
+	if cr.Number != "7" {
+		t.Errorf("expected 7, got %q", cr.Number)
 	}
 }
 
@@ -169,12 +169,12 @@ func TestGetCR_Conversion(t *testing.T) {
 	}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
-	cr, err := p.GetCR(context.Background(), "owner", "repo", 7011)
+	cr, err := p.GetCR(context.Background(), "owner", "repo", "7011")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cr.Number != 7011 || cr.ID != 15971649 {
-		t.Errorf("number/id: got %d/%d", cr.Number, cr.ID)
+	if cr.Number != "7011" || cr.ID != 15971649 {
+		t.Errorf("number/id: got %q/%d", cr.Number, cr.ID)
 	}
 	if cr.State != provider.CRStateMerged {
 		t.Errorf("state: got %s, want merged", cr.State)
@@ -289,7 +289,7 @@ func TestMergeCR_PutThenRefetch(t *testing.T) {
 	}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
-	cr, err := p.MergeCR(context.Background(), "owner", "repo", 7, provider.MergeCROptions{MergeCommitMessage: "msg", Squash: true})
+	cr, err := p.MergeCR(context.Background(), "owner", "repo", "7", provider.MergeCROptions{MergeCommitMessage: "msg", Squash: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestUpdateCRLabels_Endpoint(t *testing.T) {
 	}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
-	if err := p.UpdateCRLabels(context.Background(), "owner", "repo", 3, []string{"x", "y"}); err != nil {
+	if err := p.UpdateCRLabels(context.Background(), "owner", "repo", "3", []string{"x", "y"}); err != nil {
 		t.Fatal(err)
 	}
 	if method != "PUT" || path != "/api/v5/repos/owner/repo/pulls/3/labels" {
@@ -420,14 +420,14 @@ func TestNotes_CreateDelete(t *testing.T) {
 	}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
-	id, err := p.CreateNote(context.Background(), "owner", "repo", 5, "note")
+	id, err := p.CreateNote(context.Background(), "owner", "repo", "5", "note")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if id != "48745338" {
 		t.Errorf("note id: got %q", id)
 	}
-	if err := p.DeleteNote(context.Background(), "owner", "repo", 5, id); err != nil {
+	if err := p.DeleteNote(context.Background(), "owner", "repo", "5", id); err != nil {
 		t.Fatal(err)
 	}
 	if len(ops) != 2 || ops[1] != "DELETE /api/v5/repos/owner/repo/pulls/comments/48745338" {
@@ -452,7 +452,7 @@ func TestGetCRDiff_SDKFiles(t *testing.T) {
 	}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
-	diff, err := p.GetCRDiff(context.Background(), "owner", "repo", 9)
+	diff, err := p.GetCRDiff(context.Background(), "owner", "repo", "9")
 	if err != nil {
 		t.Fatal(err)
 	}

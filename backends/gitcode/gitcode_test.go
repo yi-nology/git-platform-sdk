@@ -102,8 +102,8 @@ func TestCreateCR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cr.Number != 7 {
-		t.Errorf("expected 7, got %d", cr.Number)
+	if cr.Number != "7" {
+		t.Errorf("expected 7, got %q", cr.Number)
 	}
 }
 

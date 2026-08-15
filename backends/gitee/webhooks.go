@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -181,7 +182,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Type = "cr." + action
 		event.Action = action
 		event.CR = &provider.ChangeRequest{
-			Number:       pl.Number,
+			Number:       strconv.Itoa(pl.Number),
 			Title:        pl.Title,
 			Description:  pl.Body,
 			State:        provider.MapBoolStateToCR(pl.State, pl.State == "merged"),

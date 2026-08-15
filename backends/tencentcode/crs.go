@@ -2,10 +2,22 @@ package tencentcode
 
 import (
 	"context"
+	"strconv"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
+
+// prNumber parses the SDK's string change-request number into gongfeng's
+// int merge-request IID form. op is the public operation the parse serves;
+// failures surface under it.
+func prNumber(op, number string) (int, error) {
+	n, err := strconv.Atoi(number)
+	if err != nil {
+		return 0, provider.Wrapf(provider.PlatformTencentCode, op, "invalid pull request number %q", number)
+	}
+	return n, nil
+}
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
@@ -26,9 +38,13 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("GetCR", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := owner + "/" + repo
-	mr, _, err := p.client.MergeRequests.GetMergeRequest(ctx, pid, number)
+	mr, _, err := p.client.MergeRequests.GetMergeRequest(ctx, pid, n)
 	if err != nil {
 		return nil, sdkError("GetCR", err)
 	}
@@ -57,10 +73,14 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+	n, err := prNumber("MergeCR", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := owner + "/" + repo
 	// Pre-flight: check MR state.
-	existingMR, _, err := p.client.MergeRequests.GetMergeRequest(ctx, pid, number)
+	existingMR, _, err := p.client.MergeRequests.GetMergeRequest(ctx, pid, n)
 	if err == nil {
 		if mapState(existingMR.State) != provider.CRStateOpened {
 			return nil, provider.Wrapf(provider.PlatformTencentCode, "MergeCR",
@@ -71,7 +91,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, 
 	if opts.MergeCommitMessage != "" {
 		acceptOpts.MergeCommitMessage = gongfeng.Ptr(opts.MergeCommitMessage)
 	}
-	mr, _, err := p.client.MergeRequests.AcceptMergeRequest(ctx, pid, number, acceptOpts)
+	mr, _, err := p.client.MergeRequests.AcceptMergeRequest(ctx, pid, n, acceptOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "MergeCR", err)
 	}
@@ -79,12 +99,16 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, 
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("CloseCR", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := owner + "/" + repo
 	updateOpts := &gongfeng.UpdateMergeRequestOptions{
 		StateEvent: gongfeng.Ptr("close"),
 	}
-	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, number, updateOpts)
+	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
 		return nil, sdkError("CloseCR", err)
 	}
@@ -92,12 +116,16 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) 
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("ReopenCR", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := owner + "/" + repo
 	updateOpts := &gongfeng.UpdateMergeRequestOptions{
 		StateEvent: gongfeng.Ptr("reopen"),
 	}
-	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, number, updateOpts)
+	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
 		return nil, sdkError("ReopenCR", err)
 	}
@@ -105,7 +133,11 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int)
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+	n, err := prNumber("UpdateCR", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := owner + "/" + repo
 	updateOpts := &gongfeng.UpdateMergeRequestOptions{}
 	if opts.Title != "" {
@@ -117,7 +149,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 	if opts.TargetBranch != "" {
 		updateOpts.TargetBranch = gongfeng.Ptr(opts.TargetBranch)
 	}
-	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, number, updateOpts)
+	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
 		return nil, sdkError("UpdateCR", err)
 	}
@@ -127,14 +159,18 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 // UpdateCRLabels implements provider.ChangeRequestManager.
 //
 // Tencent Code's API no longer supports setting labels via UpdateMergeRequest.
-func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
+func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
 	return provider.Wrap(provider.PlatformTencentCode, "UpdateCRLabels", provider.ErrNotImplemented)
 }
 
 // ListCRComments implements provider.ChangeRequestManager.
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*provider.CRComment, error) {
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
+	n, err := prNumber("ListCRComments", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := owner + "/" + repo
-	notes, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid, number, nil)
+	notes, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid, n, nil)
 	if err != nil {
 		return nil, sdkError("ListCRComments", err)
 	}
@@ -155,9 +191,13 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, numbe
 }
 
 // ListCRCommits implements provider.ChangeRequestManager.
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*provider.CRCommit, error) {
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
+	n, err := prNumber("ListCRCommits", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := owner + "/" + repo
-	commits, _, err := p.client.MergeRequests.ListMergeRequestCommits(ctx, pid, number, nil)
+	commits, _, err := p.client.MergeRequests.ListMergeRequestCommits(ctx, pid, n, nil)
 	if err != nil {
 		return nil, sdkError("ListCRCommits", err)
 	}

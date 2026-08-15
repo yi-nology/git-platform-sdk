@@ -12,7 +12,7 @@ import (
 
 // ListReviews implements provider.ReviewManager.
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	n, err := issueNumber("ListReviews", number)
+	n, err := prNumber("ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 
 // GetReview implements provider.ReviewManager.
 func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	n, err := issueNumber("GetReview", number)
+	n, err := prNumber("GetReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 // CreateReview implements provider.ReviewManager. It moved here from
 // DiffManager; the change request number is now addressed as a string.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	n, err := issueNumber("CreateReview", number)
+	n, err := prNumber("CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 
 // RequestReviewers implements provider.ReviewManager.
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	n, err := issueNumber("RequestReviewers", number)
+	n, err := prNumber("RequestReviewers", number)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 
 // DismissReview implements provider.ReviewManager.
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	n, err := issueNumber("DismissReview", number)
+	n, err := prNumber("DismissReview", number)
 	if err != nil {
 		return err
 	}
