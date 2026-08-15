@@ -34,7 +34,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   status), Gitee (notes), TencentCode (discussions + note), and GitCode
   (review endpoint with inline-comment fallback) are gone with the
   migration: reviews are now a declared capability implemented against
-  platforms that expose a real review API. Route with
+  platforms that expose a real review API. Gitee is ruled out entirely —
+  its API exposes only PR tester assignment, with no review
+  list/create/dismiss endpoints — so it declares no Reviews capability
+  (capability threshold, design spec §4.6). Route with
   `p.Capabilities().Reviews` and type-assert `provider.ReviewManager`
   instead of calling `DiffManager.CreateReview`.
 
@@ -72,6 +75,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   contract suite gained an `IgnoresRequestReviewers` harness flag (in the
   spirit of `IgnoresListPagination`) asserting such registered ignores
   stay silent on the wire.
+
+- **The GitCode backend implements `ReviewManager` and declares
+  `Capabilities().Reviews`**, restoring the review capability dropped
+  from `DiffManager` in this release: gitcode_api@v0.6.0 exposes real
+  review endpoints, so `ListReviews`/`CreateReview` ride
+  `ListPullRequestReviews`/`CreatePullRequestReview` (body+event on the
+  wire); `RequestReviewers` posts the real `requested_reviewers`
+  endpoint; `DismissReview` rides `DismissPullRequestReview`
+  (PUT `.../reviews/{id}/dismissals`). One registered semantic mapping
+  (spec §4.6): gitcode_api has no single-review GET, so `GetReview` is
+  synthesized from the review list and matched by ID, reporting misses as
+  `provider.ErrNotFound`. `CreateReview` keeps the pre-slimming
+  resilience behavior: inline comments post individually after the review
+  itself, and if the review endpoint rejects the request the fallback
+  path posts inline comments plus a plain note instead of failing. No
+  registered stubs and no harness opt-outs — all five reviews contract
+  subtests pass on the standard wire assertions.
 
 - **The gitee backend now declares `Capabilities().Issues`.** The
   IssueManager implementation is fully migrated onto the go-gitee SDK —

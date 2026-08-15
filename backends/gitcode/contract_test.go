@@ -36,5 +36,12 @@ func TestGitCode_Contract(t *testing.T) {
 			CommentsResponse: `[{"id":1,"body":"a comment","user":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			LabelsResponse:   `[{"id":1,"name":"bug","color":"#4cc917"}]`,
 		},
+		// GitCode review payloads are GitHub-shaped; the review author rides
+		// the "user" (fallback "author") key and the timestamp is created_at.
+		Reviews: &contracttest.ReviewsHarnessConfig{
+			ListResponse:   `[{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","created_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","created_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse: `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","created_at":"2026-01-01T00:00:00Z"}`,
+		},
 	})
 }
