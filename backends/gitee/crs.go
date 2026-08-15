@@ -3,6 +3,7 @@ package gitee
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -46,10 +47,10 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	path := fmt.Sprintf("/repos/%s/%s/pulls?page=%d&per_page=%d&state=%s", esc(opts.Owner), esc(opts.Repo), page, perPage, state)
 	if opts.SourceBranch != "" {
-		path += "&source_branch=" + opts.SourceBranch
+		path += "&source_branch=" + url.QueryEscape(opts.SourceBranch)
 	}
 	if opts.TargetBranch != "" {
-		path += "&target_branch=" + opts.TargetBranch
+		path += "&target_branch=" + url.QueryEscape(opts.TargetBranch)
 	}
 	var prs []giteePR
 	headers, err := p.doRequestWithHeaders(ctx, "GET", path, nil, &prs)

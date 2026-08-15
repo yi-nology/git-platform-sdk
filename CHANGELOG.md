@@ -20,6 +20,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (owner, repo, branch, label name, sha, file path, ref). Names containing
   `#`, `?`, `%`, spaces, or non-ASCII characters previously corrupted or
   truncated the request URL.
+- **The gitee backend now query-escapes string query values** on list
+  endpoints (`source_branch`, `target_branch`, `sha`, `since`, `until`),
+  matching the previously fixed `ref` parameter. Values containing `#`,
+  `?`, spaces, or a `+` in timestamps previously corrupted the query string.
 - **GitCode `UpdateLabel` now sends `#`-prefixed colors.** GitCode's label
   API uses `#`-prefixed colors (matching its create endpoint), but the update
   path forwarded the SDK's canonical `#`-free form, breaking color changes

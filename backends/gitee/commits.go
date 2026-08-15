@@ -3,6 +3,7 @@ package gitee
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -21,13 +22,13 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	path := fmt.Sprintf("/repos/%s/%s/commits?page=%d&per_page=%d", esc(owner), esc(repo), page, perPage)
 	if opts.Branch != "" {
-		path += "&sha=" + opts.Branch
+		path += "&sha=" + url.QueryEscape(opts.Branch)
 	}
 	if opts.Since != "" {
-		path += "&since=" + opts.Since
+		path += "&since=" + url.QueryEscape(opts.Since)
 	}
 	if opts.Until != "" {
-		path += "&until=" + opts.Until
+		path += "&until=" + url.QueryEscape(opts.Until)
 	}
 	var commits []giteeCommitDetail
 	if err := p.doRequest(ctx, "GET", path, nil, &commits); err != nil {
