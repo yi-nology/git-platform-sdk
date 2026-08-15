@@ -378,7 +378,8 @@ type Milestone struct {
 // ListMilestonesOptions contains options for listing repository
 // milestones. State filters by "open" or "closed"; an empty State lists
 // whatever the platform defaults to (GitHub/Gitea/Forgejo/Gitee default to
-// open, GitLab to all).
+// open, GitLab to all). Tencent Code ignores State entirely — gongfeng's
+// list options expose pagination only, so all states are listed.
 type ListMilestonesOptions struct {
 	State   string `json:"state,omitempty"`
 	Page    int    `json:"page,omitempty"`

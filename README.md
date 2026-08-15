@@ -315,6 +315,17 @@ if caps.Labels {
 - **Milestone 寻址语义随平台不同**: `MilestoneRef.Number` / `Milestone.Number`
   在 GitHub 上是 milestone number，在 GitLab/Gitea/Forgejo/GitCode/Tencent Code 上是
   milestone ID，在 Gitee 上是里程碑序号（载荷 `number` 字段）；跨平台传递 ID 不可移植。
+- **CR/评审寻址已全面 string 化（迁移提示）**: `ChangeRequestManager` 与
+  `DiffManager` 的 number 参数、`ChangeRequest.Number` 及 `ReviewManager` 各方法
+  均以 string 寻址，与 Issues/Milestones/Search 同一规则；数字平台内部解析，
+  非法输入返回包裹的 `invalid pull request number` 错误。旧代码中传 `1` 的
+  调用点改为传 `"1"`。
+- **Gitee 企业版 issue 状态原样透传**: `Issue.State` 是开放字符串词表而非封闭
+  枚举；Gitee 企业空间在 open/closed 之外还有 progressing/rejected 等工作流状态，
+  按平台返回值原样出现在 `Issue.State` 中（已登记）。
+- **Search 的 `Sort`/`Order` 走各平台自身词表**: 取值随平台不同（如 GitHub 的
+  stars/forks/updated + asc/desc）；Gitea/Forgejo 对未知值返回 HTTP 422，
+  GitLab 搜索 API 无 sort/order 参数（登记忽略）。请按目标平台文档取值。
 
 ### Tencent 工蜂专属能力
 
