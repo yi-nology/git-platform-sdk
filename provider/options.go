@@ -444,9 +444,12 @@ type SearchRepoResult struct {
 	Private       bool   `json:"private,omitempty"`
 }
 
-// SearchIssueResult is a single result from an issue search.
+// SearchIssueResult is a single result from an issue search. Number is the
+// platform's issue addressing identifier as a string, so results feed
+// GetIssue(number string) directly (numeric platforms return "1", Gitee's
+// alphanumeric identifiers return e.g. "IAINVA").
 type SearchIssueResult struct {
-	Number    int        `json:"number"`
+	Number    string     `json:"number"`
 	Title     string     `json:"title"`
 	Body      string     `json:"body,omitempty"`
 	State     IssueState `json:"state"`

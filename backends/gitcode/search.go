@@ -2,7 +2,6 @@ package gitcode
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 	gitcode "github.com/yi-nology/gitcode_api"
@@ -57,9 +56,8 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		for _, l := range r.Labels {
 			labels = append(labels, l.Name)
 		}
-		number, _ := strconv.Atoi(r.Number)
 		out = append(out, &provider.SearchIssueResult{
-			Number:    number,
+			Number:    r.Number,
 			Title:     r.Title,
 			Body:      r.Body,
 			State:     provider.IssueState(r.State),
