@@ -235,8 +235,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`gitee.com/openeuler/go-gitee`): repos, branches, CRs, commits, diffs,
   files, labels, releases, webhooks, and issues now ride the generated
   client through the shared transport pipeline, replacing the hand-rolled
-  REST plumbing (URL escaping became the SDK's job, retiring the backend's
-  manual escapers). Known gap: **Gitee's `ChangeRequest.Draft` is always
+  REST plumbing (the backend's manual escapers `esc`/`escPath` were
+  **retained**, not retired: they now also wrap every go-gitee call site,
+  because the SDK interpolates path parameters into URLs without escaping
+  them — `escape_test.go` pins this behavior). The SDK is pinned by
+  pseudo-version (`v0.0.0-20251225091545-a0f78272dafc`, a commit-hash
+  lock): upgrading it requires deliberate human review of the upstream
+  changes it pulls in. Retry caveat: go-gitee internally retries 502
+  responses up to 3× with fixed 1s/2s sleeps, so on a persistent 502 its
+  internal retries multiply with the SDK's own transport retry pipeline
+  (registered in code at the gitee client construction). Known gap:
+  **Gitee's `ChangeRequest.Draft` is always
   `false`** — the live PR payload carries a `draft` boolean but the SDK's
   `PullRequest` model omits the field (upstream swagger omission); it
   returns to wire-accurate once go-gitee models the field. Where the
