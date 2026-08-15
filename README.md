@@ -64,12 +64,12 @@ func main() {
 
 | Platform | Status | Coverage |
 |----------|--------|----------|
-| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
-| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels |
-| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
-| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
+| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
+| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
+| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
+| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
 | Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
-| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels |
+| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues |
 | Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release + exclusive features |
 
 ### Installation
@@ -119,12 +119,12 @@ cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
 
 | 平台 | 状态 | API 覆盖 | 默认 API |
 |------|------|----------|----------|
-| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://api.github.com` |
-| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels | `https://gitlab.com/api/v4` |
-| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://gitea.com/api/v1` |
-| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://codeberg.org` |
+| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://api.github.com` |
+| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://gitlab.com/api/v4` |
+| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://gitea.com/api/v1` |
+| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://codeberg.org` |
 | Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://gitee.com/api/v5` |
-| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels | `https://api.gitcode.com/api/v5` |
+| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues | `https://api.gitcode.com/api/v5` |
 | Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
 
 ## 安装
@@ -287,9 +287,12 @@ if caps.Labels {
 
 | 能力 | 接口 | 支持平台 |
 |------|------|----------|
-| Issues | `IssueManager` | GitCode |
+| Issues | `IssueManager` | GitCode / GitHub / GitLab / Gitea / Forgejo |
 | Search | `SearchManager` | GitCode |
 | Labels | `LabelManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
+
+> **Gitee 说明**: Gitee 的 Issue 实现已就绪但未声明 (真实平台返回字母数字编号,
+> 等待寻址重构, 见 backend 注释)。
 
 ### Tencent 工蜂专属能力
 

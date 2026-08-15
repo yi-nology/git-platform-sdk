@@ -13,6 +13,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   field (0 = unset/unchanged).** Consumers reading the milestone title now
   use `issue.Milestone.Title` with a nil check.
 
+### Added
+
+- **`IssueManager` implemented by GitHub, GitLab, Gitea, and Forgejo**,
+  joining GitCode: all four now declare `Capabilities().Issues` and implement
+  the full 11-method interface (list/get/create/update/close/reopen,
+  comments, issue labels). Backends whose APIs diverge from the SDK's
+  vocabulary translate internally — GitLab applies state changes via
+  `state_event` verbs and label changes via the `add_labels`/`remove_labels`
+  update options, while Gitea and Forgejo resolve label names to numeric IDs
+  and backfill the title on issue edit (their edit API always serializes
+  `Title`). GitLab ignores `Assignees` on issue create/update: its API takes
+  assignee IDs, and resolving usernames to IDs requires the Users API (a
+  future UserManager round). Gitee's implementation exists in code but is
+  deliberately not declared — every current Gitee repo returns alphanumeric
+  string issue numbers (e.g. "IAINVA"), which the int-typed `IssueManager`
+  can neither decode nor address; it will be re-enabled after a planned
+  string-identifier spike (see `backends/gitee/gitee.go`).
+- **The issue-management contract suite is now auto-mounted from the main
+  `contracttest.Harness` via the optional `Issues` field**, mirroring the
+  labels suite: `Run` fails when a platform declares
+  `Capabilities().Issues` without wiring the suite, or wires it without
+  declaring, and the capability checks enforce that declarations match the
+  implemented method set. Gitee's deliberate implemented-but-undeclared
+  state is documented via the harness's `IssuesImplementedButUndeclared`
+  field.
+
 ### Fixed
 
 - **The gitee backend now maps the SDK `CRState` vocabulary to gitee's
@@ -22,6 +48,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Gitea and Forgejo `ListIssues` now request only issues, not pull
   requests.** The list option's type filter was left unset, so real
   instances returned PRs mixed into issue lists.
+- **GitLab `ListIssues` now maps the SDK `open` state filter to GitLab's
+  `opened` vocabulary.** The SDK's `open` previously went out raw where
+  GitLab's issues API expects `opened`; the inbound conversion already
+  mapped back.
 
 ## [v0.38.1] - 2026-08-15
 
