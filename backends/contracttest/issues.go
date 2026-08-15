@@ -196,7 +196,8 @@ func assertIssueComments(t *testing.T, im provider.IssueManager, requests *[]rec
 }
 
 // assertIssueLabelOps checks repository-label listing (color normalization),
-// adding labels to an issue, and removing one via DELETE.
+// adding labels to an issue, and removing one — via a dedicated DELETE
+// endpoint (GitHub-style) or via a fetch + full-set write (GitLab-style).
 func assertIssueLabelOps(t *testing.T, im provider.IssueManager, requests *[]recordedRequest) {
 	t.Helper()
 	labels, err := im.ListIssueLabels(context.Background(), "owner", "repo")
@@ -212,9 +213,39 @@ func assertIssueLabelOps(t *testing.T, im provider.IssueManager, requests *[]rec
 	if err := im.RemoveIssueLabel(context.Background(), "owner", "repo", 1, "bug"); err != nil {
 		t.Fatalf("RemoveIssueLabel: %v", err)
 	}
-	if !sawMethod(*requests, http.MethodDelete) {
-		t.Errorf("expected a DELETE for label removal, recorded %s", methodsOf(*requests))
+	if !sawLabelRemoval(*requests) {
+		t.Errorf("expected label removal via DELETE or a fetch + full-set write, recorded %s", methodsOf(*requests))
 	}
+}
+
+// sawLabelRemoval reports whether label removal used one of the two wire
+// shapes platforms have: a dedicated DELETE endpoint (GitHub), or GitLab's
+// lack of one — the issue is fetched (GET /issues/{n}) and the filtered full
+// label set written back via PUT/PATCH.
+func sawLabelRemoval(requests []recordedRequest) bool {
+	if sawMethod(requests, http.MethodDelete) {
+		return true
+	}
+	fetched, wrote := false, false
+	for _, r := range requests {
+		switch r.Method {
+		case http.MethodGet:
+			if issuePathNum.MatchString(pathWithoutQuery(r.Path)) {
+				fetched = true
+			}
+		case http.MethodPut, http.MethodPatch:
+			wrote = true
+		}
+	}
+	return fetched && wrote
+}
+
+// pathWithoutQuery strips any query string from a recorded request URI.
+func pathWithoutQuery(p string) string {
+	if i := strings.IndexByte(p, '?'); i >= 0 {
+		return p[:i]
+	}
+	return p
 }
 
 var issuePathNum = regexp.MustCompile(`/issues/\d+$`)
