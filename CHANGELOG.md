@@ -239,13 +239,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   manual escapers). Known gap: **Gitee's `ChangeRequest.Draft` is always
   `false`** — the live PR payload carries a `draft` boolean but the SDK's
   `PullRequest` model omits the field (upstream swagger omission); it
-  returns to wire-accurate once go-gitee models the field. A handful of
-  write endpoints keep doc-registered raw detours where the generated
-  client is unusable (multipart bodies posted as `application/json`,
-  mis-typed models that swallow decode errors into empty results): issue
-  create, webhook create/list, label create/update, milestone
-  create/update, release create/update/delete/get-by-tag, and branch
-  delete (no SDK method exists for the latter).
+  returns to wire-accurate once go-gitee models the field. Where the
+  generated client is unusable, methods keep doc-registered raw detours
+  through the same transport pipeline. Write detours: repo create
+  (`RepositoryPostParam` has no `default_branch` field), file
+  create/update/delete (bracketed JSON keys, multipart posted as
+  `application/json`, and query-param encodings the REST contract puts in
+  the body, plus a `CommitContent` model that mis-types the response),
+  issue create (unparseable multipart body), webhook create/list
+  (multipart body; the `Hook` model mis-types the live wire), label
+  update (multipart-as-JSON — label create and delete ride the SDK),
+  milestone create/update (form values under a JSON Content-Type),
+  release create/update/delete/get-by-tag (the `Release` model mis-types
+  the live payload; the PATCH call posts multipart), and branch delete
+  (no SDK method exists). Read detours: repo list (the generated list
+  calls decode a single Project where the endpoint answers an array),
+  commit get/list/compare (`RepoCommit`/`Compare` models type payload
+  objects as plain strings), file content (`Content` model mis-types
+  `size`/`_links`), label list (the generated list options carry no
+  pagination), and tag/release lists (the same `Release` model defect).
 
 ### Security
 
