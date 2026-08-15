@@ -2,7 +2,6 @@ package gitcode
 
 import (
 	"context"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -29,29 +28,19 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 	return result, nil
 }
 
-// GetReview implements provider.ReviewManager. Registered semantic mapping
-// (spec §4.6): gitcode_api exposes no single-review GET, so GetReview is
-// synthesized from the review list (same wire endpoint as ListReviews) and
-// matched by review ID. This composes real endpoints — it is not a stub.
+// GetReview implements provider.ReviewManager via
+// GetPullRequestReview (GET .../pulls/{n}/reviews/{id}).
 func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
 	n, err := issueNumber("GetReview", number)
 	if err != nil {
 		return nil, err
 	}
-	reviews, err := p.client.ListPullRequestReviews(ctx, owner, repo, n)
+	review, err := p.client.GetPullRequestReview(ctx, owner, repo, n, reviewID)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetReview", err)
 	}
-	for _, r := range reviews {
-		if r != nil && r.ID == reviewID {
-			review := convertReview(r)
-			return &review, nil
-		}
-	}
-	// Synthesized miss: report it like the 404 a single-review GET would
-	// have returned, so provider.IsNotFound keeps working for callers.
-	return nil, provider.New(provider.PlatformGitCode, "GetReview", http.StatusNotFound,
-		"review "+strconv.FormatInt(reviewID, 10)+" not found")
+	r := convertReview(review)
+	return &r, nil
 }
 
 // CreateReview implements provider.ReviewManager via

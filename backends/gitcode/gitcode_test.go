@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,6 +52,36 @@ func TestListRepos(t *testing.T) {
 	}
 	if len(repos) != 1 || repos[0].Owner != "owner" {
 		t.Errorf("unexpected: %+v", repos)
+	}
+}
+
+// TestGetReview_UsesSingleReviewEndpoint guards that GetReview rides the
+// dedicated single-review endpoint (GET .../pulls/{n}/reviews/{id}) rather
+// than fetching the whole review list and filtering client-side.
+func TestGetReview_UsesSingleReviewEndpoint(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		writeJSON(w, map[string]any{
+			"id": 42, "state": "APPROVED", "body": "lgtm",
+			"user":       map[string]any{"id": "7", "login": "dev"},
+			"created_at": "2026-01-01T00:00:00Z",
+		})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	review, err := p.GetReview(context.Background(), "owner", "repo", "1", 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review == nil || review.ID != 42 || review.User != "dev" || review.State != provider.ReviewStateApproved {
+		t.Fatalf("unexpected review: %+v", review)
+	}
+	if len(paths) != 1 || paths[0] != "GET /repos/owner/repo/pulls/1/reviews/42" {
+		t.Fatalf("expected a single GET to the review-by-id path, recorded %v", paths)
 	}
 }
 
