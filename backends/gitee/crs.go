@@ -15,11 +15,11 @@ import (
 // int32 form. op is the public operation the parse serves; failures
 // surface under it.
 func prNumber(op, number string) (int32, error) {
-	n, err := strconv.ParseInt(number, 10, 64)
+	n, err := strconv.ParseInt(number, 10, 32)
 	if err != nil {
 		return 0, provider.Wrapf(provider.PlatformGitee, op, "invalid pull request number %q", number)
 	}
-	return int32(n), nil // #nosec:G115 -- Gitee PR numbers are far below the int32 range
+	return int32(n), nil // #nosec:G115 -- ParseInt already bounded to 32 bits
 }
 
 // CreateCR implements provider.ChangeRequestManager.

@@ -64,12 +64,17 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 // UpdateRelease implements provider.ReleaseManager via Gongfeng's
 // tag-addressed update (PUT). Registration: the platform's update surface
 // accepts only a description, so UpdateReleaseOptions.Name, .Draft, and
-// .Prerelease are ignored on this platform — only Body is carried.
+// .Prerelease are ignored on this platform — only Body is carried. An
+// update carrying nothing (Body nil, the only field forwarded) short-
+// circuits to the GetReleaseByTag result instead of PUTting an empty
+// update body.
 func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+	if opts.Body == nil {
+		return p.GetReleaseByTag(ctx, owner, repo, tag)
+	}
 	pid := owner + "/" + repo
-	updateOpts := &gongfeng.UpdateReleaseOptions{}
-	if opts.Body != nil {
-		updateOpts.Description = gongfeng.Ptr(*opts.Body)
+	updateOpts := &gongfeng.UpdateReleaseOptions{
+		Description: gongfeng.Ptr(*opts.Body),
 	}
 	release, _, err := p.client.Releases.UpdateRelease(ctx, pid, tag, updateOpts)
 	if err != nil {

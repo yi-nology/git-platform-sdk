@@ -38,7 +38,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 
 // GetMilestone implements provider.MilestoneManager.
 func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	id, err := issueNumber("GetMilestone", number)
+	id, err := milestoneNumber("GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 // title — Gitea's API keeps the existing title for blank values (a title
 // is required to be non-empty, so blank cannot be a legitimate rename).
 func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	id, err := issueNumber("UpdateMilestone", number)
+	id, err := milestoneNumber("UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	id, err := issueNumber("DeleteMilestone", number)
+	id, err := milestoneNumber("DeleteMilestone", number)
 	if err != nil {
 		return err
 	}

@@ -38,7 +38,10 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 	return result, nil
 }
 
-// CreateRelease implements provider.ReleaseManager.
+// CreateRelease implements provider.ReleaseManager. Registration:
+// CreateReleaseOption.Target always serializes (target_commitish carries
+// no omitempty), so a Target-less create sends `"target_commitish": ""`,
+// which the server treats as unchanged (the default branch).
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
 	r, _, err := p.client.CreateRelease(owner, repo, forgejo.CreateReleaseOption{
 		TagName:      opts.TagName,
