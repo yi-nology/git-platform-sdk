@@ -20,6 +20,12 @@ func TestTencentCode_Contract(t *testing.T) {
 		},
 		EmptyListResponse:    `[]`,
 		NonEmptyListResponse: `[{"id":1,"name":"repo","path_with_namespace":"owner/repo","http_url_to_repo":"https://example.com/owner/repo.git","default_branch":"main","visibility_level":20}]`,
+		// Gongfeng milestone shape (GitLab-shaped): id-addressed, wire state
+		// "active", date-only due_date.
+		Milestones: &contracttest.MilestonesHarnessConfig{
+			ListResponse:   `[{"id":1,"iid":1,"project_id":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}]`,
+			MutateResponse: `{"id":1,"iid":1,"project_id":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}`,
+		},
 		// Gongfeng release shape: tag_name/description only — the model has
 		// no name/id/url fields, and the update surface cannot carry a name
 		// (registered limitation), so the suite asserts the description key.

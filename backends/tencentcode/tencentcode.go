@@ -5,7 +5,24 @@
 // specific extensions (native code reviews, branch protection, repository
 // tree/blob). This package implements the cross-platform provider.Provider
 // interface and additionally exposes a TencentCodeExtras interface for the
-// platform-specific capabilities.
+// platform-specific capabilities. All Provider methods are split across
+// the per-responsibility files in this package:
+//
+//   - tencentcode.go: constructor + identity (Platform, TestConnection, Capabilities)
+//   - init.go:    provider registration with the global registry
+//   - repos.go:   ListRepos, GetRepo, CreateRepo, DeleteRepo, UpdateRepo, ForkRepo
+//   - crs.go:     Change requests (MRs): Create/Get/List/Close/Merge/Reopen/Update/Comments/Commits
+//   - webhooks.go: webhook CRUD + signature validation + event parsing
+//   - branches.go: ListBranches, CreateBranch, DeleteBranch
+//   - diffs.go:   GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion
+//   - commits.go:  GetCommit, ListCommits, CompareCommits, CreateCommitStatus
+//   - files.go:    GetFileContent, CreateFile, UpdateFile, DeleteFile
+//   - releases.go: ListTags, ListReleases, CreateRelease, GetReleaseByTag,
+//     UpdateRelease, DeleteRelease, GetArchive
+//   - milestones.go: repository milestone CRUD (MilestoneManager)
+//   - extras.go:  TencentCodeExtras (native code reviews, commit comments,
+//     repository tree, branch protection)
+//   - types.go:   gongfeng model -> provider model conversions
 package tencentcode
 
 import (
@@ -109,11 +126,11 @@ func sdkError(op string, err error) error {
 // Platform implements provider.Provider.
 func (p *Provider) Platform() provider.Platform { return provider.PlatformTencentCode }
 
-// Capabilities implements provider.Provider. This backend does not yet
-// implement any optional capability interface; flip fields here as
-// capability backends land.
+// Capabilities implements provider.Provider. The backend declares the
+// optional capability interfaces it implements; flip fields here as
+// capability backends land (currently only Milestones).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{}
+	return provider.CapabilitySet{Milestones: true}
 }
 
 // TestConnection implements provider.Provider.

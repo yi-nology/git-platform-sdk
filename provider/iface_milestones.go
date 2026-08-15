@@ -11,9 +11,9 @@ import "context"
 // and Milestone.Number expose:
 //
 //   - GitHub: the milestone *number* (its per-repo serial number).
-//   - GitLab, Gitea, Forgejo, GitCode: the platform milestone *ID* (the
-//     write endpoints take exactly that identifier, so per-platform
-//     round-trips hold).
+//   - GitLab, Gitea, Forgejo, GitCode, Tencent Code: the platform
+//     milestone *ID* (the write endpoints take exactly that identifier,
+//     so per-platform round-trips hold).
 //   - Gitee: the milestone *serial number* (the "number" field of Gitee's
 //     milestone payload — the identifier Gitee's own issue and milestone
 //     write endpoints take; the SDK model exposes no id).

@@ -70,7 +70,7 @@ func main() {
 | Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
 | Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Search |
 | GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
-| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release + exclusive features |
+| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Milestones + exclusive features |
 
 ### Installation
 
@@ -125,7 +125,7 @@ cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
 | Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://codeberg.org` |
 | Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Search | `https://gitee.com/api/v5` |
 | GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://api.gitcode.com/api/v5` |
-| Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
+| Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Milestones + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
 
 ## 安装
 
@@ -290,7 +290,7 @@ if caps.Labels {
 | Issues | `IssueManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
 | Search | `SearchManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
 | Labels | `LabelManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
-| Milestones | `MilestoneManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
+| Milestones | `MilestoneManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode / Tencent Code |
 | Reviews | `ReviewManager` | GitHub / GitLab / Gitea / Forgejo / GitCode |
 
 说明：
@@ -313,8 +313,8 @@ if caps.Labels {
 - **Gitea / Forgejo 的 `REQUEST_CHANGES`/`COMMENT` 评审需要 body 或行内评论**:
   两平台 SDK 的客户端校验拒绝空 body 且无评论的非 APPROVE 评审（APPROVE 豁免）。
 - **Milestone 寻址语义随平台不同**: `MilestoneRef.Number` / `Milestone.Number`
-  在 GitHub 上是 milestone number，在 GitLab/Gitea/Forgejo/GitCode 上是 milestone
-  ID，在 Gitee 上是里程碑序号（载荷 `number` 字段）；跨平台传递 ID 不可移植。
+  在 GitHub 上是 milestone number，在 GitLab/Gitea/Forgejo/GitCode/Tencent Code 上是
+  milestone ID，在 Gitee 上是里程碑序号（载荷 `number` 字段）；跨平台传递 ID 不可移植。
 
 ### Tencent 工蜂专属能力
 
