@@ -14,7 +14,11 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gitlab.ListProjectIssuesOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)}}
 	if opts.State != "" {
-		listOpts.State = gitlab.Ptr(string(opts.State))
+		s := string(opts.State)
+		if s == string(provider.IssueStateOpen) {
+			s = "opened" // GitLab's issues API vocabulary; inbound convertIssue maps back
+		}
+		listOpts.State = gitlab.Ptr(s)
 	}
 	if opts.Assignee != "" {
 		listOpts.AssigneeUsername = gitlab.Ptr(opts.Assignee)
