@@ -157,8 +157,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   create/update wire bodies (POST/PATCH/PUT carrying the title), and a
   non-GET delete, with the same bidirectional capability-declaration drift
   checks as the labels, issues, and reviews suites. Six backends implement
-  it and declare `Capabilities().Milestones`: GitHub and GitCode through
-  their SDK's number/ID-addressed CRUD as-is; GitLab via the project
+  it and declare `Capabilities().Milestones`: GitHub through its SDK's
+  number-addressed CRUD as-is; GitCode via the SDK's ID-addressed surface
+  for list/get/delete, with a registered raw detour on create/update —
+  gitcode_api's option structs marshal `due_on` without omitempty, so an
+  SDK-ridden call without a due date would post `"due_on": ""` and clear
+  GitCode's stored due date (the raw bodies carry exactly the fields the
+  caller set); GitLab via the project
   `MilestonesService` with two registered vocabulary mappings (wire state
   `active` ↔ SDK `open`, so state changes travel as the `state_event`
   verbs `activate`/`close`; and a date-only `ISOTime` due date, so

@@ -2,12 +2,14 @@ package gitcode
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
 	gitcode "github.com/yi-nology/gitcode_api"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/git-platform-sdk/transport"
 )
 
 // This file implements provider.MilestoneManager over gitcode_api's
@@ -16,6 +18,17 @@ import (
 // "number" spelling) — the same value MilestoneRef.Number and
 // Milestone.Number carry on this platform. Wire states are
 // "open"/"closed", already the SDK's vocabulary.
+//
+// CreateMilestone and UpdateMilestone are routed through the raw transport
+// client rather than the SDK (registered detour, in the spirit of the
+// gitee raw detours): the SDK's create/update option structs marshal
+// `DueOn string` under `json:"due_on"` WITHOUT omitempty, so a call
+// without a due date posts `"due_on": ""` — on GitCode's GitHub-shaped API
+// an explicit empty due_on conventionally clears (or errors on) the value,
+// which would wipe the milestone's due date on every title-only update.
+// The SDK marshals its option struct directly into the request body, so
+// the empty key cannot be suppressed through its types; the raw bodies
+// carry exactly the fields the caller set (title always on create).
 
 // ListMilestones implements provider.MilestoneManager. State filters by
 // "open"/"closed" (GitCode also accepts "all").
@@ -50,51 +63,52 @@ func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string)
 	return &ms, nil
 }
 
-// CreateMilestone implements provider.MilestoneManager.
+// CreateMilestone implements provider.MilestoneManager through the raw
+// transport client (SDK due_on omission bug — see the file comment). The
+// body carries title always, description/due_on only when set.
 func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*provider.Milestone, error) {
-	createOpts := gitcode.CreateMilestoneOptions{
-		Title:       opts.Title,
-		Description: opts.Description,
+	body := map[string]any{"title": opts.Title}
+	if opts.Description != "" {
+		body["description"] = opts.Description
 	}
 	if opts.DueOn != nil {
-		createOpts.DueOn = opts.DueOn.Format(time.RFC3339)
+		body["due_on"] = opts.DueOn.Format(time.RFC3339)
 	}
-	m, err := p.client.CreateMilestoneWithOptions(ctx, owner, repo, createOpts)
-	if err != nil {
+	var m gitcode.Milestone
+	if err := p.doJSON(ctx, "POST", fmt.Sprintf("/repos/%s/%s/milestones", owner, repo), body, &m); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateMilestone", err)
 	}
-	ms := convertMilestone(m)
+	ms := convertMilestone(&m)
 	return &ms, nil
 }
 
-// UpdateMilestone implements provider.MilestoneManager. Fields the caller
-// left nil stay zero-valued; the SDK options marshal description/state/
-// due_on with omitempty so they drop off the wire (Title always marshals —
-// an update that does not rename sends the empty string, which GitCode's
-// GitHub-shaped API treats as "leave unchanged").
+// UpdateMilestone implements provider.MilestoneManager through the raw
+// transport client (SDK due_on omission bug — see the file comment). The
+// body carries exactly the fields the caller set; everything left nil is
+// absent from the wire, leaving the milestone unchanged.
 func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
 	id, err := issueNumber("UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
-	updateOpts := gitcode.UpdateMilestoneOptions{}
+	body := map[string]any{}
 	if opts.Title != nil {
-		updateOpts.Title = *opts.Title
+		body["title"] = *opts.Title
 	}
 	if opts.Description != nil {
-		updateOpts.Description = *opts.Description
+		body["description"] = *opts.Description
 	}
 	if opts.State != "" {
-		updateOpts.State = string(opts.State)
+		body["state"] = string(opts.State)
 	}
 	if opts.DueOn != nil {
-		updateOpts.DueOn = opts.DueOn.Format(time.RFC3339)
+		body["due_on"] = opts.DueOn.Format(time.RFC3339)
 	}
-	m, err := p.client.UpdateMilestone(ctx, owner, repo, id, updateOpts)
-	if err != nil {
+	var m gitcode.Milestone
+	if err := p.doJSON(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/milestones/%d", owner, repo, id), body, &m); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateMilestone", err)
 	}
-	ms := convertMilestone(m)
+	ms := convertMilestone(&m)
 	return &ms, nil
 }
 
@@ -108,6 +122,19 @@ func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number stri
 		return provider.Wrap(provider.PlatformGitCode, "DeleteMilestone", err)
 	}
 	return nil
+}
+
+// doJSON is the raw-transport convenience wrapper serving the registered
+// detours of this package (see Provider.rawClient): JSON-in / JSON-out
+// with the method/path/body/result signature used by the gitee backend.
+func (p *Provider) doJSON(ctx context.Context, method, path string, body, result any) error {
+	_, err := p.rawClient.DoJSON(ctx, &transport.Request{
+		Method: method,
+		Path:   path,
+		Body:   body,
+		Result: result,
+	})
+	return err
 }
 
 // convertMilestone maps a gitcode.Milestone to a provider.Milestone.

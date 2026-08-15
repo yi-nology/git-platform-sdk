@@ -37,7 +37,11 @@ import (
 // Provider is the GitCode implementation of provider.Provider.
 type Provider struct {
 	client *gitcode.Client
-	logger provider.Logger
+	// rawClient serves the registered raw detours — surfaces where the
+	// SDK's option types cannot express the honest wire body (currently
+	// milestone create/update; see milestones.go).
+	rawClient *transport.Client
+	logger    provider.Logger
 }
 
 // New builds a GitCode Provider from the given config.
@@ -81,7 +85,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 	client.SetHTTPClient(httpClient)
 
-	return &Provider{client: client, logger: logger}, nil
+	return &Provider{client: client, rawClient: transportClient, logger: logger}, nil
 }
 
 // Platform implements provider.Provider.
