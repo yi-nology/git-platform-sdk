@@ -11,7 +11,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`Issue.Milestone` changed from `string` to `*MilestoneRef{Number, Title}`,
   and `CreateIssueOptions`/`UpdateIssueOptions` gained a `Milestone int`
   field (0 = unset/unchanged).** Consumers reading the milestone title now
-  use `issue.Milestone.Title` with a nil check.
+  use `issue.Milestone.Title` with a nil check. `MilestoneRef.Number`
+  carries the platform's addressing identifier (number on GitHub, ID on
+  GitLab/Gitea/Forgejo/GitCode).
 
 ### Added
 

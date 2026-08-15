@@ -223,7 +223,12 @@ type Issue struct {
 	ClosedAt  *time.Time    `json:"closed_at,omitempty"`
 }
 
-// MilestoneRef references a milestone from an issue.
+// MilestoneRef references a milestone from an issue. Number carries the
+// platform's milestone addressing identifier: the milestone *number* on
+// GitHub, and the platform milestone *ID* on GitLab, Gitea, Forgejo, and
+// GitCode (whose write endpoints take exactly that identifier, so
+// per-platform round-trips hold). A future MilestoneManager will reconcile
+// this field with a unified addressing scheme.
 type MilestoneRef struct {
 	Number int    `json:"number"`
 	Title  string `json:"title,omitempty"`

@@ -214,16 +214,42 @@ func assertIssueLabelOps(t *testing.T, im provider.IssueManager, requests *[]rec
 		t.Fatalf("RemoveIssueLabel: %v", err)
 	}
 	if !sawLabelRemoval(*requests) {
-		t.Errorf("expected label removal via DELETE or a PATCH/PUT write, recorded %s", methodsOf(*requests))
+		t.Errorf("expected label removal via DELETE or a PATCH/PUT write carrying remove_labels, recorded %s", methodsOf(*requests))
 	}
 }
 
 // sawLabelRemoval reports whether label removal used one of the two wire
-// shapes platforms have: a dedicated DELETE endpoint (GitHub), or a
-// PATCH/PUT write such as GitLab's remove_labels option.
+// shapes platforms have: a dedicated DELETE endpoint (GitHub, Gitea,
+// Forgejo, GitCode), or a PATCH/PUT write whose body carries a non-empty
+// remove_labels key (GitLab — go-gitlab sends the update form-encoded, and
+// the recorded Body map normalizes form keys). Bare method matching is not
+// enough: GitLab's AddIssueLabels is also a PUT, so a RemoveIssueLabel that
+// silently stopped sending remove_labels would otherwise pass.
 func sawLabelRemoval(requests []recordedRequest) bool {
-	return sawMethod(requests, http.MethodDelete) ||
-		sawMethod(requests, http.MethodPut, http.MethodPatch)
+	for _, r := range requests {
+		switch r.Method {
+		case http.MethodDelete:
+			return true
+		case http.MethodPatch, http.MethodPut:
+			if v, ok := r.Body["remove_labels"]; ok && nonEmptyBodyValue(v) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// nonEmptyBodyValue reports whether a decoded body value carries content:
+// strings must be non-empty, non-nil values of any other decoded type (e.g.
+// a JSON array) count as present.
+func nonEmptyBodyValue(v any) bool {
+	if v == nil {
+		return false
+	}
+	if s, ok := v.(string); ok {
+		return s != ""
+	}
+	return true
 }
 
 // Alphanumeric (not just digits) because Gitee issue numbers are alphanumeric (e.g. I3XU7A).
