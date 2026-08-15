@@ -226,7 +226,8 @@ func sawLabelRemoval(requests []recordedRequest) bool {
 		sawMethod(requests, http.MethodPut, http.MethodPatch)
 }
 
-var issuePathNum = regexp.MustCompile(`/issues/\d+$`)
+// Alphanumeric (not just digits) because Gitee issue numbers are alphanumeric (e.g. I3XU7A).
+var issuePathNum = regexp.MustCompile(`/issues/[A-Za-z0-9]+$`)
 
 // issueStubServer returns the method/shape-routed recording mock.
 func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {

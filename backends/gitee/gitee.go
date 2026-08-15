@@ -19,6 +19,7 @@
 //   - files.go:   GetFileContent, CreateFile, UpdateFile, DeleteFile
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
 //   - labels.go:  repository label CRUD (LabelManager)
+//   - issues.go:  issue CRUD, comments, and issue labels (IssueManager)
 //   - types.go:   internal Gitee-API types and conversion helpers
 package gitee
 
@@ -71,9 +72,9 @@ func New(cfg provider.Config) (provider.Provider, error) {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee }
 
 // Capabilities implements provider.Provider. Gitee implements the optional
-// LabelManager interface (see labels.go).
+// LabelManager (see labels.go) and IssueManager (see issues.go) interfaces.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true}
+	return provider.CapabilitySet{Labels: true, Issues: true}
 }
 
 // TestConnection implements provider.Provider.
