@@ -8,6 +8,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`provider.Wrap` no longer panics on non-struct error values.** The
+  reflection-based status-code fallback in `httpStatusFromError` called
+  `NumField` on non-struct kinds (e.g. `url.EscapeError`, a string kind) and
+  panicked; it now falls through to message parsing.
 - **`UpdateLabel`/`DeleteLabel` no longer falsely report NotFound for labels
   beyond the first page.** The GitLab, Gitea, and Forgejo name→ID resolution
   now scans labels with server-side pagination (100 per page, bounded to 50

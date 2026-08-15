@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"testing"
 )
@@ -251,5 +252,26 @@ func TestStatusError_ImplementsStatusCoder(t *testing.T) {
 	}
 	if se.StatusCode() != 429 {
 		t.Errorf("expected 429, got %d", se.StatusCode())
+	}
+}
+
+func TestWrap_NonStructError_DoesNotPanic(t *testing.T) {
+	// url.EscapeError is a string-kind error value; the reflection fallback
+	// in httpStatusFromError used to call NumField on it and panic.
+	err := url.EscapeError("invalid%escape")
+
+	got := Wrap(PlatformGitHub, "TestOp", err)
+	var pe *ProviderError
+	if !errors.As(got, &pe) {
+		t.Fatalf("expected *ProviderError, got %T", got)
+	}
+	if pe.StatusCode != 0 {
+		t.Errorf("expected StatusCode 0 for a non-HTTP error, got %d", pe.StatusCode)
+	}
+
+	// Pointer form exercises the pointer-deref path into the same guard.
+	got2 := Wrap(PlatformGitHub, "TestOp", &err)
+	if !errors.As(got2, &pe) {
+		t.Fatalf("expected *ProviderError for pointer form, got %T", got2)
 	}
 }

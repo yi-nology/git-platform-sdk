@@ -199,13 +199,14 @@ func httpStatusFromError(err error) (int, bool) {
 		return 0, false
 	}
 	// Method first (cheaper than field iteration).
-	if m := v.MethodByName("StatusCode"); m.IsValid() {
-		out := m.Call(nil)
-		if len(out) == 1 {
-			if c, ok := out[0].Interface().(int); ok {
-				return c, true
-			}
-		}
+	if c, ok := statusCodeFromMethod(v); ok {
+		return c, true
+	}
+	// Non-struct error values (e.g. url.EscapeError, a string kind) have no
+	// fields; NumField panics on non-struct kinds, so fall through to
+	// message parsing.
+	if v.Kind() != reflect.Struct {
+		return parseStatusFromString(err.Error())
 	}
 	// Fields.
 	for i := 0; i < v.NumField(); i++ {
@@ -226,6 +227,21 @@ func httpStatusFromError(err error) (int, bool) {
 	}
 	// Last resort: scan the error message for "returned NNN" or "HTTP NNN".
 	return parseStatusFromString(err.Error())
+}
+
+// statusCodeFromMethod reports the result of calling a value method named
+// "StatusCode" that returns a single int, when v has one.
+func statusCodeFromMethod(v reflect.Value) (int, bool) {
+	m := v.MethodByName("StatusCode")
+	if !m.IsValid() {
+		return 0, false
+	}
+	out := m.Call(nil)
+	if len(out) != 1 {
+		return 0, false
+	}
+	c, ok := out[0].Interface().(int)
+	return c, ok
 }
 
 // parseStatusFromString extracts a 3-digit HTTP status code from an error
