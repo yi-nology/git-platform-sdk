@@ -5,6 +5,8 @@ go 1.26
 require (
 	code.gitea.io/sdk/gitea v0.25.1
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
+	gitee.com/openeuler/go-gitee v0.0.0-20251225091545-a0f78272dafc
+	github.com/antihax/optional v1.0.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/google/go-github/v69 v69.2.0
 	github.com/yi-nology/gitcode_api v0.6.0

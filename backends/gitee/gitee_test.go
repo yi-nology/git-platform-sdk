@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,6 +35,73 @@ func newTestProvider(t *testing.T, srv *httptest.Server) *gitee.Provider {
 		t.Fatalf("expected *gitee.Provider, got %T", p)
 	}
 	return gp
+}
+
+// TestBasePath_NoDoubledV5Prefix verifies the URL wiring after the go-gitee
+// SDK migration: the SDK builds paths as BasePath + "/v5/..." itself, so the
+// Provider must point the SDK at ".../api" (not ".../api/v5") while the raw
+// client keeps the full "/api/v5" root. Against a bare server URL and against
+// a cfg.BaseURL that already carries "/api/v5", every request must carry
+// exactly one "/api/v5" prefix.
+func TestBasePath_NoDoubledV5Prefix(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		baseURL func(srvURL string) string
+	}{
+		{"bare server URL", func(srvURL string) string { return srvURL }},
+		{"explicit api v5", func(srvURL string) string { return srvURL + "/api/v5" }},
+		{"explicit api v5 trailing slash", func(srvURL string) string { return srvURL + "/api/v5/" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var paths []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				paths = append(paths, r.URL.Path)
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				if strings.HasSuffix(r.URL.Path, "/branches") || strings.HasSuffix(r.URL.Path, "/user/repos") {
+					_, _ = w.Write([]byte(`[{"name":"main"}]`))
+					return
+				}
+				_, _ = w.Write([]byte(`{"id":1,"name":"repo","full_name":"owner/repo","owner":{"login":"owner"}}`))
+			}))
+			defer srv.Close()
+
+			p, err := provider.NewProvider(provider.Config{
+				Platform: provider.PlatformGitee,
+				BaseURL:  tc.baseURL(srv.URL),
+				Token:    "test-token",
+			})
+			if err != nil {
+				t.Fatalf("NewProvider: %v", err)
+			}
+			ctx := context.Background()
+			if _, err := p.ListBranches(ctx, "owner", "repo"); err != nil {
+				t.Fatalf("ListBranches (SDK): %v", err)
+			}
+			if _, err := p.GetRepo(ctx, "owner", "repo"); err != nil {
+				t.Fatalf("GetRepo (SDK): %v", err)
+			}
+			if _, err := p.ListRepos(ctx, provider.ListRepoOptions{}); err != nil {
+				t.Fatalf("ListRepos (raw): %v", err)
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			if len(paths) != 3 {
+				t.Fatalf("expected 3 recorded requests, got %d: %v", len(paths), paths)
+			}
+			for _, path := range paths {
+				if strings.Count(path, "/v5") != 1 {
+					t.Errorf("path %q must contain exactly one /v5 segment", path)
+				}
+				if !strings.HasPrefix(path, "/api/v5/") {
+					t.Errorf("path %q must start with /api/v5/", path)
+				}
+			}
+		})
+	}
 }
 
 func TestListRepos(t *testing.T) {

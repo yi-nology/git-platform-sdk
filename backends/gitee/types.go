@@ -3,41 +3,41 @@ package gitee
 import (
 	"time"
 
+	gitee "gitee.com/openeuler/go-gitee/gitee"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// The giteeXxx types below mirror the JSON shapes returned by the Gitee REST
-// API. They are intentionally unexported (lowercase) since they only exist to
-// drive the provider-neutral result types.
+// The convertXxx functions below translate go-gitee SDK models into the
+// provider-neutral result types. The giteeXxx types further down mirror the
+// JSON shapes returned by the Gitee REST API for surfaces still served by the
+// raw transport client; they are intentionally unexported (lowercase) since
+// they only exist to drive the provider-neutral result types and are being
+// retired as the SDK migration proceeds.
 
-type giteeRepo struct {
-	ID       int    `json:"id"`
-	FullName string `json:"full_name"`
-	Name     string `json:"name"`
-	Owner    struct {
-		Login string `json:"login"`
-	} `json:"owner"`
-	Description   string `json:"description"`
-	CloneURL      string `json:"clone_url"`
-	SSHURL        string `json:"ssh_url"`
-	DefaultBranch string `json:"default_branch"`
-	Private       bool   `json:"private"`
-	HTMLURL       string `json:"html_url"`
-}
-
-func (r *giteeRepo) toPlatformRepo() *provider.PlatformRepo {
-	return &provider.PlatformRepo{
-		ID:            int64(r.ID),
+// convertRepo translates the SDK Project model (gitee's repo object) into a
+// PlatformRepo. The SDK Project model has no clone_url field (Gitee's repo
+// payload carries ssh_url/html_url only), so CloneURL stays empty.
+func convertRepo(r gitee.Project) *provider.PlatformRepo {
+	out := &provider.PlatformRepo{
+		ID:            int64(r.Id),
 		FullName:      r.FullName,
 		Name:          r.Name,
-		Owner:         r.Owner.Login,
 		Description:   r.Description,
-		CloneURL:      r.CloneURL,
-		SSHURL:        r.SSHURL,
+		SSHURL:        r.SshUrl,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
 		Platform:      provider.PlatformGitee,
 	}
+	if r.Owner != nil {
+		out.Owner = r.Owner.Login
+	}
+	return out
+}
+
+// convertBranch translates the SDK Branch model into a PlatformBranch.
+func convertBranch(b gitee.Branch) *provider.PlatformBranch {
+	return &provider.PlatformBranch{Name: b.Name}
 }
 
 type giteePR struct {
