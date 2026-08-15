@@ -409,9 +409,10 @@ type UpdateMilestoneOptions struct {
 // Sort and Order are platform-dependent: each backend forwards them to its
 // platform's own vocabulary (e.g. GitHub's stars/forks/updated with
 // asc/desc), so values valid on one platform may be ignored or rejected on
-// another (gitea/forgejo silently ignore unknown sorts; gitlab's search API
-// exposes no sort/order at all — a registered ignore). Consult the target
-// platform's search documentation for the accepted values.
+// another (gitea/forgejo reject unknown sort/order values with HTTP 422;
+// gitlab's search API exposes no sort/order at all — a registered ignore).
+// Consult the target platform's search documentation for the accepted
+// values.
 type SearchReposOptions struct {
 	Query   string `json:"q"`
 	Sort    string `json:"sort,omitempty"`
