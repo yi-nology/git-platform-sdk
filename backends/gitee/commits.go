@@ -10,7 +10,7 @@ import (
 // GetCommit implements provider.CommitManager.
 func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
 	var c giteeCommitDetail
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/commits/%s", owner, repo, sha), nil, &c); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/commits/%s", esc(owner), esc(repo), esc(sha)), nil, &c); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetCommit", err)
 	}
 	return c.toCommitInfo(), nil
@@ -19,7 +19,7 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // ListCommits implements provider.CommitManager.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	path := fmt.Sprintf("/repos/%s/%s/commits?page=%d&per_page=%d", owner, repo, page, perPage)
+	path := fmt.Sprintf("/repos/%s/%s/commits?page=%d&per_page=%d", esc(owner), esc(repo), page, perPage)
 	if opts.Branch != "" {
 		path += "&sha=" + opts.Branch
 	}
@@ -46,7 +46,7 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 		Commits []giteeCommitDetail `json:"commits"`
 		Files   []giteePRFile       `json:"files"`
 	}
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/compare/%s...%s", owner, repo, base, head), nil, &cmp); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/compare/%s...%s", esc(owner), esc(repo), esc(base), esc(head)), nil, &cmp); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CompareCommits", err)
 	}
 	result := &provider.CompareResult{TotalCommits: len(cmp.Commits)}

@@ -12,6 +12,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   beyond the first page.** The GitLab, Gitea, and Forgejo name→ID resolution
   now scans labels with server-side pagination (100 per page, bounded to 50
   pages) instead of stopping after the first 100 labels.
+- **The gitee backend now percent-encodes variable URL path segments**
+  (owner, repo, branch, label name, sha, file path, ref). Names containing
+  `#`, `?`, `%`, spaces, or non-ASCII characters previously corrupted or
+  truncated the request URL.
 
 ## [v0.38.0] - 2026-08-15
 

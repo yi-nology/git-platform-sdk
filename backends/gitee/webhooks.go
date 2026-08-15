@@ -30,7 +30,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	body["push_events"] = true
 	body["merge_requests_events"] = true
 	var hook giteeWebhook
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/hooks", opts.Owner, opts.Repo), body, &hook); err != nil {
+	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/hooks", esc(opts.Owner), esc(opts.Repo)), body, &hook); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateWebhook", err)
 	}
 	return hook.toPlatformWebhook(), nil
@@ -38,7 +38,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, repo, webhookID), nil, nil)
+	err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/hooks/%d", esc(owner), esc(repo), webhookID), nil, nil)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteWebhook", err)
 	}
@@ -48,7 +48,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 // ListWebhooks implements provider.WebhookManager.
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
 	var hooks []giteeWebhook
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/hooks", owner, repo), nil, &hooks); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/hooks", esc(owner), esc(repo)), nil, &hooks); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListWebhooks", err)
 	}
 	result := make([]*provider.PlatformWebhook, 0, len(hooks))

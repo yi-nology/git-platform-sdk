@@ -17,7 +17,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 			SHA string `json:"sha"`
 		} `json:"commit"`
 	}
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/tags?page=%d&per_page=%d", owner, repo, page, perPage), nil, &tags); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/tags?page=%d&per_page=%d", esc(owner), esc(repo), page, perPage), nil, &tags); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListTags", err)
 	}
 	result := make([]*provider.TagInfo, 0, len(tags))
@@ -31,7 +31,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
 	page, perPage := provider.NormalizePageOpts(1, 0)
 	var releases []giteeRelease
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/releases?page=%d&per_page=%d", owner, repo, page, perPage), nil, &releases); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/releases?page=%d&per_page=%d", esc(owner), esc(repo), page, perPage), nil, &releases); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListReleases", err)
 	}
 	result := make([]*provider.ReleaseInfo, 0, len(releases))
@@ -60,7 +60,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 		body["prerelease"] = true
 	}
 	var r giteeRelease
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/releases", owner, repo), body, &r); err != nil {
+	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/releases", esc(owner), esc(repo)), body, &r); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateRelease", err)
 	}
 	return r.toReleaseInfo(), nil
@@ -74,7 +74,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	}
 	resp, err := p.client.Do(ctx, &transport.Request{
 		Method: "GET",
-		Path:   fmt.Sprintf("/repos/%s/%s/%s/%s", owner, repo, archiveFormat, ref),
+		Path:   fmt.Sprintf("/repos/%s/%s/%s/%s", esc(owner), esc(repo), archiveFormat, esc(ref)),
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)

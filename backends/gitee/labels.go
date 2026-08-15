@@ -21,7 +21,7 @@ type giteeLabel struct {
 func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	var labels []giteeLabel
-	path := fmt.Sprintf("/repos/%s/%s/labels?page=%d&per_page=%d", owner, repo, page, perPage)
+	path := fmt.Sprintf("/repos/%s/%s/labels?page=%d&per_page=%d", esc(owner), esc(repo), page, perPage)
 	if err := p.doRequest(ctx, "GET", path, nil, &labels); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListLabels", err)
 	}
@@ -39,7 +39,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 		body["description"] = opts.Description
 	}
 	var label giteeLabel
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/labels", owner, repo), body, &label); err != nil {
+	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/labels", esc(owner), esc(repo)), body, &label); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateLabel", err)
 	}
 	return convertLabel(label), nil
@@ -59,7 +59,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 		body["description"] = *opts.Description
 	}
 	var label giteeLabel
-	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/labels/%s", owner, repo, name), body, &label); err != nil {
+	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/labels/%s", esc(owner), esc(repo), esc(name)), body, &label); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateLabel", err)
 	}
 	return convertLabel(label), nil
@@ -67,7 +67,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 
 // DeleteLabel implements provider.LabelManager.
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
-	if err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/labels/%s", owner, repo, name), nil, nil); err != nil {
+	if err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/labels/%s", esc(owner), esc(repo), esc(name)), nil, nil); err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteLabel", err)
 	}
 	return nil

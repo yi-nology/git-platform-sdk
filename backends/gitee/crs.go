@@ -22,7 +22,7 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 		body["labels"] = strings.Join(opts.Labels, ",")
 	}
 	var pr giteePR
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/pulls", opts.Owner, opts.Repo), body, &pr); err != nil {
+	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/pulls", esc(opts.Owner), esc(opts.Repo)), body, &pr); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateCR", err)
 	}
 	return pr.toChangeRequest(), nil
@@ -31,7 +31,7 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 // GetCR implements provider.ChangeRequestManager.
 func (p *Provider) GetCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
 	var pr giteePR
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), nil, &pr); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d", esc(owner), esc(repo), number), nil, &pr); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetCR", err)
 	}
 	return pr.toChangeRequest(), nil
@@ -44,7 +44,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	if state == "" {
 		state = "open"
 	}
-	path := fmt.Sprintf("/repos/%s/%s/pulls?page=%d&per_page=%d&state=%s", opts.Owner, opts.Repo, page, perPage, state)
+	path := fmt.Sprintf("/repos/%s/%s/pulls?page=%d&per_page=%d&state=%s", esc(opts.Owner), esc(opts.Repo), page, perPage, state)
 	if opts.SourceBranch != "" {
 		path += "&source_branch=" + opts.SourceBranch
 	}
@@ -73,7 +73,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, 
 		body["squash"] = true
 	}
 	var pr giteePR
-	if err := p.doRequest(ctx, "PUT", fmt.Sprintf("/repos/%s/%s/pulls/%d/merge", owner, repo, number), body, &pr); err != nil {
+	if err := p.doRequest(ctx, "PUT", fmt.Sprintf("/repos/%s/%s/pulls/%d/merge", esc(owner), esc(repo), number), body, &pr); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "MergeCR", err)
 	}
 	return pr.toChangeRequest(), nil
@@ -83,7 +83,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, 
 func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
 	body := map[string]any{"state": "closed"}
 	var pr giteePR
-	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), body, &pr); err != nil {
+	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/pulls/%d", esc(owner), esc(repo), number), body, &pr); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CloseCR", err)
 	}
 	return pr.toChangeRequest(), nil
@@ -93,7 +93,7 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) 
 func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
 	body := map[string]any{"state": "open"}
 	var pr giteePR
-	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), body, &pr); err != nil {
+	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/pulls/%d", esc(owner), esc(repo), number), body, &pr); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ReopenCR", err)
 	}
 	return pr.toChangeRequest(), nil
@@ -112,7 +112,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 		body["target_branch"] = opts.TargetBranch
 	}
 	var pr giteePR
-	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), body, &pr); err != nil {
+	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/pulls/%d", esc(owner), esc(repo), number), body, &pr); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
 	}
 	return pr.toChangeRequest(), nil
@@ -121,7 +121,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 // UpdateCRLabels implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
 	body := map[string]any{"labels": strings.Join(labels, ",")}
-	err := p.doRequest(ctx, "PUT", fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), body, nil)
+	err := p.doRequest(ctx, "PUT", fmt.Sprintf("/repos/%s/%s/pulls/%d", esc(owner), esc(repo), number), body, nil)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "UpdateCRLabels", err)
 	}
@@ -132,7 +132,7 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, numbe
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*provider.CRComment, error) {
 	page, perPage := provider.NormalizePageOpts(1, 0)
 	var comments []giteeComment
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/comments?page=%d&per_page=%d", owner, repo, number, page, perPage), nil, &comments); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/comments?page=%d&per_page=%d", esc(owner), esc(repo), number, page, perPage), nil, &comments); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListCRComments", err)
 	}
 	result := make([]*provider.CRComment, 0, len(comments))
@@ -146,7 +146,7 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, numbe
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*provider.CRCommit, error) {
 	page, perPage := provider.NormalizePageOpts(1, 0)
 	var commits []giteeCommit
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/commits?page=%d&per_page=%d", owner, repo, number, page, perPage), nil, &commits); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/commits?page=%d&per_page=%d", esc(owner), esc(repo), number, page, perPage), nil, &commits); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListCRCommits", err)
 	}
 	result := make([]*provider.CRCommit, 0, len(commits))

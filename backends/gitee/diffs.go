@@ -11,7 +11,7 @@ import (
 // GetCRDiff implements provider.DiffManager.
 func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*provider.MergeDiff, error) {
 	var files []giteePRFile
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/files", owner, repo, number), nil, &files); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/pulls/%d/files", esc(owner), esc(repo), number), nil, &files); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetCRDiff", err)
 	}
 	diff := &provider.MergeDiff{}
@@ -38,7 +38,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number in
 	var resp struct {
 		ID int64 `json:"id"`
 	}
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/pulls/%d/comments", owner, repo, number), reqBody, &resp); err != nil {
+	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/pulls/%d/comments", esc(owner), esc(repo), number), reqBody, &resp); err != nil {
 		return "", provider.Wrap(provider.PlatformGitee, "CreateNote", err)
 	}
 	return fmt.Sprintf("%d", resp.ID), nil
@@ -46,7 +46,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number in
 
 // DeleteNote implements provider.DiffManager.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
-	err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/pulls/comments/%s", owner, repo, noteID), nil, nil)
+	err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/pulls/comments/%s", esc(owner), esc(repo), esc(noteID)), nil, nil)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteNote", err)
 	}

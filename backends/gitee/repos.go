@@ -12,7 +12,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	var path string
 	if opts.Owner != "" {
-		path = fmt.Sprintf("/users/%s/repos?page=%d&per_page=%d", opts.Owner, page, perPage)
+		path = fmt.Sprintf("/users/%s/repos?page=%d&per_page=%d", esc(opts.Owner), page, perPage)
 	} else {
 		path = fmt.Sprintf("/user/repos?page=%d&per_page=%d", page, perPage)
 	}
@@ -30,7 +30,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 // GetRepo implements provider.RepoManager.
 func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
 	var r giteeRepo
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s", owner, repo), nil, &r); err != nil {
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s", esc(owner), esc(repo)), nil, &r); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetRepo", err)
 	}
 	return r.toPlatformRepo(), nil
@@ -38,7 +38,7 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 
 // DeleteRepo implements provider.RepoManager.
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
-	err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s", owner, repo), nil, nil)
+	err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s", esc(owner), esc(repo)), nil, nil)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteRepo", err)
 	}
@@ -61,7 +61,7 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 		body["private"] = *opts.Private
 	}
 	var r giteeRepo
-	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s", owner, repo), body, &r); err != nil {
+	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s", esc(owner), esc(repo)), body, &r); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRepo", err)
 	}
 	return r.toPlatformRepo(), nil
@@ -77,7 +77,7 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 		body["name"] = opts.Name
 	}
 	var r giteeRepo
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/forks", owner, repo), body, &r); err != nil {
+	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/forks", esc(owner), esc(repo)), body, &r); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ForkRepo", err)
 	}
 	return r.toPlatformRepo(), nil
@@ -101,7 +101,7 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 
 	var path string
 	if owner != "" {
-		path = fmt.Sprintf("/orgs/%s/repos", owner)
+		path = fmt.Sprintf("/orgs/%s/repos", esc(owner))
 	} else {
 		path = "/user/repos"
 	}
