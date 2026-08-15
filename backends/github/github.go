@@ -15,6 +15,7 @@
 //   - files.go:    GetFileContent, CreateFile, UpdateFile, DeleteFile
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
 //   - labels.go:   repository label CRUD (LabelManager)
+//   - issues.go:   issue CRUD, comments, and issue labels (IssueManager)
 //   - types.go:    internal GitHub-API types and conversion helpers
 package github
 
@@ -94,9 +95,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitHub }
 
 // Capabilities implements provider.Provider. GitHub implements the optional
-// LabelManager interface (see labels.go).
+// LabelManager interface (see labels.go) and the IssueManager interface
+// (see issues.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true}
+	return provider.CapabilitySet{Labels: true, Issues: true}
 }
 
 // TestConnection implements provider.Provider.

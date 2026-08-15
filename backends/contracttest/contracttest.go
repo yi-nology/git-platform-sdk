@@ -47,6 +47,9 @@ type Harness struct {
 	// Capabilities().Labels must provide this config, and a config must not
 	// be provided by a platform that does not declare the capability.
 	Labels *LabelsHarnessConfig
+	// Issues, when non-nil, auto-mounts the issue-management suite inside
+	// Run, with the same bidirectional drift checks as Labels.
+	Issues *IssuesHarnessConfig
 }
 
 // Run executes the full contract suite against h. Each subtest is independent.
@@ -61,6 +64,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("Context_Cancel", func(t *testing.T) { testContextCancel(t, h) })
 	t.Run("Capabilities_Consistency", func(t *testing.T) { testCapabilities(t, h) })
 	t.Run("LabelsSuite", func(t *testing.T) { testLabelsSuite(t, h) })
+	t.Run("IssuesSuite", func(t *testing.T) { testIssuesSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

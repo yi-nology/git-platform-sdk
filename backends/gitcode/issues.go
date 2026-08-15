@@ -3,6 +3,7 @@ package gitcode
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 	gitcode "github.com/yi-nology/gitcode_api"
@@ -127,9 +128,12 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 	result := make([]*provider.IssueLabel, 0, len(labels))
 	for _, l := range labels {
 		result = append(result, &provider.IssueLabel{
-			ID:    l.ID,
-			Name:  l.Name,
-			Color: l.Color,
+			ID:   l.ID,
+			Name: l.Name,
+			// Same canonicalization as convertLabel in labels.go: GitCode
+			// labels carry '#'-prefixed colors on the wire; the SDK type is
+			// '#' free.
+			Color: strings.TrimPrefix(l.Color, "#"),
 		})
 	}
 	return result, nil
