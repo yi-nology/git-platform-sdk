@@ -50,6 +50,45 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	return convertRelease(release), nil
 }
 
+// GetReleaseByTag implements provider.ReleaseManager. Gongfeng's release
+// endpoints are tag-addressed natively.
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+	pid := owner + "/" + repo
+	release, _, err := p.client.Releases.GetRelease(ctx, pid, tag)
+	if err != nil {
+		return nil, sdkError("GetReleaseByTag", err)
+	}
+	return convertRelease(release), nil
+}
+
+// UpdateRelease implements provider.ReleaseManager via Gongfeng's
+// tag-addressed update (PUT). Registration: the platform's update surface
+// accepts only a description, so UpdateReleaseOptions.Name, .Draft, and
+// .Prerelease are ignored on this platform — only Body is carried.
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+	pid := owner + "/" + repo
+	updateOpts := &gongfeng.UpdateReleaseOptions{}
+	if opts.Body != nil {
+		updateOpts.Description = gongfeng.Ptr(*opts.Body)
+	}
+	release, _, err := p.client.Releases.UpdateRelease(ctx, pid, tag, updateOpts)
+	if err != nil {
+		return nil, sdkError("UpdateRelease", err)
+	}
+	return convertRelease(release), nil
+}
+
+// DeleteRelease implements provider.ReleaseManager via Gongfeng's
+// tag-addressed delete.
+func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
+	pid := owner + "/" + repo
+	_, err := p.client.Releases.DeleteRelease(ctx, pid, tag)
+	if err != nil {
+		return sdkError("DeleteRelease", err)
+	}
+	return nil
+}
+
 // GetArchive implements provider.ReleaseManager.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
 	pid := owner + "/" + repo

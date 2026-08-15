@@ -72,6 +72,62 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	return ri, nil
 }
 
+// GetReleaseByTag implements provider.ReleaseManager. GitLab's release
+// endpoints are tag-addressed natively.
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+	r, _, err := p.client.Releases.GetRelease(pidOf(owner, repo), tag, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "GetReleaseByTag", err)
+	}
+	return convertGitLabRelease(r), nil
+}
+
+// UpdateRelease implements provider.ReleaseManager via GitLab's
+// tag-addressed update. Registration: GitLab releases have no draft or
+// prerelease concepts (a release is created from a tag and published
+// immediately), so UpdateReleaseOptions.Draft and .Prerelease are ignored
+// on this platform — only Name and Body are carried.
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+	r, _, err := p.client.Releases.UpdateRelease(pidOf(owner, repo), tag, &gitlab.UpdateReleaseOptions{
+		Name:        opts.Name,
+		Description: opts.Body,
+	}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateRelease", err)
+	}
+	return convertGitLabRelease(r), nil
+}
+
+// DeleteRelease implements provider.ReleaseManager via GitLab's
+// tag-addressed delete. The release's tag is kept; only the release object
+// is removed.
+func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
+	_, _, err := p.client.Releases.DeleteRelease(pidOf(owner, repo), tag, gitlab.WithContext(ctx))
+	if err != nil {
+		return provider.Wrap(provider.PlatformGitLab, "DeleteRelease", err)
+	}
+	return nil
+}
+
+// convertGitLabRelease maps a gitlab.Release to a provider.ReleaseInfo
+// (description is the release body; released_at is the publish timestamp).
+func convertGitLabRelease(r *gitlab.Release) *provider.ReleaseInfo {
+	if r == nil {
+		return nil
+	}
+	ri := &provider.ReleaseInfo{
+		TagName:   r.TagName,
+		Title:     r.Name,
+		Body:      r.Description,
+		URL:       r.Links.Self,
+		CreatedAt: timeOrZero(r.CreatedAt),
+	}
+	if r.ReleasedAt != nil {
+		ri.PublishedAt = *r.ReleasedAt
+	}
+	return ri
+}
+
 // GetArchive implements provider.ReleaseManager.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
 	fmtVal := "tar.gz"

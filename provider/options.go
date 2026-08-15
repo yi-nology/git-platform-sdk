@@ -216,6 +216,15 @@ type CreateReleaseOptions struct {
 	Prerelease bool   `json:"prerelease,omitempty"`
 }
 
+// UpdateReleaseOptions contains options for updating a release addressed by
+// tag. Nil fields are left unchanged.
+type UpdateReleaseOptions struct {
+	Name       *string `json:"name,omitempty"`
+	Body       *string `json:"body,omitempty"`
+	Draft      *bool   `json:"draft,omitempty"`
+	Prerelease *bool   `json:"prerelease,omitempty"`
+}
+
 // --- Issues ---
 
 // IssueState represents the state of an issue.

@@ -37,5 +37,13 @@ func TestGitee_Contract(t *testing.T) {
 			CommentsResponse: `[{"id":1,"body":"a comment","user":{"id":1,"login":"dev","name":"Dev"},"created_at":"2026-08-15T10:30:00+08:00","updated_at":"2026-08-15T10:35:00+08:00"}]`,
 			LabelsResponse:   `[{"id":1,"name":"bug","color":"#4cc917"}]`,
 		},
+		// Gitee release shape (raw transport; the SDK model mis-types the
+		// payload — see backends/gitee/releases.go): github-like keys with
+		// html_url, served by the same mock for by-tag fetches and the
+		// tag→id resolution that precedes update/delete.
+		Releases: &contracttest.ReleasesHarnessConfig{
+			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+		},
 	})
 }

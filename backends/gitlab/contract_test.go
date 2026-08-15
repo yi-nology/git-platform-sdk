@@ -51,5 +51,13 @@ func TestGitLab_Contract(t *testing.T) {
 			// the wire subtest only asserts a silent no-op.
 			IgnoresRequestReviewers: true,
 		},
+		// GitLab release shape: name/description/_links.self (released_at is
+		// the publish timestamp). Update is a tag-addressed PUT carrying
+		// name/description; Draft/Prerelease have no GitLab counterpart
+		// (registered ignore in the backend).
+		Releases: &contracttest.ReleasesHarnessConfig{
+			ByTagResponse:  `{"tag_name":"v1.0.0","name":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
+			UpdateResponse: `{"tag_name":"v1.0.0","name":"v1.0.0-renamed","description":"updated notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
+		},
 	})
 }

@@ -47,6 +47,59 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	return convertRelease(r), nil
 }
 
+// GetReleaseByTag implements provider.ReleaseManager. GitCode exposes a
+// dedicated tag-addressed endpoint.
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+	r, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "GetReleaseByTag", err)
+	}
+	return convertRelease(r), nil
+}
+
+// UpdateRelease implements provider.ReleaseManager. The update endpoint is
+// id-addressed, so the tag is resolved through the by-tag endpoint first
+// (exact lookup, no list window). The SDK's UpdateReleaseOptions carries
+// plain-string name/body fields that would clobber the release when sent
+// empty, so the current values from the resolution fetch backfill every
+// option the caller left nil; draft/prerelease are pointers that pass
+// through untouched.
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+	cur, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateRelease", err)
+	}
+	name, body := cur.Name, cur.Body
+	if opts.Name != nil {
+		name = *opts.Name
+	}
+	if opts.Body != nil {
+		body = *opts.Body
+	}
+	r, err := p.client.UpdateRelease(ctx, owner, repo, cur.ID, gitcode.UpdateReleaseOptions{
+		TagName:    cur.TagName,
+		Name:       name,
+		Body:       body,
+		Draft:      opts.Draft,
+		Prerelease: opts.Prerelease,
+	})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateRelease", err)
+	}
+	return convertRelease(r), nil
+}
+
+// DeleteRelease implements provider.ReleaseManager via GitCode's
+// tag-addressed delete: the SDK deletes the release for the tag and, when
+// the platform reports the release already gone, falls back to deleting the
+// tag itself so the call stays idempotent.
+func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
+	if err := p.client.DeleteRelease(ctx, owner, repo, tag); err != nil {
+		return provider.Wrap(provider.PlatformGitCode, "DeleteRelease", err)
+	}
+	return nil
+}
+
 // GetArchive implements provider.ReleaseManager.
 //
 // The GitCode platform API (/api/v5) does not expose an archive download

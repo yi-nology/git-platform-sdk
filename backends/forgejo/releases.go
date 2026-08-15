@@ -54,6 +54,57 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	return convertRelease(r), nil
 }
 
+// GetReleaseByTag implements provider.ReleaseManager. Forgejo exposes a
+// dedicated tag-addressed endpoint.
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+	r, _, err := p.client.GetReleaseByTag(owner, repo, tag)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "GetReleaseByTag", err)
+	}
+	return convertRelease(r), nil
+}
+
+// UpdateRelease implements provider.ReleaseManager. The edit endpoint is
+// id-addressed, so the tag is resolved through the by-tag endpoint first
+// (exact lookup, no list window). EditReleaseOption's name/note fields are
+// plain strings that would clobber the release when sent empty, so the
+// current values from the resolution fetch backfill every option the caller
+// left nil; draft/prerelease are pointers that pass through untouched.
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+	cur, _, err := p.client.GetReleaseByTag(owner, repo, tag)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "UpdateRelease", err)
+	}
+	title, note := cur.Title, cur.Note
+	if opts.Name != nil {
+		title = *opts.Name
+	}
+	if opts.Body != nil {
+		note = *opts.Body
+	}
+	r, _, err := p.client.EditRelease(owner, repo, cur.ID, forgejo.EditReleaseOption{
+		TagName:      tag,
+		Title:        title,
+		Note:         note,
+		IsDraft:      opts.Draft,
+		IsPrerelease: opts.Prerelease,
+	})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "UpdateRelease", err)
+	}
+	return convertRelease(r), nil
+}
+
+// DeleteRelease implements provider.ReleaseManager via Forgejo's
+// tag-addressed delete (the SDK version-gates itself against the server).
+// The release's tag is kept.
+func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
+	if _, err := p.client.DeleteReleaseByTag(owner, repo, tag); err != nil {
+		return provider.Wrap(provider.PlatformForgejo, "DeleteRelease", err)
+	}
+	return nil
+}
+
 // GetArchive implements provider.ReleaseManager.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
 	var (

@@ -85,6 +85,84 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	return r.toReleaseInfo(), nil
 }
 
+// GetReleaseByTag implements provider.ReleaseManager.
+//
+// Routed through the raw transport client rather than the SDK: the
+// generated GetV5ReposOwnerRepoReleasesTagsTag decodes into the mis-typed
+// Release model (see ListReleases), and the tag-addressed endpoint is
+// outside the SDK's release surface anyway.
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+	var r giteeRelease
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/releases/tags/%s", esc(owner), esc(repo), esc(tag)), nil, &r); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "GetReleaseByTag", err)
+	}
+	return r.toReleaseInfo(), nil
+}
+
+// UpdateRelease implements provider.ReleaseManager.
+//
+// Routed through the raw transport client rather than the SDK: the
+// generated PatchV5ReposOwnerRepoReleasesId posts its parameters as a
+// multipart body labeled application/json (the upstream client.go bug
+// behind CreateRelease's detour) and decodes into the mis-typed Release
+// model. The update endpoint is id-addressed, so the tag is resolved
+// through the by-tag endpoint first (exact lookup, no list window); the
+// PATCH body carries only the fields the caller set, so nil options leave
+// the release untouched.
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+	id, err := p.resolveReleaseID(ctx, "UpdateRelease", owner, repo, tag)
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]any{}
+	if opts.Name != nil {
+		body["name"] = *opts.Name
+	}
+	if opts.Body != nil {
+		body["body"] = *opts.Body
+	}
+	if opts.Draft != nil {
+		body["draft"] = *opts.Draft
+	}
+	if opts.Prerelease != nil {
+		body["prerelease"] = *opts.Prerelease
+	}
+	var r giteeRelease
+	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/releases/%d", esc(owner), esc(repo), id), body, &r); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRelease", err)
+	}
+	return r.toReleaseInfo(), nil
+}
+
+// DeleteRelease implements provider.ReleaseManager.
+//
+// Routed through the raw transport client rather than the SDK, for the same
+// multipart/mis-typed-model reasons as UpdateRelease. The delete endpoint
+// is id-addressed, so the tag is resolved through the by-tag endpoint
+// first. The release's tag is kept.
+func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
+	id, err := p.resolveReleaseID(ctx, "DeleteRelease", owner, repo, tag)
+	if err != nil {
+		return err
+	}
+	if err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/releases/%d", esc(owner), esc(repo), id), nil, nil); err != nil {
+		return provider.Wrap(provider.PlatformGitee, "DeleteRelease", err)
+	}
+	return nil
+}
+
+// resolveReleaseID finds the numeric ID of the release addressed by tag via
+// the exact by-tag endpoint (no pagination window to bound, unlike the
+// list-scanning label resolution). op is the public operation the
+// resolution serves; failures surface under that op.
+func (p *Provider) resolveReleaseID(ctx context.Context, op, owner, repo, tag string) (int64, error) {
+	var r giteeRelease
+	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/releases/tags/%s", esc(owner), esc(repo), esc(tag)), nil, &r); err != nil {
+		return 0, provider.Wrap(provider.PlatformGitee, op, err)
+	}
+	return r.ID, nil
+}
+
 // GetArchive implements provider.ReleaseManager.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
 	archiveFormat := "zipball"
