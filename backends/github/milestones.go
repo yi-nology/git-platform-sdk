@@ -35,7 +35,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 
 // GetMilestone implements provider.MilestoneManager.
 func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	n, err := issueNumber("GetMilestone", number)
+	n, err := milestoneNumber("GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 // UpdateMilestone implements provider.MilestoneManager. Nil fields in opts
 // stay absent from the PATCH body, leaving the milestone unchanged.
 func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	n, err := issueNumber("UpdateMilestone", number)
+	n, err := milestoneNumber("UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	n, err := issueNumber("DeleteMilestone", number)
+	n, err := milestoneNumber("DeleteMilestone", number)
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package gitcode
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -28,7 +29,10 @@ import (
 // which would wipe the milestone's due date on every title-only update.
 // The SDK marshals its option struct directly into the request body, so
 // the empty key cannot be suppressed through its types; the raw bodies
-// carry exactly the fields the caller set (title always on create).
+// carry exactly the fields the caller set (title always on create). The
+// raw paths interpolate owner/repo through esc() — the transport client
+// concatenates BaseURL and Path verbatim, so unescaped segments with
+// '#', '?', '%', or spaces would corrupt the URL.
 
 // ListMilestones implements provider.MilestoneManager. State filters by
 // "open"/"closed" (GitCode also accepts "all").
@@ -51,11 +55,11 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 
 // GetMilestone implements provider.MilestoneManager.
 func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	id, err := issueNumber("GetMilestone", number)
+	id, err := milestoneNumber("GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
-	m, err := p.client.GetMilestone(ctx, owner, repo, id)
+	m, err := p.client.GetMilestone(ctx, owner, repo, int(id))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetMilestone", err)
 	}
@@ -75,7 +79,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 		body["due_on"] = opts.DueOn.Format(time.RFC3339)
 	}
 	var m gitcode.Milestone
-	if err := p.doJSON(ctx, "POST", fmt.Sprintf("/repos/%s/%s/milestones", owner, repo), body, &m); err != nil {
+	if err := p.doJSON(ctx, "POST", fmt.Sprintf("/repos/%s/%s/milestones", esc(owner), esc(repo)), body, &m); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateMilestone", err)
 	}
 	ms := convertMilestone(&m)
@@ -87,7 +91,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 // body carries exactly the fields the caller set; everything left nil is
 // absent from the wire, leaving the milestone unchanged.
 func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	id, err := issueNumber("UpdateMilestone", number)
+	id, err := milestoneNumber("UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +109,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 		body["due_on"] = opts.DueOn.Format(time.RFC3339)
 	}
 	var m gitcode.Milestone
-	if err := p.doJSON(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/milestones/%d", owner, repo, id), body, &m); err != nil {
+	if err := p.doJSON(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/milestones/%d", esc(owner), esc(repo), id), body, &m); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateMilestone", err)
 	}
 	ms := convertMilestone(&m)
@@ -114,19 +118,28 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	id, err := issueNumber("DeleteMilestone", number)
+	id, err := milestoneNumber("DeleteMilestone", number)
 	if err != nil {
 		return err
 	}
-	if err := p.client.DeleteMilestone(ctx, owner, repo, id); err != nil {
+	if err := p.client.DeleteMilestone(ctx, owner, repo, int(id)); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteMilestone", err)
 	}
 	return nil
 }
 
+// esc escapes a single URL path segment. Variable segments interpolated
+// into raw-client paths (owner, repo, ...) must pass through this — the
+// transport client joins BaseURL and Path by plain concatenation, so
+// characters like '#', '?', '%', or spaces would otherwise corrupt or
+// truncate the URL. (SDK-covered calls are handed to gitcode_api's typed
+// methods and are out of scope here.)
+func esc(s string) string { return url.PathEscape(s) }
+
 // doJSON is the raw-transport convenience wrapper serving the registered
 // detours of this package (see Provider.rawClient): JSON-in / JSON-out
 // with the method/path/body/result signature used by the gitee backend.
+// Path segments interpolated by the caller must already be esc()-escaped.
 func (p *Provider) doJSON(ctx context.Context, method, path string, body, result any) error {
 	_, err := p.rawClient.DoJSON(ctx, &transport.Request{
 		Method: method,

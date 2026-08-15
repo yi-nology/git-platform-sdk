@@ -248,7 +248,10 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 // onto Issue.Assignees in that order; MilestoneRef.Number carries Gitee's
 // milestone serial number (the SDK Milestone model exposes no id), which is
 // exactly the identifier Gitee's issue write endpoints take, so
-// MilestoneRef round trips through CreateIssue/UpdateIssue.
+// MilestoneRef round trips through CreateIssue/UpdateIssue. State passes
+// through unfiltered: beyond open/closed, Gitee enterprise workspaces
+// expose extra workflow states (progressing, rejected, ...) that surface
+// as-is — IssueState is an open string vocabulary, not a closed enum.
 func convertIssue(i gitee.Issue) *provider.Issue {
 	issue := &provider.Issue{
 		Number:    i.Number,

@@ -164,6 +164,10 @@ func (p *Provider) resolveReleaseID(ctx context.Context, op, owner, repo, tag st
 }
 
 // GetArchive implements provider.ReleaseManager.
+//
+// Routed through the raw transport client (registered detour): the
+// go-gitee SDK exposes no archive-download endpoint, so the GitHub-shaped
+// zipball/tarball URLs are fetched directly.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
 	archiveFormat := "zipball"
 	if format == "tar.gz" {

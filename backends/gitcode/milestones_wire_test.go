@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -69,5 +70,55 @@ func TestGitCode_MilestoneMutations_OmitDueOn(t *testing.T) {
 	}
 	if v, _ := createBody["title"].(string); v != "v2" {
 		t.Errorf("create body title = %q, want %q", v, "v2")
+	}
+}
+
+// TestGitCode_MilestoneRawPaths_EscapeSegments verifies that the raw
+// milestone detours percent-encode the owner/repo path segments: the
+// transport client joins BaseURL and Path by plain concatenation, so an
+// unescaped '#' or '?' would corrupt or truncate the URL before it
+// reaches the server.
+func TestGitCode_MilestoneRawPaths_EscapeSegments(t *testing.T) {
+	var mu sync.Mutex
+	var paths = map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths[r.Method] = r.URL.EscapedPath()
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":1,"title":"v1","state":"open"}`))
+	}))
+	defer srv.Close()
+
+	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	mm := p.(provider.MilestoneManager)
+
+	const (
+		owner = "ow#ner"
+		repo  = "re?po"
+	)
+	newTitle := "v2"
+	if _, err := mm.UpdateMilestone(context.Background(), owner, repo, "1", provider.UpdateMilestoneOptions{Title: &newTitle}); err != nil {
+		t.Fatalf("UpdateMilestone: %v", err)
+	}
+	if _, err := mm.CreateMilestone(context.Background(), owner, repo, provider.CreateMilestoneOptions{Title: "v3"}); err != nil {
+		t.Fatalf("CreateMilestone: %v", err)
+	}
+
+	for method, want := range map[string]string{
+		http.MethodPatch: "/repos/ow%23ner/re%3Fpo/milestones/1",
+		http.MethodPost:  "/repos/ow%23ner/re%3Fpo/milestones",
+	} {
+		got, ok := paths[method]
+		if !ok {
+			t.Errorf("expected a %s request, recorded methods: %v", method, paths)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s path = %q, want %q (owner/repo segments must be percent-encoded)", method, got, want)
+		}
 	}
 }

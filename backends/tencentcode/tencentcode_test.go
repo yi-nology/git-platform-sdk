@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -244,6 +245,35 @@ func TestListTags(t *testing.T) {
 	}
 	if len(tags) != 1 || tags[0].Commit != "abc" {
 		t.Errorf("unexpected: %+v", tags)
+	}
+}
+
+// TestUpdateRelease_AllNilShortCircuit verifies that an UpdateRelease
+// carrying nothing this platform can express (only Body is forwarded;
+// Name/Draft/Prerelease are ignored by registered limitation) skips the
+// PUT entirely and returns the current release from GetReleaseByTag.
+func TestUpdateRelease_AllNilShortCircuit(t *testing.T) {
+	var mu sync.Mutex
+	var methods []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		methods = append(methods, r.Method)
+		mu.Unlock()
+		writeJSON(w, map[string]any{"tag_name": "v1.0", "description": "current notes"})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	rel, err := p.UpdateRelease(context.Background(), "owner", "repo", "v1.0", provider.UpdateReleaseOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel == nil || rel.TagName != "v1.0" || rel.Body != "current notes" {
+		t.Errorf("unexpected release: %+v", rel)
+	}
+	for _, m := range methods {
+		if m == http.MethodPut {
+			t.Errorf("all-nil update must not PUT an empty body; recorded methods: %v", methods)
+		}
 	}
 }
 
