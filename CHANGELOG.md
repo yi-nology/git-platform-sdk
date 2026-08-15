@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Tencent Code 工蜂 now declares the optional `Milestones` capability.**
+  `MilestoneManager` is implemented over the gongfeng SDK's GitLab-shaped
+  milestones surface (all five methods: `ListMilestones`, `GetMilestone`,
+  `CreateMilestone`, `UpdateMilestone`, `DeleteMilestone`). Milestones are
+  addressed by the gongfeng milestone ID (the same string-addressing scheme
+  as the other ID-based platforms), wire state `active` normalizes to
+  `open`, state changes travel as the platform's `state_event` verbs, and
+  due dates exchange as date-only strings. Registered limitation:
+  `ListMilestonesOptions.State` is ignored — gongfeng's list endpoint
+  options expose pagination only.
+
 ## [v0.40.0] - 2026-08-15
 
 ### ⚠️ Breaking changes

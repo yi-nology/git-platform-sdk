@@ -257,13 +257,13 @@ type Issue struct {
 // MilestoneRef references a milestone from an issue. Number carries the
 // platform's milestone addressing identifier as a string: the milestone
 // *number* on GitHub, the platform milestone *ID* on GitLab, Gitea,
-// Forgejo, and GitCode (whose write endpoints take exactly that identifier,
-// so per-platform round-trips hold), and Gitee's milestone *serial number*
-// (the "number" field of Gitee's milestone payload — the identifier Gitee's
-// own issue and milestone write endpoints take; the SDK model exposes no
-// id). This is the same identifier Milestone.Number exposes and
-// MilestoneManager methods accept, so refs round-trip through the
-// milestone manager on the platform they came from.
+// Forgejo, GitCode, and Tencent Code (whose write endpoints take exactly
+// that identifier, so per-platform round-trips hold), and Gitee's
+// milestone *serial number* (the "number" field of Gitee's milestone
+// payload — the identifier Gitee's own issue and milestone write endpoints
+// take; the SDK model exposes no id). This is the same identifier
+// Milestone.Number exposes and MilestoneManager methods accept, so refs
+// round-trip through the milestone manager on the platform they came from.
 type MilestoneRef struct {
 	Number string `json:"number"`
 	Title  string `json:"title,omitempty"`
@@ -365,8 +365,8 @@ const (
 // platform's milestone addressing identifier as a string — the same value
 // MilestoneRef.Number uses and MilestoneManager methods accept: the
 // milestone number on GitHub, the platform milestone ID on GitLab, Gitea,
-// Forgejo, and GitCode, and the milestone serial number on Gitee (see
-// MilestoneManager for the per-platform truth).
+// Forgejo, GitCode, and Tencent Code, and the milestone serial number on
+// Gitee (see MilestoneManager for the per-platform truth).
 type Milestone struct {
 	Number      string         `json:"number"`
 	Title       string         `json:"title"`
