@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.38.0] - 2026-08-15
+
 ### ⚠️ Breaking changes
 
 - **`IssueManager` and `SearchManager` removed from the `Provider` interface.**
