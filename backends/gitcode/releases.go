@@ -89,12 +89,19 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	return convertRelease(r), nil
 }
 
-// DeleteRelease implements provider.ReleaseManager via GitCode's
-// tag-addressed delete: the SDK deletes the release for the tag and, when
-// the platform reports the release already gone, falls back to deleting the
-// tag itself so the call stays idempotent.
+// DeleteRelease implements provider.ReleaseManager. The delete endpoint is
+// id-addressed, so the tag is resolved through the by-tag endpoint first
+// (exact lookup, no list window) and the release is deleted by ID. The
+// SDK's tag-addressed DeleteRelease is deliberately NOT used: it falls
+// back to deleting the tag itself on any release-delete error — transient
+// 500/401/429 included — which would silently destroy the git tag; the
+// release-object-only semantics every other platform honors rule that out.
 func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
-	if err := p.client.DeleteRelease(ctx, owner, repo, tag); err != nil {
+	cur, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
+	if err != nil {
+		return provider.Wrap(provider.PlatformGitCode, "DeleteRelease", err)
+	}
+	if err := p.client.DeleteReleaseByID(ctx, owner, repo, cur.ID); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteRelease", err)
 	}
 	return nil
