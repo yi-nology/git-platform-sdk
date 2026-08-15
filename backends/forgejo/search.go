@@ -3,7 +3,6 @@ package forgejo
 import (
 	"context"
 	"strconv"
-	"strings"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
@@ -16,13 +15,15 @@ import (
 //     Sort passes through in Forgejo's own vocabulary (alpha/created/
 //     updated/size/id) — values from other platforms' vocabularies are
 //     ignored server-side (registered pass-through).
-//   - SearchIssues rides the global keyword issue search
+//   - SearchIssues: without Repo it rides the global keyword issue search
 //     (/repos/issues/search, KeyWord param) restricted to real issues via
 //     the "issues" type filter (the endpoint also matches pull requests).
-//     SearchIssuesOptions.Repo ("owner/repo") is applied as a client-side
-//     filter on each hit's repository metadata — the global endpoint
-//     exposes no repo parameter (registered mapping). State forwards
-//     natively.
+//     With Repo set ("owner/repo") it routes to ListRepoIssues — the
+//     server-side repo-scoped listing at /repos/{owner}/{repo}/issues,
+//     which honors the same KeyWord/type/state/pagination parameters —
+//     mirroring the GitLab IssuesByProject routing, so multi-page
+//     repo-scoped results and totals stay exact (no client-side
+//     filtering). State forwards natively.
 //   - SearchUsers rides /users/search.
 //   - The SDK returns no totals, so the page size is reported. The SDK
 //     takes no per-call context (as with the rest of this backend).
@@ -54,23 +55,33 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 	return out, len(out), nil
 }
 
-// SearchIssues implements provider.SearchManager.
+// SearchIssues implements provider.SearchManager. Repo routes to the
+// server-side repo-scoped listing (ListRepoIssues); without it the global
+// keyword search runs.
 func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	issues, _, err := p.client.ListIssues(forgejo.ListIssueOption{
+	listOpts := forgejo.ListIssueOption{
 		KeyWord:     opts.Query,
 		State:       forgejo.StateType(opts.State),
 		Type:        forgejo.IssueTypeIssue,
 		ListOptions: forgejo.ListOptions{Page: page, PageSize: perPage},
-	})
+	}
+	var issues []*forgejo.Issue
+	var err error
+	if opts.Repo != "" {
+		owner, repo := provider.SplitFullName(opts.Repo)
+		if owner == "" || repo == "" {
+			return nil, 0, provider.Wrapf(provider.PlatformForgejo, "SearchIssues", "invalid repo %q, want owner/name", opts.Repo)
+		}
+		issues, _, err = p.client.ListRepoIssues(owner, repo, listOpts)
+	} else {
+		issues, _, err = p.client.ListIssues(listOpts)
+	}
 	if err != nil {
 		return nil, 0, provider.Wrap(provider.PlatformForgejo, "SearchIssues", err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(issues))
 	for _, i := range issues {
-		if opts.Repo != "" && i.Repository != nil && !strings.EqualFold(i.Repository.FullName, opts.Repo) {
-			continue
-		}
 		labels := make([]string, 0, len(i.Labels))
 		for _, l := range i.Labels {
 			labels = append(labels, l.Name)

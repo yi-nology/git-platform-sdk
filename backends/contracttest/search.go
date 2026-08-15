@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -79,7 +80,9 @@ func testSearchSuite(t *testing.T, h Harness) {
 //
 // Subtests: each search parses its fixture (repos by full_name, issues by
 // title + string number, users by login) and the query keyword reaches the
-// wire under some query parameter.
+// wire under some query parameter; the repo-scoped subtest additionally
+// verifies SearchIssuesOptions.Repo takes a wire route that reflects the
+// repo (path-embedded or query-carried, per platform).
 func RunSearchSuite(t *testing.T, h SearchHarness) {
 	newSM := func(t *testing.T) (provider.SearchManager, *[]recordedRequest) {
 		srv, requests := searchStubServer(h)
@@ -99,6 +102,10 @@ func RunSearchSuite(t *testing.T, h SearchHarness) {
 	t.Run("SearchIssues_Parses", func(t *testing.T) {
 		sm, requests := newSM(t)
 		assertSearchIssues(t, sm, requests)
+	})
+	t.Run("SearchIssues_RepoScoped_Wire", func(t *testing.T) {
+		sm, requests := newSM(t)
+		assertSearchIssuesRepoScoped(t, sm, requests)
 	})
 	t.Run("SearchUsers_Parses", func(t *testing.T) {
 		sm, requests := newSM(t)
@@ -148,6 +155,46 @@ func assertSearchIssues(t *testing.T, sm provider.SearchManager, requests *[]rec
 		t.Errorf("expected first issue number %q, got %q", "1", issues[0].Number)
 	}
 	assertQueryCarriesKeyword(t, requests, "gopher")
+}
+
+// assertSearchIssuesRepoScoped checks that repo-scoped issue search takes a
+// wire route that reflects the repo: the platform either addresses the repo
+// in the request path (Gitea/Forgejo /repos/{owner}/{repo}/issues; GitLab
+// /projects/{owner%2Frepo}/search) or carries it in a query parameter
+// (Gitee/GitCode repo=; GitHub's repo: qualifier inside q). The assertion
+// is platform-agnostic and encoding-tolerant ("/" vs "%2F").
+func assertSearchIssuesRepoScoped(t *testing.T, sm provider.SearchManager, requests *[]recordedRequest) {
+	t.Helper()
+	const repo = "owner/repo"
+	issues, _, err := sm.SearchIssues(context.Background(), provider.SearchIssuesOptions{Query: "gopher", Repo: repo})
+	if err != nil {
+		t.Fatalf("SearchIssues(repo-scoped): %v", err)
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected at least one repo-scoped issue result")
+	}
+	forms := []string{repo, url.PathEscape(repo)}
+	for i := range *requests {
+		for _, form := range forms {
+			if strings.Contains((*requests)[i].Path, form) || queryValuesContain(*requests, i, form) {
+				return
+			}
+		}
+	}
+	t.Errorf("expected a request reflecting repo %q in its path or query parameters, recorded %s", repo, methodsOf(*requests))
+}
+
+// queryValuesContain checks whether any query parameter value of the i-th
+// recorded request contains s.
+func queryValuesContain(requests []recordedRequest, i int, s string) bool {
+	for _, values := range requests[i].Query() {
+		for _, v := range values {
+			if strings.Contains(v, s) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // assertSearchUsers checks that SearchUsers returns parsed user results —
