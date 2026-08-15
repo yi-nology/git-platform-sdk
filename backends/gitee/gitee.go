@@ -94,6 +94,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	// Underlying http.Client used by go-gitee. Its transport is wrapped with
 	// transport.NewRetryingRoundTripper so all SDK-issued requests flow
 	// through the auth/retry/hooks pipeline.
+	//
+	// Caveat: go-gitee's callAPI also retries 502 internally (up to 3 attempts
+	// with fixed 1s/2s sleeps), which multiplies with this pipeline on a
+	// persistent 502, and its re-Do of an already-consumed request body can
+	// degrade that internal retry to a client-side error for body-bearing
+	// calls (upstream codegen bug, client.go callAPI).
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: backendutil.ChainTransport(
