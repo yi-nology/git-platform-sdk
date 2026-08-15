@@ -44,6 +44,7 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo string, number int)
 }
 
 // CreateIssue implements provider.IssueManager.
+// opts.Milestone is ignored: gitcode_api v0.6.0 exposes no milestone write parameter.
 func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
 	createOpts := gitcode.CreateIssueOptions{
 		Title:     opts.Title,
@@ -59,6 +60,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 }
 
 // UpdateIssue implements provider.IssueManager.
+// opts.Milestone is ignored: gitcode_api v0.6.0 exposes no milestone write parameter.
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo string, number int, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
 	updateOpts := gitcode.UpdateIssueOptions{
 		Title:     opts.Title,
@@ -179,9 +181,9 @@ func convertIssue(i *gitcode.Issue) *provider.Issue {
 	if author == nil {
 		author = convertUser(i.User)
 	}
-	var milestone string
+	var milestone *provider.MilestoneRef
 	if i.Milestone != nil {
-		milestone = i.Milestone.Title
+		milestone = &provider.MilestoneRef{Number: int(i.Milestone.ID), Title: i.Milestone.Title}
 	}
 	number := int(i.Number)
 	return &provider.Issue{

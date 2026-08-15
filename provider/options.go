@@ -208,19 +208,25 @@ const (
 
 // Issue represents an issue on a platform.
 type Issue struct {
-	ID        int64      `json:"id"`
-	Number    int        `json:"number"`
-	Title     string     `json:"title"`
-	Body      string     `json:"body"`
-	State     IssueState `json:"state"`
-	Author    *CRUser    `json:"author,omitempty"`
-	Labels    []string   `json:"labels,omitempty"`
-	Assignees []string   `json:"assignees,omitempty"`
-	Milestone string     `json:"milestone,omitempty"`
-	WebURL    string     `json:"web_url,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	ClosedAt  *time.Time `json:"closed_at,omitempty"`
+	ID        int64         `json:"id"`
+	Number    int           `json:"number"`
+	Title     string        `json:"title"`
+	Body      string        `json:"body"`
+	State     IssueState    `json:"state"`
+	Author    *CRUser       `json:"author,omitempty"`
+	Labels    []string      `json:"labels,omitempty"`
+	Assignees []string      `json:"assignees,omitempty"`
+	Milestone *MilestoneRef `json:"milestone,omitempty"`
+	WebURL    string        `json:"web_url,omitempty"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
+	ClosedAt  *time.Time    `json:"closed_at,omitempty"`
+}
+
+// MilestoneRef references a milestone from an issue.
+type MilestoneRef struct {
+	Number int    `json:"number"`
+	Title  string `json:"title,omitempty"`
 }
 
 // IssueComment represents a comment on an issue.
@@ -258,6 +264,7 @@ type CreateIssueOptions struct {
 	Body      string   `json:"body,omitempty"`
 	Assignees []string `json:"assignees,omitempty"`
 	Labels    []string `json:"labels,omitempty"`
+	Milestone int      `json:"milestone,omitempty"` // 0 = 不设置 / 不修改
 }
 
 // UpdateIssueOptions contains options for updating an issue.
@@ -267,6 +274,7 @@ type UpdateIssueOptions struct {
 	State     IssueState `json:"state,omitempty"`
 	Assignees []string   `json:"assignees,omitempty"`
 	Labels    []string   `json:"labels,omitempty"`
+	Milestone int        `json:"milestone,omitempty"` // 0 = 不设置 / 不修改
 }
 
 // --- Labels ---
