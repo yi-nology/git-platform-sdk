@@ -50,6 +50,13 @@ func TestGitCode_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"title":"v1","state":"open","description":"first","due_date":"2026-01-01T00:00:00Z"}]`,
 			MutateResponse: `{"id":1,"title":"v1","state":"open","description":"first","due_date":"2026-01-01T00:00:00Z"}`,
 		},
+		// GitCode search payloads are GitHub-shaped bare arrays; issue
+		// numbers are strings on the wire.
+		Search: &contracttest.SearchHarnessConfig{
+			ReposResponse:  `[{"full_name":"owner/repo","description":"search hit","web_url":"https://gitcode.com/owner/repo","stargazers_count":5,"forks_count":2,"default_branch":"main","private":false}]`,
+			IssuesResponse: `[{"number":"1","title":"found","state":"open","body":"b","html_url":"https://gitcode.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z"}]`,
+			UsersResponse:  `[{"login":"dev","name":"Dev","avatar_url":"https://gitcode.com/avatars/u/1","html_url":"https://gitcode.com/dev"}]`,
+		},
 		// GitCode release payloads are GitHub-shaped (id/tag_name/name/body/
 		// draft/prerelease/html_url).
 		Releases: &contracttest.ReleasesHarnessConfig{

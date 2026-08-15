@@ -66,5 +66,12 @@ func TestGitLab_Contract(t *testing.T) {
 			ByTagResponse:  `{"tag_name":"v1.0.0","name":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
 			UpdateResponse: `{"tag_name":"v1.0.0","name":"v1.0.0-renamed","description":"updated notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
 		},
+		// GitLab search payloads are bare arrays keyed by iid/path_with_
+		// namespace/username; the scope rides the query string, not the path.
+		Search: &contracttest.SearchHarnessConfig{
+			ReposResponse:  `[{"path_with_namespace":"owner/repo","description":"search hit","web_url":"https://gitlab.example.com/owner/repo","star_count":5,"forks_count":2,"default_branch":"main","visibility":"private"}]`,
+			IssuesResponse: `[{"id":1,"iid":1,"title":"found","state":"opened","description":"b","web_url":"https://gitlab.example.com/owner/repo/-/issues/1","labels":["bug"],"user_notes_count":2,"created_at":"2026-01-01T00:00:00Z"}]`,
+			UsersResponse:  `[{"username":"dev","name":"Dev","avatar_url":"https://gitlab.example.com/uploads/-/system/user/avatar/1/avatar.png","web_url":"https://gitlab.example.com/dev"}]`,
+		},
 	})
 }

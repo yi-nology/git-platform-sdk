@@ -24,6 +24,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `MilestoneRef.Number` is the same identifier as returned by the platform
   (milestone number on GitHub, milestone ID on GitLab, Gitea, Forgejo, and
   GitCode, milestone serial number on Gitee).
+- **`SearchIssueResult.Number` changed `int` → `string`.** Search results
+  now carry the platform's issue addressing identifier as a string, so
+  they feed `GetIssue(number string)` directly (the same string-addressing
+  scheme as `IssueManager`): numeric platforms return `"1"`, Gitee's
+  alphanumeric identifiers (e.g. `"IAINVA"`) are natively representable.
+  GitCode's search no longer round trips through `strconv.Atoi`.
 - **`CreateReview` moved from `DiffManager` to the new optional
   `ReviewManager` capability interface, and `DiffManager` is slimmed to five
   methods** (`GetCRDiff`, `GetCRFiles`, `CreateNote`, `DeleteNote`,
@@ -50,6 +56,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`SearchManager` implemented by GitHub, GitLab, Gitea, Forgejo, and
+  Gitee**, joining GitCode: all six platforms now declare
+  `Capabilities().Search` and implement the three-method interface
+  (`SearchRepos`, `SearchIssues`, `SearchUsers`) against real endpoints —
+  no registered stubs anywhere (3/3 methods real on every platform, well
+  past the §4.6 capability threshold). Platform mappings: GitHub rides
+  `SearchService` with `repo:`/`state:`/`is:issue` qualifiers built from
+  the options (`is:issue` keeps pull requests out of issue results; repo
+  search is global since `SearchReposOptions` carries no scoping) and
+  reports the API's `total_count`; GitLab rides the typed search scopes
+  (`projects`/`issues`/`users`), routing `SearchIssuesOptions.Repo` to the
+  project-scoped issue search (its search API has no state/sort/order
+  parameters — registered ignore); Gitea and Forgejo ride the global
+  keyword searches (`/repos/search`, `/repos/issues/search` restricted to
+  real issues via the type filter, `/users/search`) with `Repo` applied as
+  a client-side filter on hit metadata (registered mapping); Gitee rides
+  `/v5/search/{repositories,issues,users}` with native repo/state
+  parameters. A cross-platform search contract suite
+  (`contracttest.RunSearchSuite`, auto-mounted via `Harness.Search` with
+  the same bidirectional capability-drift checks as the labels/issues/
+  reviews/milestones suites) verifies repo parsing (`full_name`
+  `owner/repo`), issue parsing (title plus string number feeding
+  `GetIssue(number string)`), user parsing (`login`), and that the keyword
+  reaches the wire.
 - **Tag-addressed release get/update/delete on every platform.** The core
   `ReleaseManager` interface gains `GetReleaseByTag`, `UpdateRelease`, and
   `DeleteRelease` plus `UpdateReleaseOptions` (`Name`/`Body`/`Draft`/

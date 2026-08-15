@@ -18,6 +18,7 @@
 //   - issues.go:   issue CRUD, comments, and issue labels (IssueManager)
 //   - reviews.go:  PR review list/get/create/dismiss/request-reviewers (ReviewManager)
 //   - milestones.go: repository milestone CRUD (MilestoneManager)
+//   - search.go:    global repo/issue/user search (SearchManager)
 //   - types.go:    internal GitHub-API types and conversion helpers
 package github
 
@@ -98,9 +99,10 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitHub
 
 // Capabilities implements provider.Provider. GitHub implements the optional
 // LabelManager interface (see labels.go), the IssueManager interface
-// (see issues.go), and the ReviewManager interface (see reviews.go).
+// (see issues.go), the ReviewManager interface (see reviews.go), and the
+// SearchManager interface (see search.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true}
 }
 
 // TestConnection implements provider.Provider.

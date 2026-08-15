@@ -52,5 +52,12 @@ func TestGitee_Contract(t *testing.T) {
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 		},
+		// Gitee search payloads are bare arrays; issue numbers are
+		// alphanumeric strings on the wire.
+		Search: &contracttest.SearchHarnessConfig{
+			ReposResponse:  `[{"full_name":"owner/repo","description":"search hit","html_url":"https://gitee.com/owner/repo","stargazers_count":5,"forks_count":2,"default_branch":"main","private":false}]`,
+			IssuesResponse: `[{"number":"1","title":"found","state":"open","body":"b","html_url":"https://gitee.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z"}]`,
+			UsersResponse:  `[{"login":"dev","name":"Dev","avatar_url":"https://gitee.com/avatars/1","html_url":"https://gitee.com/dev"}]`,
+		},
 	})
 }

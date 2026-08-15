@@ -31,6 +31,7 @@
 //   - labels.go:  repository label CRUD (LabelManager)
 //   - issues.go:  issue CRUD, comments, and issue labels (IssueManager)
 //   - milestones.go: repository milestone CRUD (MilestoneManager)
+//   - search.go:    global repo/issue/user search (SearchManager)
 //   - types.go:   SDK model conversions and raw-wire types/helpers
 package gitee
 
@@ -157,11 +158,12 @@ func (p *Provider) sdkErr(op string, resp *http.Response, err error) error {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee }
 
 // Capabilities implements provider.Provider. Gitee implements the optional
-// LabelManager (see labels.go) and IssueManager (see issues.go) interfaces.
-// Gitee issue numbers are alphanumeric strings (e.g. "IAINVA"), addressed
-// natively by the string-typed IssueManager.
+// LabelManager (see labels.go), IssueManager (see issues.go), and
+// SearchManager (see search.go) interfaces. Gitee issue numbers are
+// alphanumeric strings (e.g. "IAINVA"), addressed natively by the
+// string-typed IssueManager.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Milestones: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Milestones: true, Search: true}
 }
 
 // TestConnection implements provider.Provider.

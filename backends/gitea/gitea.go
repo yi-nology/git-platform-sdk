@@ -19,6 +19,7 @@
 //   - issues.go:  issue CRUD, comments, and issue labels (IssueManager)
 //   - reviews.go: pull-request code reviews (ReviewManager)
 //   - milestones.go: repository milestone CRUD (MilestoneManager)
+//   - search.go:    global repo/issue/user search (SearchManager)
 //   - types.go:   internal Gitea-API types and conversion helpers
 package gitea
 
@@ -81,10 +82,11 @@ func New(cfg provider.Config) (provider.Provider, error) {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitea }
 
 // Capabilities implements provider.Provider. Gitea implements the optional
-// LabelManager (see labels.go), IssueManager (see issues.go), and
-// ReviewManager (see reviews.go) interfaces.
+// LabelManager (see labels.go), IssueManager (see issues.go),
+// ReviewManager (see reviews.go), and SearchManager (see search.go)
+// interfaces.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true}
 }
 
 // TestConnection implements provider.Provider.

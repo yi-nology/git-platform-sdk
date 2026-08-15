@@ -59,5 +59,13 @@ func TestGitea_Contract(t *testing.T) {
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 		},
+		// Gitea search: repo and user results wrap items in {"data":[..]}
+		// (the /repos/search and /users/search envelopes); issue search
+		// (/repos/issues/search) is a bare array keyed by number.
+		Search: &contracttest.SearchHarnessConfig{
+			ReposResponse:  `{"ok":true,"data":[{"id":1,"full_name":"owner/repo","description":"search hit","html_url":"https://gitea.example.com/owner/repo","stars_count":5,"forks_count":2,"default_branch":"main","private":false,"owner":{"login":"owner"}}]}`,
+			IssuesResponse: `[{"number":1,"title":"found","state":"open","body":"b","html_url":"https://gitea.example.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z","repository":{"full_name":"owner/repo"}}]`,
+			UsersResponse:  `{"ok":true,"data":[{"login":"dev","full_name":"Dev","avatar_url":"https://gitea.example.com/avatars/1","html_url":"https://gitea.example.com/dev"}]}`,
+		},
 	})
 }
