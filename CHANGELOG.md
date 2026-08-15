@@ -40,9 +40,39 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (capability threshold, design spec §4.6). Route with
   `p.Capabilities().Reviews` and type-assert `provider.ReviewManager`
   instead of calling `DiffManager.CreateReview`.
+- **`ReleaseManager` (composed into `provider.Provider`) gains three
+  methods: `GetReleaseByTag`, `UpdateRelease`, and `DeleteRelease`**
+  (releases are addressed by tag name across all three), plus the
+  `UpdateReleaseOptions` type (`Name`/`Body`/`Draft`/`Prerelease`, nil =
+  leave unchanged). The methods are implemented on all seven platform
+  backends, but any external implementation of `ReleaseManager` (or of the
+  full `Provider` interface) must add the three methods to keep compiling.
 
 ### Added
 
+- **Tag-addressed release get/update/delete on every platform.** The core
+  `ReleaseManager` interface gains `GetReleaseByTag`, `UpdateRelease`, and
+  `DeleteRelease` plus `UpdateReleaseOptions` (`Name`/`Body`/`Draft`/
+  `Prerelease`, nil = leave unchanged), implemented across all seven
+  backends. GitLab and TencentCode are tag-native end to end; GitHub,
+  Gitea, Forgejo, GitCode, and Gitee resolve tag→ID through the platform's
+  exact single-release-by-tag endpoint before their ID-addressed
+  update/delete calls (no list-scan window to bound, unlike name-keyed
+  label resolution); Gitea/Forgejo/GitCode merge the current title/body
+  into their non-pointer SDK update fields so nil options never clobber a
+  release. Two registered platform-semantic registrations: GitLab releases
+  have no draft/prerelease concepts, so `Draft`/`Prerelease` are ignored
+  there (name/description carry); TencentCode's update surface accepts a
+  description only, so `Name`/`Draft`/`Prerelease` are ignored there. The
+  Gitee implementation rides the raw transport client throughout (same
+  ledger as its other release methods — the SDK's Release model mis-types
+  the live payload and its PATCH posts a mislabeled multipart body): get
+  by tag via `GET /repos/{o}/{r}/releases/tags/{tag}`, then update/delete
+  by the resolved ID. A cross-platform release contract suite
+  (`contracttest.RunReleaseSuite`, auto-mounted via `Harness.Releases` for
+  all seven platforms — mandatory, since `ReleaseManager` is a core
+  interface with no capability drift to enforce) verifies by-tag parsing,
+  the update wire body, and the delete verb.
 - **New optional `ReviewManager` capability interface** with five methods:
   `CreateReview`, `ListReviews`, `GetReview`, `RequestReviewers`,
   `DismissReview` (change requests addressed by string number, individual
