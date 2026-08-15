@@ -17,6 +17,7 @@
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
 //   - labels.go:  repository label CRUD (LabelManager)
 //   - issues.go:  issue CRUD, comments, and issue labels (IssueManager)
+//   - reviews.go: pull-request code reviews (ReviewManager)
 //   - types.go:   internal Gitea-API types and conversion helpers
 package gitea
 
@@ -79,9 +80,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitea }
 
 // Capabilities implements provider.Provider. Gitea implements the optional
-// LabelManager (see labels.go) and IssueManager (see issues.go) interfaces.
+// LabelManager (see labels.go), IssueManager (see issues.go), and
+// ReviewManager (see reviews.go) interfaces.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true}
 }
 
 // TestConnection implements provider.Provider.
