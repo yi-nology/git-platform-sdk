@@ -35,6 +35,48 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ListMilestonesOptions.State` is ignored — gongfeng's list endpoint
   options expose pagination only.
 
+### Changed
+
+- **Tightened milestone-number error texts, GitCode raw-path escaping,
+  and registered platform semantics.** The milestone number helpers on
+  GitHub, Gitea, Forgejo, and GitCode now report `invalid milestone
+  number` on non-numeric input (they previously reused the issue parser
+  and mis-reported "invalid issue number"). GitCode's registered raw
+  milestone create/update paths now escape the owner/repo path segments —
+  `#`, `?`, `%`, or spaces previously corrupted the request URL (the
+  transport client joins base URL and path by plain concatenation).
+  TencentCode's `UpdateRelease` with nothing to carry (Body nil — the
+  only field the platform's update surface accepts) short-circuits to the
+  `GetReleaseByTag` result instead of PUTting an empty update body.
+  Newly doc-registered platform semantics: Gitea/Forgejo release creates
+  serialize `target_commitish: ""` when no target is set (the SDK field
+  has no omitempty; the server reads it as the default branch); Gitee's
+  `GetArchive` rides the raw transport client (the go-gitee SDK exposes
+  no archive endpoint); Gitee enterprise workspaces' extra issue states
+  (progressing, rejected, ...) pass through `Issue.State` as-is (an open
+  string vocabulary, not a closed enum); and
+  `SearchReposOptions.Sort`/`Order` are platform-vocabulary-dependent —
+  gitea/forgejo reject unknown values with HTTP 422, and GitLab's search
+  API exposes no sort/order at all (registered ignore).
+
+### Tests
+
+- **The reviews and search contract suites now pin the wire more
+  tightly.** Reviews: harnesses declare `CreateEvent` — the exact wire
+  value the platform's create must carry under the `event` key for the
+  suite's APPROVE-verdict create ("APPROVE" on GitHub/GitCode,
+  "APPROVED" on Gitea/Forgejo after their SDK translation) — and the
+  suite asserts exact equality, so the two wire vocabularies can no
+  longer pass for each other; GitLab's note-based create (no verdict key
+  on the wire) skips only the event assertion via an empty value. Search:
+  harnesses declare `ReposTotalCount`, and when a platform reports a
+  server-side total (GitHub's `total_count`, set to 1 in its fixture) the
+  suite asserts the returned total equals it exactly instead of the
+  weaker total ≥ len(results) fallback. Harness docs caught up too: the
+  milestones suite's ID-addressing platform list now includes Tencent
+  Code (its seventh ID-based platform), and the issues suite's routing
+  note acknowledges alphanumeric issue numbers (Gitee).
+
 ## [v0.40.0] - 2026-08-15
 
 ### ⚠️ Breaking changes
