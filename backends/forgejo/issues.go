@@ -14,6 +14,8 @@ import (
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := forgejo.ListIssueOption{ListOptions: forgejo.ListOptions{Page: page, PageSize: perPage}}
+	// Unset, the endpoint returns PRs mixed in with the issues.
+	listOpts.Type = forgejo.IssueTypeIssue
 	if opts.State != "" {
 		listOpts.State = forgejo.StateType(opts.State)
 	}

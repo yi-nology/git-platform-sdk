@@ -13,6 +13,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   field (0 = unset/unchanged).** Consumers reading the milestone title now
   use `issue.Milestone.Title` with a nil check.
 
+### Fixed
+
+- **The gitee backend now maps the SDK `CRState` vocabulary to gitee's
+  pull-list vocabulary and query-escapes the `state` parameter in
+  `ListCRs`.** The SDK's `opened` previously went out raw where gitee
+  expects `open`; an empty state defaults to `open` as before.
+- **Gitea and Forgejo `ListIssues` now request only issues, not pull
+  requests.** The list option's type filter was left unset, so real
+  instances returned PRs mixed into issue lists.
+
 ## [v0.38.1] - 2026-08-15
 
 ### Fixed

@@ -117,3 +117,26 @@ func TestGitee_QueryValueEscaping(t *testing.T) {
 		t.Errorf("until decoded to %q, want RFC3339 passthrough", got)
 	}
 }
+
+// TestGitee_ListCRs_StateMapping verifies that the SDK CRState vocabulary is
+// mapped to gitee's pull-list vocabulary (open/closed/merged/all): the SDK's
+// "opened" must go out as "open", and an empty state defaults to "open"
+// rather than being sent (or omitted) raw.
+func TestGitee_ListCRs_StateMapping(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.URL.Query().Get("state"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	p, err := gitee.New(provider.Config{BaseURL: srv.URL, Token: "t"})
+	if err != nil {
+		t.Fatalf("gitee.New: %v", err)
+	}
+	_, _, _ = p.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r", State: provider.CRStateOpened})
+	_, _, _ = p.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r"})
+	if len(got) != 2 || got[0] != "open" || got[1] != "open" {
+		t.Fatalf("expected state mapping [open open], got %v", got)
+	}
+}

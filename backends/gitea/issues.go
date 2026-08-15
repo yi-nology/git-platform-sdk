@@ -14,6 +14,8 @@ import (
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := gitea.ListIssueOption{ListOptions: gitea.ListOptions{Page: page, PageSize: perPage}}
+	// Unset, the endpoint returns PRs mixed in with the issues.
+	listOpts.Type = gitea.IssueTypeIssue
 	if opts.State != "" {
 		listOpts.State = gitea.StateType(opts.State)
 	}

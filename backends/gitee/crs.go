@@ -41,11 +41,8 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo string, number int) (*
 // ListCRs implements provider.ChangeRequestManager.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	state := string(opts.State)
-	if state == "" {
-		state = "open"
-	}
-	path := fmt.Sprintf("/repos/%s/%s/pulls?page=%d&per_page=%d&state=%s", esc(opts.Owner), esc(opts.Repo), page, perPage, state)
+	state := mapCRStateForGitee(opts.State)
+	path := fmt.Sprintf("/repos/%s/%s/pulls?page=%d&per_page=%d&state=%s", esc(opts.Owner), esc(opts.Repo), page, perPage, url.QueryEscape(state))
 	if opts.SourceBranch != "" {
 		path += "&source_branch=" + url.QueryEscape(opts.SourceBranch)
 	}
@@ -158,3 +155,16 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo string, number
 }
 
 var _ provider.ChangeRequestManager = (*Provider)(nil)
+
+// mapCRStateForGitee maps the SDK CRState to gitee's pull-list vocabulary
+// (open/closed/merged/all). Empty defaults to open, matching gitee's API.
+func mapCRStateForGitee(s provider.CRState) string {
+	switch s {
+	case provider.CRStateClosed:
+		return "closed"
+	case provider.CRStateMerged:
+		return "merged"
+	default: // CRStateOpened or ""
+		return "open"
+	}
+}

@@ -74,3 +74,29 @@ func buildLabelsPage(n int, prefix string) string {
 	b.WriteByte(']')
 	return b.String()
 }
+
+// TestGitLab_ResolveLabelID_NotFoundStopsOnShortPage verifies the resolver
+// terminates on a short page and reports NotFound without further requests.
+func TestGitLab_ResolveLabelID_NotFoundStopsOnShortPage(t *testing.T) {
+	page1 := buildLabelsPage(99, "l") // short page: resolver must stop here
+	var gets int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			gets++
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(page1))
+	}))
+	defer srv.Close()
+	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	lm := p.(provider.LabelManager)
+	if err := lm.DeleteLabel(context.Background(), "owner", "repo", "missing"); !provider.IsNotFound(err) {
+		t.Fatalf("expected NotFound, got %v", err)
+	}
+	if gets != 1 {
+		t.Fatalf("expected exactly 1 GET (short page terminates), got %d", gets)
+	}
+}
