@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.41.0] - 2026-08-16
+
 ### ⚠️ Breaking changes
 
 - **`ChangeRequestManager` and `DiffManager` methods now address change
