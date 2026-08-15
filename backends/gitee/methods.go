@@ -10,7 +10,9 @@ import (
 
 // doRequest is a convenience wrapper for JSON-in / JSON-out calls using the
 // method/path/body/result signature used throughout the gitee implementation.
-// It serves the surfaces that are still served by the raw transport client;
+// It serves the surfaces that are still served by the raw transport client —
+// the registered SDK detours (commits, contents, tags/releases, label list
+// and update) plus the not-yet-migrated issues and webhooks surfaces;
 // SDK-covered surfaces call the generated service methods directly.
 func (p *Provider) doRequest(ctx context.Context, method, path string, body, result any) error {
 	_, err := p.raw().DoJSON(ctx, &transport.Request{
@@ -31,6 +33,7 @@ func esc(s string) string { return url.PathEscape(s) }
 
 // escPath escapes a multi-segment path (e.g. a file path), preserving the
 // "/" separators: each segment is percent-encoded, the separators are not.
+// Used by the raw contents fallbacks (files.go).
 func escPath(p string) string {
 	segs := strings.Split(p, "/")
 	for i, s := range segs {

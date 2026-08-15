@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	gitee "gitee.com/openeuler/go-gitee/gitee"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -38,7 +40,7 @@ type giteeIssue struct {
 	Body      string          `json:"body"`
 	State     string          `json:"state"`
 	User      *giteeUser      `json:"user"`
-	Labels    []giteeLabel    `json:"labels"`
+	Labels    []gitee.Label   `json:"labels"`
 	Assignees []giteeUser     `json:"assignees"`
 	Milestone *giteeMilestone `json:"milestone"`
 	HTMLURL   string          `json:"html_url"`
@@ -196,13 +198,13 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 
 // ListIssueLabels implements provider.IssueManager: repository-level labels.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	var labels []giteeLabel
+	var labels []gitee.Label
 	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/labels", esc(owner), esc(repo)), nil, &labels); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListIssueLabels", err)
 	}
 	result := make([]*provider.IssueLabel, 0, len(labels))
 	for _, l := range labels {
-		result = append(result, &provider.IssueLabel{ID: l.ID, Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
+		result = append(result, &provider.IssueLabel{ID: int64(l.Id), Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
 	}
 	return result, nil
 }

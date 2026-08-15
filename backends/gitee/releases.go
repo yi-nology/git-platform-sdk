@@ -9,6 +9,12 @@ import (
 )
 
 // ListTags implements provider.ReleaseManager.
+//
+// Routed through the raw transport client rather than the SDK: the SDK's
+// GetV5ReposOwnerRepoTags returns a single Tag whose Commit is a plain
+// string, while the live wire is an array of objects with a nested
+// commit{sha} (verified against the live v5 tags payload) — the generated
+// call cannot decode the response at all.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
 	page, perPage := provider.NormalizePageOpts(1, 0)
 	var tags []struct {
@@ -28,6 +34,13 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 }
 
 // ListReleases implements provider.ReleaseManager.
+//
+// Routed through the raw transport client rather than the SDK: the SDK's
+// Release model types the live payload's boolean "prerelease" and object
+// "author" as plain strings (upstream swagger generation bug — verified
+// against the live v5 releases payload), so GetV5ReposOwnerRepoReleases
+// fails to decode every real response. The model also lacks the
+// draft/published_at/html_url fields ReleaseInfo surfaces.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
 	page, perPage := provider.NormalizePageOpts(1, 0)
 	var releases []giteeRelease
@@ -42,6 +55,12 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 }
 
 // CreateRelease implements provider.ReleaseManager.
+//
+// Routed through the raw transport client rather than the SDK: the generated
+// PostV5ReposOwnerRepoReleases posts its parameters as a multipart body
+// labeled application/json (upstream client.go bug) and offers no draft
+// parameter, and its response decodes into the mis-typed Release model (see
+// ListReleases).
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
 	body := map[string]any{
 		"tag_name": opts.TagName,

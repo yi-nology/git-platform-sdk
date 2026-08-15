@@ -333,6 +333,76 @@ func TestUpdateCRLabels_Endpoint(t *testing.T) {
 	}
 }
 
+// TestLabels_SDKCreateDelete locks the SDK label wiring: create posts a JSON
+// body via PostV5ReposOwnerRepoLabels (access_token, name, color — and no
+// description key, matching the live API, which has no label description),
+// delete hits the name-addressed DELETE endpoint with the per-call
+// access_token query param, and the returned color is normalized (leading
+// '#' stripped) on both paths.
+func TestLabels_SDKCreateDelete(t *testing.T) {
+	var mu sync.Mutex
+	var got []capturedRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		mu.Lock()
+		got = append(got, capturedRequest{r.Method, r.URL.Path, r.URL.Query(), body})
+		mu.Unlock()
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		writeJSON(w, map[string]any{"id": 1, "name": "bug", "color": "#4cc917"})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+
+	l, err := p.CreateLabel(context.Background(), "owner", "repo", provider.CreateLabelOptions{
+		Name: "bug", Color: "4cc917", Description: "dropped on gitee",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Color != "4cc917" {
+		t.Errorf("color normalization lost: got %q", l.Color)
+	}
+	if err := p.DeleteLabel(context.Background(), "owner", "repo", "la bel"); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 recorded requests, got %d: %+v", len(got), got)
+	}
+	create, del := got[0], got[1]
+	if create.method != "POST" || create.path != "/api/v5/repos/owner/repo/labels" {
+		t.Errorf("create request: %s %s", create.method, create.path)
+	}
+	if create.body["name"] != "bug" || create.body["color"] != "4cc917" {
+		t.Errorf("create body keys: got %v", create.body)
+	}
+	if _, ok := create.body["description"]; ok {
+		t.Errorf("create body carries description %v — the live Gitee label API has no description", create.body["description"])
+	}
+	if del.method != "DELETE" || del.path != "/api/v5/repos/owner/repo/labels/la bel" {
+		t.Errorf("delete request: %s %s", del.method, del.path)
+	}
+	if del.query.Get("access_token") != "test-token" {
+		t.Errorf("delete access_token: got %q", del.query.Get("access_token"))
+	}
+}
+
+// capturedRequest records one observed HTTP request for the SDK-wiring tests.
+type capturedRequest struct {
+	method string
+	path   string
+	query  url.Values
+	body   map[string]any
+}
+
 // TestNotes_CreateDelete exercises the PR-comment CRUD path: POST returns the
 // comment id as a string note ID, DELETE addresses it numerically.
 func TestNotes_CreateDelete(t *testing.T) {

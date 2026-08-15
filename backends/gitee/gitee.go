@@ -5,16 +5,20 @@
 // unified transport pipeline (auth, retry, hooks, logging) so SDK-issued
 // requests behave like every other backend's traffic. A handful of endpoints
 // are not usable through the SDK — either missing entirely (e.g.
-// DELETE /repos/{owner}/{repo}/branches/{branch}) or generated with a broken
+// DELETE /repos/{owner}/{repo}/branches/{branch}), generated with a broken
 // signature (the user-repos list methods decode into a single Project instead
-// of an array; the commit and compare models type live objects/arrays as
-// plain strings) — and keep using the retained transport.Client via
-// Provider.raw(). All Provider methods are split across the
+// of an array; the commit, compare, contents, and release models type live
+// objects/arrays/booleans as plain strings; the tags method returns a single
+// Tag for an array endpoint; the labels list opts carry no pagination; the
+// labels patch and releases create methods post multipart bodies labeled
+// application/json) — and keep using the retained transport.Client via
+// Provider.raw(). Each such detour is registered in a doc comment on the
+// method that takes it. All Provider methods are split across the
 // per-responsibility files in this package:
 //
 //   - gitee.go:   constructor + identity (Platform, TestConnection, Capabilities)
 //   - init.go:    provider registration with the global registry
-//   - methods.go: doRequest/doRequestWithHeaders JSON HTTP helpers (raw client)
+//   - methods.go: doRequest JSON helper + esc/escPath path escaping (raw client)
 //   - repos.go:   ListRepos, GetRepo, CreateRepo, DeleteRepo, UpdateRepo, ForkRepo
 //   - crs.go:     Change requests (PRs): Create/Get/List/Merge/Close/Reopen/Update/UpdateLabels/Comments/Commits
 //   - webhooks.go: webhook CRUD + signature validation + event parsing
