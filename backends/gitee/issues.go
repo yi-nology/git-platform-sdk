@@ -10,6 +10,14 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
+// This file implements the full provider.IssueManager surface over Gitee's
+// native REST endpoints, but the capability is deliberately NOT declared in
+// Capabilities() (see gitee.go): every current Gitee repo returns
+// alphanumeric string issue numbers (e.g. "IAINVA"), which the int-typed
+// IssueManager can neither decode nor address. The implementation stays
+// compile-guarded and spike-ready; re-declare Issues after the
+// issue-addressing spike redesigns the interface around string identifiers.
+
 // giteeUser mirrors Gitee's user JSON shape.
 type giteeUser struct {
 	Login string `json:"login"`

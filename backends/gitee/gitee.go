@@ -19,7 +19,8 @@
 //   - files.go:   GetFileContent, CreateFile, UpdateFile, DeleteFile
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
 //   - labels.go:  repository label CRUD (LabelManager)
-//   - issues.go:  issue CRUD, comments, and issue labels (IssueManager)
+//   - issues.go:  issue CRUD, comments, and issue labels (implemented but
+//     undeclared pending the string-identifier spike; see Capabilities)
 //   - types.go:   internal Gitee-API types and conversion helpers
 package gitee
 
@@ -72,9 +73,13 @@ func New(cfg provider.Config) (provider.Provider, error) {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee }
 
 // Capabilities implements provider.Provider. Gitee implements the optional
-// LabelManager (see labels.go) and IssueManager (see issues.go) interfaces.
+// LabelManager interface (see labels.go). An IssueManager implementation
+// exists (issues.go) but is deliberately NOT declared: every current Gitee
+// repo returns alphanumeric string issue numbers (e.g. "IAINVA"), which the
+// int-typed IssueManager can neither decode nor address. Re-enable after the
+// issue-addressing spike redesigns the interface around string identifiers.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true}
+	return provider.CapabilitySet{Labels: true}
 }
 
 // TestConnection implements provider.Provider.
