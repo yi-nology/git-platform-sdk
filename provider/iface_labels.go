@@ -6,9 +6,10 @@ import "context"
 // capability interface: consumers should gate on Provider.Capabilities()
 // (or type-assert) before use. Labels are addressed by name; backends whose
 // platform API addresses labels by numeric ID (GitLab, Gitea, Forgejo)
-// resolve the name internally. Such backends scan a limited resolution
-// window (currently the first 100 labels); a label beyond that window may be
-// reported as not found by UpdateLabel/DeleteLabel even though it exists.
+// resolve the name internally. Such backends scan labels with server-side
+// pagination (100 per page, bounded to 50 pages); beyond that bound a label
+// may be reported as not found by UpdateLabel/DeleteLabel even though it
+// exists.
 //
 // The issue-scoped operations (ListIssueLabels, AddIssueLabels,
 // RemoveIssueLabel) remain on IssueManager because they operate on an issue,

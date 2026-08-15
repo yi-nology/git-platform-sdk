@@ -82,20 +82,27 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 
 // resolveLabelID finds the numeric ID of the named label. GitLab's update and
 // delete endpoints address labels by ID while the SDK's surface addresses
-// them by name. Only the first 100 labels are scanned; repositories with
-// more labels than that are not supported by this resolution path yet.
-// op is the public operation the resolution serves; failures surface under
-// that op rather than under this unexported helper's name.
+// them by name. Labels are scanned with server-side pagination (100 per
+// page, bounded to 50 pages); a label beyond that bound may be reported as
+// not found even though it exists. op is the public operation the resolution
+// serves; failures surface under that op rather than under this unexported
+// helper's name.
 func (p *Provider) resolveLabelID(ctx context.Context, op, owner, repo, name string) (int64, error) {
-	labels, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
-		&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{PerPage: 100}},
-		gitlab.WithContext(ctx))
-	if err != nil {
-		return 0, provider.Wrap(provider.PlatformGitLab, op, err)
-	}
-	for _, l := range labels {
-		if l.Name == name {
-			return l.ID, nil
+	const perPage = 100
+	for page := 1; page <= 50; page++ {
+		labels, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
+			&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: perPage}},
+			gitlab.WithContext(ctx))
+		if err != nil {
+			return 0, provider.Wrap(provider.PlatformGitLab, op, err)
+		}
+		for _, l := range labels {
+			if l.Name == name {
+				return l.ID, nil
+			}
+		}
+		if len(labels) < perPage {
+			break
 		}
 	}
 	return 0, provider.New(provider.PlatformGitLab, op, http.StatusNotFound, fmt.Sprintf("label %q not found", name))

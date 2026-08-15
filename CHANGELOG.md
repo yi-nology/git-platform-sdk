@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`UpdateLabel`/`DeleteLabel` no longer falsely report NotFound for labels
+  beyond the first page.** The GitLab, Gitea, and Forgejo name→ID resolution
+  now scans labels with server-side pagination (100 per page, bounded to 50
+  pages) instead of stopping after the first 100 labels.
+
 ## [v0.38.0] - 2026-08-15
 
 ### ⚠️ Breaking changes
