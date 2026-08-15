@@ -72,6 +72,9 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	if format == "tar.gz" {
 		archiveFormat = "tarball"
 	}
+	// esc encodes '/' as %2F, so slash-bearing refs (e.g. "refs/tags/v1.0")
+	// travel as a single encoded segment. This is deliberate: ref is one path
+	// segment on the wire, unlike file paths (escPath) which preserve '/'.
 	resp, err := p.client.Do(ctx, &transport.Request{
 		Method: "GET",
 		Path:   fmt.Sprintf("/repos/%s/%s/%s/%s", esc(owner), esc(repo), archiveFormat, esc(ref)),

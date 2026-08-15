@@ -44,7 +44,7 @@ func TestGitee_PathEscaping(t *testing.T) {
 		repo  = "re?po"
 	)
 	_, _ = p.ListBranches(ctx, owner, repo)
-	_ = p.(provider.LabelManager).DeleteLabel(ctx, owner, repo, "la bel%1")
+	_ = p.(provider.LabelManager).DeleteLabel(ctx, owner, repo, "la bel%1中文")
 	_, _ = p.GetFileContent(ctx, owner, repo, "dir one/file#2.txt", "bra nch")
 
 	if len(paths) != 3 {
@@ -58,7 +58,7 @@ func TestGitee_PathEscaping(t *testing.T) {
 			t.Errorf("path %q lost repo %q (segment not escaped)", path, repo)
 		}
 	}
-	if !strings.Contains(paths[1], "la bel%1") {
+	if !strings.Contains(paths[1], "la bel%1中文") {
 		t.Errorf("path %q lost label name (segment not escaped)", paths[1])
 	}
 	if !strings.Contains(paths[2], "dir one/file#2.txt") {
