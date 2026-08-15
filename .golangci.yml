@@ -1,0 +1,112 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    # Correctness
+    - errcheck
+    - staticcheck
+    - govet
+    - ineffassign
+    - unused
+    # Security
+    - gosec
+    # Modern idioms
+    - gocritic
+    - gocyclo
+    - misspell
+    - unconvert
+    - unparam
+
+  settings:
+    gocyclo:
+      min-complexity: 15
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - hugeParam
+        - exitAfterDefer
+        - unnamedResult
+        - emptyStringTest
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+    staticcheck:
+      checks:
+        - all
+        - -QF1001  # De Morgan's law style preference
+        - -QF1008  # embedded field selectors
+        - -ST1000  # package comment requirement
+        - -ST1016  # receiver name consistency
+
+  exclusions:
+    presets:
+      - common-false-positives
+    rules:
+      # Test files get more leeway
+      - path: _test\.go
+        linters:
+          - gosec
+          - gocyclo
+          - errcheck
+          - gocritic
+      # init.go files are tiny; skip style checks
+      - path: backends/.*/init\.go
+        linters:
+          - gocritic
+      # Extras file mirrors third-party API shape
+      - path: backends/tencentcode/extras\.go
+        linters:
+          - gocyclo
+          - gocritic
+      # Webhook parsers are inherently complex switch-based event routers
+      - path: backends/.*/webhooks\.go
+        linters:
+          - gosec
+          - gocyclo
+      # Transport retry uses math/rand for jitter and has inherent retry-loop complexity
+      - path: transport/retry\.go
+        linters:
+          - gosec
+          - gocyclo
+      - path: transport/client\.go
+        linters:
+          - gocyclo
+        text: "retryingRoundTripper"
+      # Backend httpTransport helpers create InsecureSkipVerify transports
+      # when the user explicitly requests SkipTLS
+      - path: backends/.*/(github|gitlab|gitea|forgejo)\.go
+        linters:
+          - gosec
+        text: "G402"
+      - path: backends/tencentcode/tencentcode\.go
+        linters:
+          - gosec
+        text: "G402"
+      # provider/webhook.go uses sha1 for HMAC validation (platform requirement)
+      - path: provider/webhook\.go
+        linters:
+          - gosec
+      # gitbackend has inherently complex git operations (merge, rebase, stash, fetch)
+      - path: gitbackend/gogit_.*\.go
+        linters:
+          - gocyclo
+      # SSH key type detection is inherently a multi-case switch
+      - path: pkg/credential/sshkey\.go
+        linters:
+          - gocyclo
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -1,0 +1,472 @@
+# Changelog
+
+All notable changes to this project are documented in this file. The format is
+based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
+project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### ⚠️ Breaking changes
+
+- **`IssueManager` methods now address issues by string number.** The eight
+  number-taking methods (`GetIssue`, `UpdateIssue`, `CloseIssue`,
+  `ReopenIssue`, `ListIssueComments`, `CreateIssueComment`, `AddIssueLabels`,
+  `RemoveIssueLabel`) changed `number int` → `number string`, and
+  `Issue.Number` changed `int` → `string`. Numeric platforms (GitHub, GitLab,
+  Gitea, Forgejo, GitCode) parse internally and return a wrapped
+  `invalid issue number` error on non-numeric input; Gitee's alphanumeric
+  identifiers (e.g. "IAINVA") are now natively representable. Pass `"1"`
+  where `1` was passed before.
+- **`CreateIssueOptions.Milestone`/`UpdateIssueOptions.Milestone` changed
+  `int` → `string`, and `MilestoneRef.Number` changed `int` → `string`.**
+  The option carries the platform's milestone addressing identifier as a
+  string (`""` = don't set on create / leave unchanged on update);
+  `MilestoneRef.Number` is the same identifier as returned by the platform
+  (milestone number on GitHub, milestone ID on GitLab, Gitea, Forgejo, and
+  GitCode, milestone serial number on Gitee).
+- **`SearchIssueResult.Number` changed `int` → `string`.** Search results
+  now carry the platform's issue addressing identifier as a string, so
+  they feed `GetIssue(number string)` directly (the same string-addressing
+  scheme as `IssueManager`): numeric platforms return `"1"`, Gitee's
+  alphanumeric identifiers (e.g. `"IAINVA"`) are natively representable.
+  GitCode's search no longer round trips through `strconv.Atoi`.
+- **`CreateReview` moved from `DiffManager` to the new optional
+  `ReviewManager` capability interface, and `DiffManager` is slimmed to five
+  methods** (`GetCRDiff`, `GetCRFiles`, `CreateNote`, `DeleteNote`,
+  `CreateDiscussion`). `ReviewManager.CreateReview` keeps its shape except
+  that the change request number is now addressed as `number string` (same
+  string-addressing scheme as `IssueManager`). The synthetic
+  `CreateReview` approximations on GitLab (note + discussions + commit
+  status), Gitee (notes), TencentCode (discussions + note), and GitCode
+  (review endpoint with inline-comment fallback) are gone with the
+  migration: reviews are now a declared capability implemented against
+  platforms that expose a real review API. Gitee is ruled out entirely —
+  its API exposes only PR tester assignment, with no review
+  list/create/dismiss endpoints — so it declares no Reviews capability
+  (capability threshold, design spec §4.6). Route with
+  `p.Capabilities().Reviews` and type-assert `provider.ReviewManager`
+  instead of calling `DiffManager.CreateReview`.
+- **`ReleaseManager` (composed into `provider.Provider`) gains three
+  methods: `GetReleaseByTag`, `UpdateRelease`, and `DeleteRelease`**
+  (releases are addressed by tag name across all three), plus the
+  `UpdateReleaseOptions` type (`Name`/`Body`/`Draft`/`Prerelease`, nil =
+  leave unchanged). The methods are implemented on all seven platform
+  backends, but any external implementation of `ReleaseManager` (or of the
+  full `Provider` interface) must add the three methods to keep compiling.
+
+### Added
+
+- **`SearchManager` implemented by GitHub, GitLab, Gitea, Forgejo, and
+  Gitee**, joining GitCode: all six platforms now declare
+  `Capabilities().Search` and implement the three-method interface
+  (`SearchRepos`, `SearchIssues`, `SearchUsers`) against real endpoints —
+  no registered stubs anywhere (3/3 methods real on every platform, well
+  past the §4.6 capability threshold). Platform mappings: GitHub rides
+  `SearchService` with `repo:`/`state:`/`is:issue` qualifiers built from
+  the options (`is:issue` keeps pull requests out of issue results; repo
+  search is global since `SearchReposOptions` carries no scoping) and
+  reports the API's `total_count`; GitLab rides the typed search scopes
+  (`projects`/`issues`/`users`), routing `SearchIssuesOptions.Repo` to the
+  project-scoped issue search (its search API has no state/sort/order
+  parameters — registered ignore); Gitea and Forgejo ride the keyword
+  searches (`/repos/search`, `/repos/issues/search` restricted to real
+  issues via the type filter, `/users/search`), routing
+  `SearchIssuesOptions.Repo` to the SDK's `ListRepoIssues`
+  (`/repos/{owner}/{repo}/issues`) so repo scoping is exact and server-side
+  across pages — totals included — with a malformed repo string failing
+  fast instead of silently matching nothing; Gitee rides
+  `/v5/search/{repositories,issues,users}` with native repo/state
+  parameters. A cross-platform search contract suite
+  (`contracttest.RunSearchSuite`, auto-mounted via `Harness.Search` with
+  the same bidirectional capability-drift checks as the labels/issues/
+  reviews/milestones suites) verifies repo parsing (`full_name`
+  `owner/repo`), issue parsing (title plus string number feeding
+  `GetIssue(number string)`), user parsing (`login`), that the keyword
+  reaches the wire, and that repo-scoped issue search takes a wire route
+  reflecting the repo.
+- **Tag-addressed release get/update/delete on every platform.** The core
+  `ReleaseManager` interface gains `GetReleaseByTag`, `UpdateRelease`, and
+  `DeleteRelease` plus `UpdateReleaseOptions` (`Name`/`Body`/`Draft`/
+  `Prerelease`, nil = leave unchanged), implemented across all seven
+  backends. GitLab and TencentCode are tag-native end to end; GitHub,
+  Gitea, Forgejo, GitCode, and Gitee resolve tag→ID through the platform's
+  exact single-release-by-tag endpoint before their ID-addressed
+  update/delete calls (no list-scan window to bound, unlike name-keyed
+  label resolution); Gitea/Forgejo/GitCode merge the current title/body
+  into their non-pointer SDK update fields so nil options never clobber a
+  release. Two registered platform-semantic registrations: GitLab releases
+  have no draft/prerelease concepts, so `Draft`/`Prerelease` are ignored
+  there (name/description carry); TencentCode's update surface accepts a
+  description only, so `Name`/`Draft`/`Prerelease` are ignored there. The
+  Gitee implementation rides the raw transport client throughout (same
+  ledger as its other release methods — the SDK's Release model mis-types
+  the live payload and its PATCH posts a mislabeled multipart body): get
+  by tag via `GET /repos/{o}/{r}/releases/tags/{tag}`, then update/delete
+  by the resolved ID. A cross-platform release contract suite
+  (`contracttest.RunReleaseSuite`, auto-mounted via `Harness.Releases` for
+  all seven platforms — mandatory, since `ReleaseManager` is a core
+  interface with no capability drift to enforce) verifies by-tag parsing,
+  the update wire body, and the delete verb.
+- **New optional `ReviewManager` capability interface** with five methods:
+  `CreateReview`, `ListReviews`, `GetReview`, `RequestReviewers`,
+  `DismissReview` (change requests addressed by string number, individual
+  reviews by numeric platform ID), plus the `Review` model and normalized
+  `ReviewState` constants (`approved`, `changes_requested`, `commented`,
+  `pending`). **The GitHub backend implements it and declares
+  `Capabilities().Reviews`**, backed by go-github's
+  `PullRequestsService` review endpoints; UPPERCASE wire states are
+  normalized to the lowercase constants. A cross-platform reviews contract
+  suite (`contracttest.RunReviewsSuite`, auto-mounted via
+  `Harness.Reviews`) verifies list parsing/state normalization, single
+  review fetch, create/request-reviewers wire bodies, and non-GET
+  dismissal, with the same bidirectional capability-declaration drift
+  checks as the labels and issues suites.
+
+- **The GitLab backend implements `ReviewManager` and declares
+  `Capabilities().Reviews`** via registered platform-semantic mappings
+  (spec §4.6): GitLab has no per-review list, so `ListReviews`/`GetReview`
+  ride `MergeRequestApprovalsService.GetApprovalState` and synthesize one
+  summary `approved` review per approver found in `rules[].approved_by`
+  (keyed by the MR IID because GitLab approvals expose no per-approval
+  IDs; `GetReview` returns the first such review, `NotFound` when nobody
+  has approved); `CreateReview` is comment-style — a merge-request note
+  via `Notes.CreateMergeRequestNote` (`commented` state; inline comments
+  and verdicts are not mapped); `DismissReview` maps to
+  `UnapproveMergeRequest` (review ID and dismissal message have no GitLab
+  equivalent); `RequestReviewers` is a registered ignore — GitLab's
+  `reviewer_ids` need username→ID resolution the SDK surface does not
+  offer (same class of limitation as issue `Assignees`), and the reviews
+  contract suite gained an `IgnoresRequestReviewers` harness flag (in the
+  spirit of `IgnoresListPagination`) asserting such registered ignores
+  stay silent on the wire.
+
+- **The Gitea and Forgejo backends implement `ReviewManager` and declare
+  `Capabilities().Reviews`**, covering all five methods against real
+  endpoints — zero registered stubs, so the spec's one-stub allowance went
+  unused. `ListReviews`/`GetReview` ride `ListPullReviews`/`GetPullReview`;
+  `CreateReview` is a single `CreatePullReview` call carrying the verdict in
+  the `event` field (the server finalizes immediately — the two-step
+  create-then-submit shape exists only for pending drafts and would double
+  the round trips); `RequestReviewers` rides `CreateReviewRequests` and
+  `DismissReview` rides `DismissPullReview` (both need server ≥1.14, and
+  `DismissPullReview` was spike-verified real, clearing the matrix's last
+  open verification cell for these platforms). One SDK-side behavior to
+  know: the client-side validation rejects a review that carries neither a
+  body nor inline comments unless the verdict is APPROVE, so
+  `REQUEST_CHANGES`/`COMMENT` reviews need a body.
+
+- **The GitCode backend implements `ReviewManager` and declares
+  `Capabilities().Reviews`**, restoring the review capability dropped
+  from `DiffManager` in this release: all five methods ride real
+  gitcode_api@v0.6.0 endpoints — `ListReviews`/`GetReview` via
+  `ListPullRequestReviews`/`GetPullRequestReview`,
+  `CreateReview` via `CreatePullRequestReview` (body+event on the wire),
+  `RequestReviewers` via the real `requested_reviewers` endpoint, and
+  `DismissReview` via `DismissPullRequestReview`
+  (PUT `.../reviews/{id}/dismissals`). `CreateReview` keeps the
+  pre-slimming resilience behavior: inline comments post individually
+  after the review itself, and if the review endpoint rejects the
+  request the fallback path posts inline comments plus a plain note
+  instead of failing. No registered stubs, no mappings, and no harness
+  opt-outs — all five reviews contract subtests pass on the standard
+  wire assertions.
+
+- **The gitee backend now declares `Capabilities().Issues`.** The
+  IssueManager implementation is fully migrated onto the go-gitee SDK —
+  Gitee's alphanumeric issue numbers (e.g. "IAINVA") flow through the
+  string-typed interface natively — with one registered raw detour: issue
+  create keeps the raw transport client because the SDK's generated create
+  call posts an unparseable multipart body (upstream codegen bug), so it
+  uses Gitee's documented owner-scoped `POST /repos/{owner}/issues`
+  endpoint. `MilestoneRef.Number` carries Gitee's milestone serial number,
+  the identifier Gitee's issue write endpoints take. The
+  `IssuesImplementedButUndeclared` contract-harness flag is gone; the
+  Issues capability check is bidirectional for every platform again.
+- **The gitee backend's webhook CRUD migrated to the go-gitee SDK** where
+  the SDK is usable: `DeleteWebhook` rides the generated delete call.
+  `CreateWebhook`/`ListWebhooks` keep registered raw detours (the SDK's
+  create posts an unparseable multipart body; its Hook model mis-types the
+  live wire's numeric id and boolean event flags as strings, and the
+  generated list swallows the decode error into an empty result). Create
+  now uses Gitee's documented vocabulary: the signing secret travels as
+  `password` (the key Gitee HMACs into `X-Gitee-Token`) and event
+  selections map onto Gitee's `*_events` booleans.
+
+- **New optional `MilestoneManager` capability interface with five methods**
+  (`ListMilestones`, `GetMilestone`, `CreateMilestone`, `UpdateMilestone`,
+  `DeleteMilestone` — all milestone-addressed by `number string`, the same
+  identifier `MilestoneRef.Number` and the new `Milestone.Number` carry:
+  milestone number on GitHub, milestone ID on GitLab, Gitea, Forgejo, and
+  GitCode, milestone serial number on Gitee), plus the `Milestone` model,
+  normalized `MilestoneState` constants (`open`, `closed`), and
+  `ListMilestonesOptions`/`CreateMilestoneOptions`/`UpdateMilestoneOptions`
+  (nil = leave unchanged). A cross-platform milestones contract suite
+  (`contracttest.RunMilestonesSuite`, auto-mounted via `Harness.Milestones`)
+  verifies list parsing/normalization (identifier as string, state), the
+  create/update wire bodies (POST/PATCH/PUT carrying the title), and a
+  non-GET delete, with the same bidirectional capability-declaration drift
+  checks as the labels, issues, and reviews suites. Six backends implement
+  it and declare `Capabilities().Milestones`: GitHub through its SDK's
+  number-addressed CRUD as-is; GitCode via the SDK's ID-addressed surface
+  for list/get/delete, with a registered raw detour on create/update —
+  gitcode_api's option structs marshal `due_on` without omitempty, so an
+  SDK-ridden call without a due date would post `"due_on": ""` and clear
+  GitCode's stored due date (the raw bodies carry exactly the fields the
+  caller set); GitLab via the project
+  `MilestonesService` with two registered vocabulary mappings (wire state
+  `active` ↔ SDK `open`, so state changes travel as the `state_event`
+  verbs `activate`/`close`; and a date-only `ISOTime` due date, so
+  `DueOn`'s time-of-day is lost on GitLab's wire); Gitea and Forgejo via
+  their ID-addressed milestone CRUD; and Gitee via the go-gitee SDK with
+  registered raw detours on create/update — the generated Post/Patch
+  milestone calls encode their parameters as form values under an
+  `application/json` Content-Type (upstream prepareRequest bug, same
+  family as the labels/issue/release detours), so those two methods post
+  documented JSON bodies through the raw transport client while
+  list/get/delete ride the SDK. TencentCode does not implement the
+  interface (out of this release's designed milestone platform set);
+  note for a future phase: the gongfeng SDK actually ships a complete
+  GitLab-shaped `MilestonesService` (list/get/create/edit/delete), so the
+  capability is implementable there if ever prioritized.
+
+### Changed
+
+- **The gitee backend is rebuilt on the go-gitee SDK**
+  (`gitee.com/openeuler/go-gitee`): repos, branches, CRs, commits, diffs,
+  files, labels, releases, webhooks, and issues now ride the generated
+  client through the shared transport pipeline, replacing the hand-rolled
+  REST plumbing (the backend's manual escapers `esc`/`escPath` were
+  **retained**, not retired: they now also wrap every go-gitee call site,
+  because the SDK interpolates path parameters into URLs without escaping
+  them — `escape_test.go` pins this behavior). The SDK is pinned by
+  pseudo-version (`v0.0.0-20251225091545-a0f78272dafc`, a commit-hash
+  lock): upgrading it requires deliberate human review of the upstream
+  changes it pulls in. Retry caveat: go-gitee internally retries 502
+  responses up to 3× with fixed 1s/2s sleeps, so on a persistent 502 its
+  internal retries multiply with the SDK's own transport retry pipeline
+  (registered in code at the gitee client construction). Known gap:
+  **Gitee's `ChangeRequest.Draft` is always
+  `false`** — the live PR payload carries a `draft` boolean but the SDK's
+  `PullRequest` model omits the field (upstream swagger omission); it
+  returns to wire-accurate once go-gitee models the field. Where the
+  generated client is unusable, methods keep doc-registered raw detours
+  through the same transport pipeline. Write detours: repo create
+  (`RepositoryPostParam` has no `default_branch` field), file
+  create/update/delete (bracketed JSON keys, multipart posted as
+  `application/json`, and query-param encodings the REST contract puts in
+  the body, plus a `CommitContent` model that mis-types the response),
+  issue create (unparseable multipart body), webhook create/list
+  (multipart body; the `Hook` model mis-types the live wire), label
+  update (multipart-as-JSON — label create and delete ride the SDK),
+  milestone create/update (form values under a JSON Content-Type),
+  release create/update/delete/get-by-tag (the `Release` model mis-types
+  the live payload; the PATCH call posts multipart), and branch delete
+  (no SDK method exists). Read detours: repo list (the generated list
+  calls decode a single Project where the endpoint answers an array),
+  commit get/list/compare (`RepoCommit`/`Compare` models type payload
+  objects as plain strings), file content (`Content` model mis-types
+  `size`/`_links`), label list (the generated list options carry no
+  pagination), and tag/release lists (the same `Release` model defect).
+
+### Security
+
+- **Credential query parameters are now masked in transport logs.** The
+  transport's round-tripper and retry logging redact `access_token`,
+  `token`, and `private_token` values to `***` before logging request
+  URLs. Gitee's query-string token auth is the motivating case: its
+  `access_token` parameter previously appeared verbatim in logged URLs.
+  Only the logged form is masked; the outgoing request keeps its real
+  credential.
+
+## [v0.39.0] - 2026-08-15
+
+### ⚠️ Breaking changes
+
+- **`Issue.Milestone` changed from `string` to `*MilestoneRef{Number, Title}`,
+  and `CreateIssueOptions`/`UpdateIssueOptions` gained a `Milestone int`
+  field (0 = unset/unchanged).** Consumers reading the milestone title now
+  use `issue.Milestone.Title` with a nil check. `MilestoneRef.Number`
+  carries the platform's addressing identifier (number on GitHub, ID on
+  GitLab/Gitea/Forgejo/GitCode).
+
+### Added
+
+- **`IssueManager` implemented by GitHub, GitLab, Gitea, and Forgejo**,
+  joining GitCode: all four now declare `Capabilities().Issues` and implement
+  the full 11-method interface (list/get/create/update/close/reopen,
+  comments, issue labels). Backends whose APIs diverge from the SDK's
+  vocabulary translate internally — GitLab applies state changes via
+  `state_event` verbs and label changes via the `add_labels`/`remove_labels`
+  update options, while Gitea and Forgejo resolve label names to numeric IDs
+  and backfill the title on issue edit (their edit API always serializes
+  `Title`). GitLab ignores `Assignees` on issue create/update: its API takes
+  assignee IDs, and resolving usernames to IDs requires the Users API (a
+  future UserManager round). Gitee's implementation exists in code but is
+  deliberately not declared — every current Gitee repo returns alphanumeric
+  string issue numbers (e.g. "IAINVA"), which the int-typed `IssueManager`
+  can neither decode nor address; it will be re-enabled after a planned
+  string-identifier spike (see `backends/gitee/gitee.go`).
+- **The issue-management contract suite is now auto-mounted from the main
+  `contracttest.Harness` via the optional `Issues` field**, mirroring the
+  labels suite: `Run` fails when a platform declares
+  `Capabilities().Issues` without wiring the suite, or wires it without
+  declaring, and the capability checks enforce that declarations match the
+  implemented method set. Gitee's deliberate implemented-but-undeclared
+  state is documented via the harness's `IssuesImplementedButUndeclared`
+  field.
+
+### Fixed
+
+- **The gitee backend now maps the SDK `CRState` vocabulary to gitee's
+  pull-list vocabulary and query-escapes the `state` parameter in
+  `ListCRs`.** The SDK's `opened` previously went out raw where gitee
+  expects `open`; an empty state defaults to `open` as before.
+- **Gitea and Forgejo `ListIssues` now request only issues, not pull
+  requests.** The list option's type filter was left unset, so real
+  instances returned PRs mixed into issue lists.
+- **GitLab `ListIssues` now maps the SDK `open` state filter to GitLab's
+  `opened` vocabulary.** The SDK's `open` previously went out raw where
+  GitLab's issues API expects `opened`; the inbound conversion already
+  mapped back.
+
+## [v0.38.1] - 2026-08-15
+
+### Fixed
+
+- **`provider.Wrap` no longer panics on non-struct error values.** The
+  reflection-based status-code fallback in `httpStatusFromError` called
+  `NumField` on non-struct kinds (e.g. `url.EscapeError`, a string kind) and
+  panicked; it now falls through to message parsing.
+- **`UpdateLabel`/`DeleteLabel` no longer falsely report NotFound for labels
+  beyond the first page.** The GitLab, Gitea, and Forgejo name→ID resolution
+  now scans labels with server-side pagination (100 per page, bounded to 50
+  pages) instead of stopping after the first 100 labels.
+- **The gitee backend now percent-encodes variable URL path segments**
+  (owner, repo, branch, label name, sha, file path, ref). Names containing
+  `#`, `?`, `%`, spaces, or non-ASCII characters previously corrupted or
+  truncated the request URL.
+- **The gitee backend now query-escapes string query values** on list
+  endpoints (`source_branch`, `target_branch`, `sha`, `since`, `until`),
+  matching the previously fixed `ref` parameter. Values containing `#`,
+  `?`, spaces, or a `+` in timestamps previously corrupted the query string.
+- **GitCode `UpdateLabel` now sends `#`-prefixed colors.** GitCode's label
+  API uses `#`-prefixed colors (matching its create endpoint), but the update
+  path forwarded the SDK's canonical `#`-free form, breaking color changes
+  against the real API.
+
+### Tests
+
+- The label-management contract suite is now auto-mounted from the main
+  `contracttest.Harness` via the optional `Labels` field: `Run` enforces that
+  a platform declaring `Capabilities().Labels` wires the suite (and vice
+  versa), replacing the six hand-written `TestX_LabelsContract` functions.
+
+## [v0.38.0] - 2026-08-15
+
+### ⚠️ Breaking changes
+
+- **`IssueManager` and `SearchManager` removed from the `Provider` interface.**
+  Only GitCode genuinely implemented these; the other six backends returned
+  `ErrNotImplemented` stubs for all methods, which forced every platform to
+  pretend it supported issues/search. These two interfaces still exist and are
+  now **optional capability interfaces**: consumers type-assert against them.
+
+  ```go
+  p, _ := provider.NewProvider(cfg)
+  if ism, ok := p.(provider.IssueManager); ok {
+      _ = ism.ListIssues(ctx, opts)
+  }
+  ```
+
+  The corresponding stub files (`issues.go` / `search.go`) were deleted from
+  the github, gitlab, gitea, gitee, gitea, forgejo, and tencentcode backends.
+  GitCode's real implementations are unchanged and still satisfy both
+  optional interfaces.
+
+- **Credential encryption format changed (argon2id + salt).** Ciphertexts
+  produced by older builds of `pkg/credential` (single-iteration SHA-256 KDF,
+  no salt) **can no longer be decrypted** and must be re-encrypted with the
+  current key. New ciphertexts carry a version byte, a 16-byte random salt,
+  and a 12-byte GCM nonce. See "Security" below for the rationale.
+
+- **Contract test harness signature changed.**
+  `contracttest.Harness.NewProvider` now takes a full `provider.Config`
+  (`func(t *testing.T, cfg provider.Config) provider.Provider`) instead of a
+  base URL, so the harness can inject a retry config. Backends' `contract_test.go`
+  were updated accordingly.
+
+- **`Provider` interface gains `Capabilities() CapabilitySet`.** Custom
+  implementations of `provider.Provider` outside this module must add the
+  method. All seven built-in backends declare their capabilities statically;
+  the contract suite enforces that declarations match implementations.
+
+### Security
+
+- **Credential KDF upgraded to argon2id with a per-ciphertext random salt**
+  (`pkg/credential/encrypt.go`). Previously a low-entropy passphrase was
+  stretched with a single unsalted SHA-256, making offline brute force trivial
+  if a ciphertext was exfiltrated. argon2id (t=3, m=64 MiB, p=2) makes such
+  attacks expensive. (Clean break — see breaking changes.)
+- **`transport` retry no longer returns a closed/empty response body.**
+  `retryingRoundTripper` now buffers the final upstream response body and
+  re-attaches a fresh reader, so SDK decoders sitting on top see the real error
+  payload instead of a misleading `EOF` / "read on closed body" (and the
+  `http.RoundTripper` contract — a received response returns a nil error — is
+  honored).
+- **`MaxBodySize` is now enforced on the retry path**, not only on the
+  success path (`transport/retry.go`). A server returning a huge body on a
+  retried 5xx can no longer bypass the cap.
+- **HMAC webhook validators reject an empty secret** (`provider/webhook.go`),
+  matching `StaticTokenValidator`. An empty HMAC key makes signature forgery
+  trivial for predictable payloads (e.g. push events on public repos).
+- **`BuildAuthURL` now percent-encodes credentials** via `net/url`
+  (`pkg/credential/manager.go`). Previously a token or username containing
+  `@`, `:`, `/`, etc. was interpolated raw, producing malformed/ambiguous URLs
+  and risking the secret leaking into the wrong URL component.
+- **SSH host-key helper is now concurrency-safe** (`pkg/credential/sshkey.go`):
+  the `hostKeys` map is guarded by a mutex, and the trust-on-first-use insert
+  is double-checked under the write lock. Also fixed: the key comparison used
+  the struct marshaler (`ssh.Marshal`) which panicked on real keys; it now uses
+  the canonical wire format (`key.Marshal()`).
+- **Removed the `ssh-keygen` shell-out fallback** in
+  `ExtractPublicKeyFromPrivateKey`. It passed the key passphrase as a command-
+  line argument, leaking it to other local users via `ps` / `/proc`.
+
+### Changed
+
+- **`gitbackend.GitBackend` god-interface split into composed sub-interfaces**
+  (`gitbackend/iface.go`): `CoreOps`, `BranchOps`, `StatusDiffOps`, `CommitOps`,
+  `RemoteOps`, `TagOps`, `FileOps`, `StashOps`, `ConfigOps`, `AdvancedOps`.
+  `GitBackend` is now the composition of all of them, so its method set and
+  the public API are unchanged; consumers may now depend on a narrower
+  sub-interface.
+- **Backend plumbing de-duplicated.** The byte-identical `convertHooks`, the
+  retry-config mapping (with its `MaxRetries+1` conversion), `chainTransport`,
+  `httpTransport`, `toTransportLogger`, and base-URL helpers that were copied
+  across all seven backends are now shared via the internal
+  `backends/internal/backendutil` package.
+
+### Tests
+
+- The cross-platform contract suite now asserts real behavior: a configured
+  retry recovers from a 503 (and the server observes >1 attempt), and each
+  platform's registered webhook validator accepts a correct signature, rejects
+  an empty secret, and (for HMAC validators) rejects a tampered body. The
+  duplicated `newVersionProxy` helper was promoted to `contracttest.VersionProxy`.
+
+### Added
+
+- **Declarative capability introspection: `Provider.Capabilities()`.**
+  Returns a static `CapabilitySet{Issues, Search, Labels, Milestones,
+  Reviews}` so consumers can route on declared capabilities instead of
+  probing with type assertions. No runtime detection is performed.
+- **`LabelManager` optional interface (repository-level label CRUD).**
+  `ListLabels` / `CreateLabel` / `UpdateLabel` / `DeleteLabel`, addressed by
+  label name with colors canonicalized to 6-digit hex without `#`. Backends
+  whose APIs address labels by numeric ID (GitLab, Gitea, Forgejo) resolve
+  names internally. Implemented by GitHub, GitLab, Gitea, Forgejo, Gitee,
+  and GitCode; a new cross-platform `RunLabelsSuite` contract suite enforces
+  behavior. GitCode's label API has no description field, so
+  `Label.Description` is always empty there.
+- `LICENSE` (MIT), `CHANGELOG.md`, `CONTRIBUTING.md`, and an `examples/`
+  directory.

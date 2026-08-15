@@ -1,0 +1,26 @@
+# Test coverage output
+coverage.out
+coverage.html
+
+# Go build/test artifacts
+*.test
+*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# golangci-lint
+.golangci-lint-cache/
+
+# Local environment
+.env
+.env.local
+
+# ZCode workspace artifacts (plans, scratch) — not project source
+.zcode/
+.worktrees/
