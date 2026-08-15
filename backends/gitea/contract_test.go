@@ -46,6 +46,10 @@ func TestGitea_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"user":{"id":7,"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}]`,
 			GetResponse:    `{"id":1,"user":{"id":7,"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}`,
 			MutateResponse: `{"id":1,"user":{"id":7,"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}`,
+			// CreateReview maps the APPROVE verdict to the gitea SDK's
+			// ReviewStateApproved ("APPROVED"), posted under the "event" key
+			// (CreatePullReviewOptions.State json tag).
+			CreateEvent: "APPROVED",
 		},
 		// Gitea milestone shape: keyed by id (milestones are ID-addressed),
 		// github-like state/due_on keys.

@@ -41,6 +41,10 @@ func TestGitHub_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}]`,
 			GetResponse:    `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}`,
 			MutateResponse: `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}`,
+			// CreateReview forwards CreateReviewOptions.Event verbatim
+			// (PullRequestReviewRequest.Event), so an APPROVE verdict hits
+			// the wire as "APPROVE".
+			CreateEvent: "APPROVE",
 		},
 		// GitHub milestone shape: github-like keys (number/state/due_on);
 		// milestones are number-addressed.
@@ -54,9 +58,12 @@ func TestGitHub_Contract(t *testing.T) {
 		},
 		// GitHub search payloads wrap items in {"total_count":..,"items":[..]}.
 		Search: &contracttest.SearchHarnessConfig{
-			ReposResponse:  `{"total_count":1,"incomplete_results":false,"items":[{"full_name":"owner/repo","description":"search hit","html_url":"https://github.com/owner/repo","stargazers_count":5,"forks_count":2,"default_branch":"main","private":false}]}`,
-			IssuesResponse: `{"total_count":1,"items":[{"number":1,"title":"found","state":"open","body":"b","html_url":"https://github.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z"}]}`,
-			UsersResponse:  `{"total_count":1,"items":[{"login":"dev","name":"Dev","avatar_url":"https://github.com/avatars/u/1","html_url":"https://github.com/dev"}]}`,
+			// The repos envelope's total_count is the server-side total the
+			// backend must return as SearchRepos's total.
+			ReposTotalCount: 1,
+			ReposResponse:   `{"total_count":1,"incomplete_results":false,"items":[{"full_name":"owner/repo","description":"search hit","html_url":"https://github.com/owner/repo","stargazers_count":5,"forks_count":2,"default_branch":"main","private":false}]}`,
+			IssuesResponse:  `{"total_count":1,"items":[{"number":1,"title":"found","state":"open","body":"b","html_url":"https://github.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z"}]}`,
+			UsersResponse:   `{"total_count":1,"items":[{"login":"dev","name":"Dev","avatar_url":"https://github.com/avatars/u/1","html_url":"https://github.com/dev"}]}`,
 		},
 	})
 }

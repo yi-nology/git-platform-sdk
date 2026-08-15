@@ -23,6 +23,13 @@ type SearchHarnessConfig struct {
 	// "items":[..]}, Gitea/Forgejo in {"data":[..]}, the rest are bare
 	// arrays).
 	ReposResponse string
+	// ReposTotalCount is the server-side total the repos fixture reports
+	// (GitHub's envelope carries total_count; the suite then asserts
+	// SearchRepos returns exactly this total). Zero means the platform
+	// reports no server-side total — the backend derives the total from the
+	// returned page and the suite keeps the weaker total >= len(results)
+	// assertion.
+	ReposTotalCount int
 	// IssuesResponse is the JSON body for issue-search GETs, same per-
 	// platform wrapping rules as ReposResponse.
 	IssuesResponse string
@@ -97,7 +104,7 @@ func RunSearchSuite(t *testing.T, h SearchHarness) {
 
 	t.Run("SearchRepos_Parses", func(t *testing.T) {
 		sm, requests := newSM(t)
-		assertSearchRepos(t, sm, requests)
+		assertSearchRepos(t, sm, requests, h.ReposTotalCount)
 	})
 	t.Run("SearchIssues_Parses", func(t *testing.T) {
 		sm, requests := newSM(t)
@@ -116,8 +123,11 @@ func RunSearchSuite(t *testing.T, h SearchHarness) {
 // assertSearchRepos checks that SearchRepos returns parsed repo results —
 // first hit full_name "owner/repo" — and that the keyword travelled to the
 // server under some query parameter (q/search/keyword encodings differ per
-// platform).
-func assertSearchRepos(t *testing.T, sm provider.SearchManager, requests *[]recordedRequest) {
+// platform). The total is checked tightly when wantTotal is positive — the
+// platform's fixture reports a server-side total (GitHub's total_count) and
+// the returned total must equal it — and weakly (total >= len(results))
+// otherwise.
+func assertSearchRepos(t *testing.T, sm provider.SearchManager, requests *[]recordedRequest, wantTotal int) {
 	t.Helper()
 	repos, total, err := sm.SearchRepos(context.Background(), provider.SearchReposOptions{Query: "gopher"})
 	if err != nil {
@@ -129,7 +139,11 @@ func assertSearchRepos(t *testing.T, sm provider.SearchManager, requests *[]reco
 	if repos[0].FullName != "owner/repo" {
 		t.Errorf("expected first repo full_name %q, got %q", "owner/repo", repos[0].FullName)
 	}
-	if total < len(repos) {
+	if wantTotal > 0 {
+		if total != wantTotal {
+			t.Errorf("expected total %d (the fixture's server-side total), got %d", wantTotal, total)
+		}
+	} else if total < len(repos) {
 		t.Errorf("total %d below returned result count %d", total, len(repos))
 	}
 	assertQueryCarriesKeyword(t, requests, "gopher")

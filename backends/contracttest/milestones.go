@@ -16,9 +16,9 @@ import (
 type MilestonesHarnessConfig struct {
 	// ListResponse is the JSON array for milestone-list GETs. First item:
 	// the platform's addressing identifier ("number" on GitHub and Gitee,
-	// "id" on GitLab, Gitea, Forgejo, and GitCode) rendering as the string
-	// "1", title "v1", state "open" (GitLab's wire state "active" is also
-	// accepted — the backend normalizes it).
+	// "id" on GitLab, Gitea, Forgejo, GitCode, and Tencent Code) rendering
+	// as the string "1", title "v1", state "open" (GitLab's wire state
+	// "active" is also accepted — the backend normalizes it).
 	ListResponse string
 	// MutateResponse is the JSON object for POST/PATCH/PUT (same shape as
 	// the first list item).

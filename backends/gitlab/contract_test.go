@@ -46,6 +46,9 @@ func TestGitLab_Contract(t *testing.T) {
 			// CreateReview posts a merge-request note; MutateResponse is the
 			// created Note (also served, and ignored, to the unapprove POST).
 			MutateResponse: `{"id":1,"body":"looks good","author":{"id":1,"username":"dev","name":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// The note-based create carries no verdict on the wire (a note is
+			// neither an approval nor a change request), so CreateEvent stays
+			// empty and the suite's event-key assertion is skipped.
 			// RequestReviewers is a registered ignore on GitLab (reviewer_ids
 			// needs username→ID resolution the SDK surface does not offer), so
 			// the wire subtest only asserts a silent no-op.
