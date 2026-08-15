@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.39.0] - 2026-08-15
+
 ### ⚠️ Breaking changes
 
 - **`Issue.Milestone` changed from `string` to `*MilestoneRef{Number, Title}`,
