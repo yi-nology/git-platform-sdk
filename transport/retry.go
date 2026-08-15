@@ -145,7 +145,7 @@ func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Re
 			lastErr = err
 			logger.Warn("transport retry: network error",
 				"method", req.Method,
-				"url", req.URL.String(),
+				"url", redactURL(*req.URL),
 				"attempt", attempt,
 				"err", err,
 			)
@@ -163,7 +163,7 @@ func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Re
 		}
 		logger.Warn("transport retry: retryable status",
 			"method", req.Method,
-			"url", req.URL.String(),
+			"url", redactURL(*req.URL),
 			"status", resp.StatusCode,
 			"attempt", attempt,
 		)
