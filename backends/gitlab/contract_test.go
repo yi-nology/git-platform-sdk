@@ -34,5 +34,22 @@ func TestGitLab_Contract(t *testing.T) {
 			CommentsResponse: `[{"id":1,"body":"a comment","author":{"id":1,"username":"dev","name":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			LabelsResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
 		},
+		Reviews: &contracttest.ReviewsHarnessConfig{
+			// GitLab approval-state shape: ListReviews/GetReview hit the
+			// approval_state endpoint whose rules[].approved_by entries
+			// (BasicUser) become synthesized single "approved" reviews keyed
+			// by the MR IID. There is no per-review GET on GitLab, so
+			// GetResponse mirrors ListResponse (the suite's /reviews/{id}
+			// route is never hit).
+			ListResponse: `{"approval_rules_overwritten":false,"rules":[{"id":1,"name":"All Eligible Users","rule_type":"any_approver","approvals_required":1,"approved_by":[{"id":1,"username":"dev","name":"dev","state":"active"}],"approved":true}]}`,
+			GetResponse:  `{"approval_rules_overwritten":false,"rules":[{"id":1,"name":"All Eligible Users","rule_type":"any_approver","approvals_required":1,"approved_by":[{"id":1,"username":"dev","name":"dev","state":"active"}],"approved":true}]}`,
+			// CreateReview posts a merge-request note; MutateResponse is the
+			// created Note (also served, and ignored, to the unapprove POST).
+			MutateResponse: `{"id":1,"body":"looks good","author":{"id":1,"username":"dev","name":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// RequestReviewers is a registered ignore on GitLab (reviewer_ids
+			// needs username→ID resolution the SDK surface does not offer), so
+			// the wire subtest only asserts a silent no-op.
+			IgnoresRequestReviewers: true,
+		},
 	})
 }

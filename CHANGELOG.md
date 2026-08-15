@@ -55,6 +55,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dismissal, with the same bidirectional capability-declaration drift
   checks as the labels and issues suites.
 
+- **The GitLab backend implements `ReviewManager` and declares
+  `Capabilities().Reviews`** via registered platform-semantic mappings
+  (spec §4.6): GitLab has no per-review list, so `ListReviews`/`GetReview`
+  ride `MergeRequestApprovalsService.GetApprovalState` and synthesize one
+  summary `approved` review per approver found in `rules[].approved_by`
+  (keyed by the MR IID because GitLab approvals expose no per-approval
+  IDs; `GetReview` returns the first such review, `NotFound` when nobody
+  has approved); `CreateReview` is comment-style — a merge-request note
+  via `Notes.CreateMergeRequestNote` (`commented` state; inline comments
+  and verdicts are not mapped); `DismissReview` maps to
+  `UnapproveMergeRequest` (review ID and dismissal message have no GitLab
+  equivalent); `RequestReviewers` is a registered ignore — GitLab's
+  `reviewer_ids` need username→ID resolution the SDK surface does not
+  offer (same class of limitation as issue `Assignees`), and the reviews
+  contract suite gained an `IgnoresRequestReviewers` harness flag (in the
+  spirit of `IgnoresListPagination`) asserting such registered ignores
+  stay silent on the wire.
+
 - **The gitee backend now declares `Capabilities().Issues`.** The
   IssueManager implementation is fully migrated onto the go-gitee SDK —
   Gitee's alphanumeric issue numbers (e.g. "IAINVA") flow through the

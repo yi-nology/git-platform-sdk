@@ -25,6 +25,9 @@ type ReviewsHarnessConfig struct {
 	// MutateResponse is the JSON object for POST/PUT/PATCH (same shape as
 	// GetResponse).
 	MutateResponse string
+	// IgnoresRequestReviewers opts the backend out of the RequestReviewers
+	// wire assertion (see ReviewsHarness.IgnoresRequestReviewers).
+	IgnoresRequestReviewers bool
 }
 
 // ReviewsHarness is the full harness RunReviewsSuite consumes; auto-mounting
@@ -34,6 +37,14 @@ type ReviewsHarness struct {
 	Platform    provider.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	ReviewsHarnessConfig
+	// IgnoresRequestReviewers declares that the backend's RequestReviewers is
+	// a registered ignore: the platform's reviewer API needs inputs the SDK
+	// surface cannot supply (GitLab's reviewer_ids want user IDs, but the SDK
+	// addresses reviewers by username and exposes no Users API to resolve
+	// them), so the method documents the ignore and performs no request. The
+	// wire subtest then only asserts a silent, error-free no-op — anything
+	// reaching the network would mean the registration drifted.
+	IgnoresRequestReviewers bool
 }
 
 // testReviewsSuite auto-mounts RunReviewsSuite from a main Harness with the
@@ -52,8 +63,11 @@ func testReviewsSuite(t *testing.T, h Harness) {
 		t.Errorf("%s Harness provides a Reviews config but the platform does not declare Capabilities().Reviews", h.Name)
 	default:
 		RunReviewsSuite(t, ReviewsHarness{
-			Name: h.Name, Platform: h.Platform, NewProvider: h.NewProvider,
-			ReviewsHarnessConfig: *h.Reviews,
+			Name:                    h.Name,
+			Platform:                h.Platform,
+			NewProvider:             h.NewProvider,
+			ReviewsHarnessConfig:    *h.Reviews,
+			IgnoresRequestReviewers: h.Reviews.IgnoresRequestReviewers,
 		})
 	}
 }
@@ -90,6 +104,10 @@ func RunReviewsSuite(t *testing.T, h ReviewsHarness) {
 	})
 	t.Run("RequestReviewers_PostsReviewers", func(t *testing.T) {
 		rm, requests := newRM(t)
+		if h.IgnoresRequestReviewers {
+			assertRequestReviewersIgnored(t, rm, requests)
+			return
+		}
 		assertRequestReviewersWire(t, rm, requests)
 	})
 	t.Run("Dismiss_NotGet", func(t *testing.T) {
@@ -172,6 +190,20 @@ func assertRequestReviewersWire(t *testing.T, rm provider.ReviewManager, request
 		}
 	}
 	t.Errorf("expected a POST whose body carries reviewers=[\"dev\"], recorded: %v", *requests)
+}
+
+// assertRequestReviewersIgnored checks a registered-ignore RequestReviewers:
+// the call must succeed and stay completely off the wire (GitLab; see
+// ReviewsHarness.IgnoresRequestReviewers). Any recorded request means the
+// ignore registration has drifted from the implementation.
+func assertRequestReviewersIgnored(t *testing.T, rm provider.ReviewManager, requests *[]recordedRequest) {
+	t.Helper()
+	if err := rm.RequestReviewers(context.Background(), "owner", "repo", "1", []string{"dev"}); err != nil {
+		t.Fatalf("RequestReviewers (registered ignore): %v", err)
+	}
+	if len(*requests) != 0 {
+		t.Errorf("expected the registered ignore to make no HTTP requests, recorded %s", methodsOf(*requests))
+	}
 }
 
 // assertReviewDismissWire checks that DismissReview reached the server with a
