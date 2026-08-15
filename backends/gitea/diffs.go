@@ -10,8 +10,12 @@ import (
 )
 
 // GetCRDiff implements provider.DiffManager.
-func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*provider.MergeDiff, error) {
-	diffBytes, _, err := p.client.GetPullRequestDiff(owner, repo, int64(number), gitea.PullRequestDiffOptions{})
+func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
+	n, err := prNumber("GetCRDiff", number)
+	if err != nil {
+		return nil, err
+	}
+	diffBytes, _, err := p.client.GetPullRequestDiff(owner, repo, n, gitea.PullRequestDiffOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "GetCRDiff", err)
 	}
@@ -30,8 +34,12 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int
 }
 
 // GetCRFiles implements provider.DiffManager.
-func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*provider.ChangedFile, error) {
-	changedFiles, _, err := p.client.ListPullRequestFiles(owner, repo, int64(number), gitea.ListPullRequestFilesOptions{
+func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*provider.ChangedFile, error) {
+	n, err := prNumber("GetCRFiles", number)
+	if err != nil {
+		return nil, err
+	}
+	changedFiles, _, err := p.client.ListPullRequestFiles(owner, repo, n, gitea.ListPullRequestFilesOptions{
 		ListOptions: gitea.ListOptions{PageSize: 100},
 	})
 	if err != nil {
@@ -57,16 +65,25 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number in
 }
 
 // CreateNote implements provider.DiffManager.
-func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
-	comment, _, err := p.client.CreateIssueComment(owner, repo, int64(number), gitea.CreateIssueCommentOption{Body: body})
+func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
+	n, err := prNumber("CreateNote", number)
+	if err != nil {
+		return "", err
+	}
+	comment, _, err := p.client.CreateIssueComment(owner, repo, n, gitea.CreateIssueCommentOption{Body: body})
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitea, "CreateNote", err)
 	}
 	return strconv.FormatInt(comment.ID, 10), nil
 }
 
-// DeleteNote implements provider.DiffManager.
-func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
+// DeleteNote implements provider.DiffManager. The note itself is addressed
+// by its numeric platform ID; the change-request number is only validated,
+// as Gitea's delete-comment endpoint does not take it.
+func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
+	if _, err := prNumber("DeleteNote", number); err != nil {
+		return err
+	}
 	id, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteNote", err)
@@ -87,8 +104,12 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number in
 // Gitea has no separate discussion endpoint; we approximate one by posting
 // an issue comment (the same backing store Gitea itself uses for PR
 // discussions).
-func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts provider.DiscussionOptions) (string, error) {
-	comment, _, err := p.client.CreateIssueComment(owner, repo, int64(number), gitea.CreateIssueCommentOption{Body: opts.Body})
+func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
+	n, err := prNumber("CreateDiscussion", number)
+	if err != nil {
+		return "", err
+	}
+	comment, _, err := p.client.CreateIssueComment(owner, repo, n, gitea.CreateIssueCommentOption{Body: opts.Body})
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitea, "CreateDiscussion", err)
 	}

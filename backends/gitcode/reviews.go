@@ -13,7 +13,7 @@ import (
 // ListReviews implements provider.ReviewManager via
 // ListPullRequestReviews (GET .../pulls/{n}/reviews).
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	n, err := issueNumber("ListReviews", number)
+	n, err := prNumber("ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +31,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 // GetReview implements provider.ReviewManager via
 // GetPullRequestReview (GET .../pulls/{n}/reviews/{id}).
 func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	n, err := issueNumber("GetReview", number)
+	n, err := prNumber("GetReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -53,13 +53,13 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 // review endpoint itself fails, the pre-P3 fallback path posts the inline
 // comments and a plain note instead of giving up.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	n, err := issueNumber("CreateReview", number)
+	n, err := prNumber("CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
 	review, err := p.client.CreatePullRequestReview(ctx, owner, repo, n, opts.Body, opts.Event)
 	if err != nil {
-		return p.createReviewFallback(ctx, owner, repo, n, opts)
+		return p.createReviewFallback(ctx, owner, repo, number, opts)
 	}
 	result := &provider.ReviewResult{ID: strconv.FormatInt(review.ID, 10)}
 	user := review.User
@@ -82,10 +82,14 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 
 // createReviewFallback posts the review as individual inline comments plus a
 // top-level note when the dedicated review endpoint rejects the request.
-func (p *Provider) createReviewFallback(ctx context.Context, owner, repo string, number int, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
+func (p *Provider) createReviewFallback(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
+	n, err := prNumber("CreateReview", number)
+	if err != nil {
+		return nil, err
+	}
 	var lastErr error
 	for _, c := range opts.Comments {
-		if err := p.createInlineComment(ctx, owner, repo, number, c, opts.CommitID); err != nil {
+		if err := p.createInlineComment(ctx, owner, repo, n, c, opts.CommitID); err != nil {
 			lastErr = err
 		}
 	}
@@ -119,7 +123,7 @@ func (p *Provider) createInlineComment(ctx context.Context, owner, repo string, 
 // RequestPullRequestReviewers (POST .../pulls/{n}/requested_reviewers with
 // the reviewer logins under the same "reviewers" wire key as GitHub).
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	n, err := issueNumber("RequestReviewers", number)
+	n, err := prNumber("RequestReviewers", number)
 	if err != nil {
 		return err
 	}
@@ -135,7 +139,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 // DismissPullRequestReview (PUT .../pulls/{n}/reviews/{id}/dismissals with
 // the dismissal message).
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	n, err := issueNumber("DismissReview", number)
+	n, err := prNumber("DismissReview", number)
 	if err != nil {
 		return err
 	}

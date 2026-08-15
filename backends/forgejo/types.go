@@ -1,6 +1,7 @@
 package forgejo
 
 import (
+	"strconv"
 	"time"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
@@ -52,7 +53,7 @@ func convertPR(pr *forgejo.PullRequest) *provider.ChangeRequest {
 	}
 	return &provider.ChangeRequest{
 		ID:           pr.ID,
-		Number:       int(pr.Index),
+		Number:       strconv.FormatInt(pr.Index, 10),
 		Title:        pr.Title,
 		Description:  pr.Body,
 		State:        mapState(string(pr.State), pr.HasMerged),

@@ -11,9 +11,13 @@ import (
 )
 
 // GetCRDiff implements provider.DiffManager.
-func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*provider.MergeDiff, error) {
+func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
+	n, err := prNumber("GetCRDiff", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := owner + "/" + repo
-	changes, _, err := p.client.MergeRequests.GetMergeRequestChanges(ctx, pid, number)
+	changes, _, err := p.client.MergeRequests.GetMergeRequestChanges(ctx, pid, n)
 	if err != nil {
 		return nil, sdkError("GetCRDiff", err)
 	}
@@ -29,7 +33,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int
 }
 
 // GetCRFiles implements provider.DiffManager.
-func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*provider.ChangedFile, error) {
+func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*provider.ChangedFile, error) {
 	diff, err := p.GetCRDiff(ctx, owner, repo, number)
 	if err != nil {
 		return nil, err
@@ -38,12 +42,16 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number in
 }
 
 // CreateNote implements provider.DiffManager.
-func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
+func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
+	n, err := prNumber("CreateNote", number)
+	if err != nil {
+		return "", err
+	}
 	pid := owner + "/" + repo
 	opts := &gongfeng.CreateMergeRequestNoteOptions{
 		Body: gongfeng.Ptr(body),
 	}
-	note, _, err := p.client.Notes.CreateMergeRequestNote(ctx, pid, number, opts)
+	note, _, err := p.client.Notes.CreateMergeRequestNote(ctx, pid, n, opts)
 	if err != nil {
 		return "", sdkError("CreateNote", err)
 	}
@@ -53,8 +61,12 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number in
 // DeleteNote implements provider.DiffManager.
 // The gongfeng SDK does not expose a delete-note endpoint, so we use the
 // SDK client's NewRequest/Do for a raw API call.
-func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
-	path := fmt.Sprintf("projects/%s/merge_requests/%d/notes/%s", owner+"/"+repo, number, noteID)
+func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
+	n, err := prNumber("DeleteNote", number)
+	if err != nil {
+		return err
+	}
+	path := fmt.Sprintf("projects/%s/merge_requests/%d/notes/%s", owner+"/"+repo, n, noteID)
 	req, err := p.client.NewRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
 		return provider.Wrap(provider.PlatformTencentCode, "DeleteNote", err)
@@ -68,8 +80,12 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number in
 // CreateDiscussion implements provider.DiffManager.
 // The gongfeng SDK does not expose a discussions endpoint, so we use the
 // SDK client's NewRequest/Do for a raw API call.
-func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts provider.DiscussionOptions) (string, error) {
-	path := fmt.Sprintf("projects/%s/merge_requests/%d/discussions", owner+"/"+repo, number)
+func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
+	n, err := prNumber("CreateDiscussion", number)
+	if err != nil {
+		return "", err
+	}
+	path := fmt.Sprintf("projects/%s/merge_requests/%d/discussions", owner+"/"+repo, n)
 	payload := map[string]any{"body": opts.Body}
 	if opts.FilePath != "" {
 		position := map[string]any{

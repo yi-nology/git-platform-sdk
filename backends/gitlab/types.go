@@ -1,6 +1,7 @@
 package gitlab
 
 import (
+	"strconv"
 	"time"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
@@ -43,7 +44,7 @@ func convertMR(mr *gitlab.MergeRequest) *provider.ChangeRequest {
 	}
 	return &provider.ChangeRequest{
 		ID:           mr.IID,
-		Number:       int(mr.IID),
+		Number:       strconv.FormatInt(mr.IID, 10),
 		Title:        mr.Title,
 		Description:  mr.Description,
 		State:        mapGLState(mr.State),
@@ -85,7 +86,7 @@ func convertBasicMR(mr *gitlab.BasicMergeRequest) *provider.ChangeRequest {
 	}
 	return &provider.ChangeRequest{
 		ID:           mr.IID,
-		Number:       int(mr.IID),
+		Number:       strconv.FormatInt(mr.IID, 10),
 		Title:        mr.Title,
 		Description:  mr.Description,
 		State:        mapGLState(mr.State),

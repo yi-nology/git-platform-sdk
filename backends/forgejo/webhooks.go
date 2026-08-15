@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -156,7 +157,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			event.CommitSHA = pl.PullRequest.Head.SHA
 			event.CR = &provider.ChangeRequest{
 				ID:           int64(pl.PullRequest.Number),
-				Number:       pl.PullRequest.Number,
+				Number:       strconv.Itoa(pl.PullRequest.Number),
 				Title:        pl.PullRequest.Title,
 				Description:  pl.PullRequest.Body,
 				State:        mapState(pl.PullRequest.State, pl.PullRequest.Merged),

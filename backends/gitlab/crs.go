@@ -3,11 +3,23 @@ package gitlab
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
+
+// prNumber parses the SDK's string change-request number into GitLab's
+// int64 IID form. op is the public operation the parse serves; failures
+// surface under it.
+func prNumber(op, number string) (int64, error) {
+	n, err := strconv.ParseInt(number, 10, 64)
+	if err != nil {
+		return 0, provider.Wrapf(provider.PlatformGitLab, op, "invalid pull request number %q", number)
+	}
+	return n, nil
+}
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
@@ -30,8 +42,12 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
-	mr, _, err := p.client.MergeRequests.GetMergeRequest(pidOf(owner, repo), int64(number), nil, gitlab.WithContext(ctx))
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("GetCR", number)
+	if err != nil {
+		return nil, err
+	}
+	mr, _, err := p.client.MergeRequests.GetMergeRequest(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "GetCR", err)
 	}
@@ -69,11 +85,15 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+	n, err := prNumber("MergeCR", number)
+	if err != nil {
+		return nil, err
+	}
 	pid := pidOf(owner, repo)
 	// Pre-flight: reject MRs in a non-mergeable state. This produces a
 	// friendlier error than waiting for the API to fail.
-	existing, _, err := p.client.MergeRequests.GetMergeRequest(pid, int64(number), nil, gitlab.WithContext(ctx))
+	existing, _, err := p.client.MergeRequests.GetMergeRequest(pid, n, nil, gitlab.WithContext(ctx))
 	if err == nil && existing != nil {
 		if existing.DetailedMergeStatus != "" && existing.DetailedMergeStatus != "mergeable" && existing.DetailedMergeStatus != "checking" {
 			return nil, provider.Wrapf(provider.PlatformGitLab, "MergeCR",
@@ -94,7 +114,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, 
 	if opts.RemoveSourceBranch {
 		acceptOpts.ShouldRemoveSourceBranch = gitlab.Ptr(true)
 	}
-	mr, _, err := p.client.MergeRequests.AcceptMergeRequest(pid, int64(number), acceptOpts, gitlab.WithContext(ctx))
+	mr, _, err := p.client.MergeRequests.AcceptMergeRequest(pid, n, acceptOpts, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "MergeCR", fmt.Errorf("merge failed: %w", err))
 	}
@@ -102,8 +122,12 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, 
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
-	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), int64(number),
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("CloseCR", number)
+	if err != nil {
+		return nil, err
+	}
+	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n,
 		&gitlab.UpdateMergeRequestOptions{StateEvent: gitlab.Ptr("close")}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CloseCR", err)
@@ -112,8 +136,12 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) 
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
-	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), int64(number),
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("ReopenCR", number)
+	if err != nil {
+		return nil, err
+	}
+	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n,
 		&gitlab.UpdateMergeRequestOptions{StateEvent: gitlab.Ptr("reopen")}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ReopenCR", err)
@@ -122,7 +150,11 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int)
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+	n, err := prNumber("UpdateCR", number)
+	if err != nil {
+		return nil, err
+	}
 	updateOpts := &gitlab.UpdateMergeRequestOptions{}
 	if opts.Title != "" {
 		updateOpts.Title = gitlab.Ptr(opts.Title)
@@ -133,7 +165,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 	if opts.TargetBranch != "" {
 		updateOpts.TargetBranch = gitlab.Ptr(opts.TargetBranch)
 	}
-	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), int64(number), updateOpts, gitlab.WithContext(ctx))
+	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateCR", err)
 	}
@@ -141,9 +173,13 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
+func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	n, err := prNumber("UpdateCRLabels", number)
+	if err != nil {
+		return err
+	}
 	l := gitlab.LabelOptions(labels)
-	_, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), int64(number),
+	_, _, err = p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n,
 		&gitlab.UpdateMergeRequestOptions{Labels: &l}, gitlab.WithContext(ctx))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitLab, "UpdateCRLabels", err)
@@ -152,8 +188,12 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, numbe
 }
 
 // ListCRComments implements provider.ChangeRequestManager.
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*provider.CRComment, error) {
-	notes, _, err := p.client.Notes.ListMergeRequestNotes(pidOf(owner, repo), int64(number), nil, gitlab.WithContext(ctx))
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
+	n, err := prNumber("ListCRComments", number)
+	if err != nil {
+		return nil, err
+	}
+	notes, _, err := p.client.Notes.ListMergeRequestNotes(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListCRComments", err)
 	}
@@ -175,8 +215,12 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, numbe
 }
 
 // ListCRCommits implements provider.ChangeRequestManager.
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*provider.CRCommit, error) {
-	commits, _, err := p.client.MergeRequests.GetMergeRequestCommits(pidOf(owner, repo), int64(number), nil, gitlab.WithContext(ctx))
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
+	n, err := prNumber("ListCRCommits", number)
+	if err != nil {
+		return nil, err
+	}
+	commits, _, err := p.client.MergeRequests.GetMergeRequestCommits(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListCRCommits", err)
 	}

@@ -1,6 +1,7 @@
 package tencentcode
 
 import (
+	"strconv"
 	"strings"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
@@ -57,7 +58,7 @@ func convertCommit(c *gongfeng.Commit) *provider.CommitInfo {
 func convertMR(mr *gongfeng.MergeRequest) *provider.ChangeRequest {
 	cr := &provider.ChangeRequest{
 		ID:           int64(mr.IID),
-		Number:       mr.IID,
+		Number:       strconv.Itoa(mr.IID),
 		Title:        mr.Title,
 		Description:  mr.Description,
 		State:        mapState(mr.State),

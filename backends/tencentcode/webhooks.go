@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -180,7 +181,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		)
 		event.CR = &provider.ChangeRequest{
 			ID:           int64(pl.ObjectAttributes.IID),
-			Number:       pl.ObjectAttributes.IID,
+			Number:       strconv.Itoa(pl.ObjectAttributes.IID),
 			Title:        pl.ObjectAttributes.Title,
 			Description:  pl.ObjectAttributes.Description,
 			State:        state,

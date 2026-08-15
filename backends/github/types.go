@@ -1,6 +1,7 @@
 package github
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/google/go-github/v69/github"
@@ -89,7 +90,7 @@ func convertPR(pr *ghPR) *provider.ChangeRequest {
 	baseSHA := pr.GetBase().GetSHA()
 	return &provider.ChangeRequest{
 		ID:           int64(pr.GetNumber()),
-		Number:       pr.GetNumber(),
+		Number:       strconv.Itoa(pr.GetNumber()),
 		Title:        pr.GetTitle(),
 		Description:  pr.GetBody(),
 		State:        state,

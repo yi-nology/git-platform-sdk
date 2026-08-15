@@ -10,8 +10,12 @@ import (
 )
 
 // GetCRDiff implements provider.DiffManager.
-func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int) (*provider.MergeDiff, error) {
-	diffs, _, err := p.client.MergeRequests.ListMergeRequestDiffs(pidOf(owner, repo), int64(number), nil, gitlab.WithContext(ctx))
+func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
+	n, err := prNumber("GetCRDiff", number)
+	if err != nil {
+		return nil, err
+	}
+	diffs, _, err := p.client.MergeRequests.ListMergeRequestDiffs(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "GetCRDiff", err)
 	}
@@ -31,7 +35,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo string, number int
 }
 
 // GetCRFiles implements provider.DiffManager.
-func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number int) ([]*provider.ChangedFile, error) {
+func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*provider.ChangedFile, error) {
 	diff, err := p.GetCRDiff(ctx, owner, repo, number)
 	if err != nil {
 		return nil, err
@@ -40,8 +44,12 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo string, number in
 }
 
 // CreateNote implements provider.DiffManager.
-func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number int, body string) (string, error) {
-	note, _, err := p.client.Notes.CreateMergeRequestNote(pidOf(owner, repo), int64(number),
+func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
+	n, err := prNumber("CreateNote", number)
+	if err != nil {
+		return "", err
+	}
+	note, _, err := p.client.Notes.CreateMergeRequestNote(pidOf(owner, repo), n,
 		&gitlab.CreateMergeRequestNoteOptions{Body: gitlab.Ptr(body)}, gitlab.WithContext(ctx))
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitLab, "CreateNote", err)
@@ -50,12 +58,16 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo string, number in
 }
 
 // DeleteNote implements provider.DiffManager.
-func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number int, noteID string) error {
+func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
+	n, err := prNumber("DeleteNote", number)
+	if err != nil {
+		return err
+	}
 	nid, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
 		return provider.Wrapf(provider.PlatformGitLab, "DeleteNote", "invalid note ID %q: %v", noteID, err)
 	}
-	_, err = p.client.Notes.DeleteMergeRequestNote(pidOf(owner, repo), int64(number), nid, gitlab.WithContext(ctx))
+	_, err = p.client.Notes.DeleteMergeRequestNote(pidOf(owner, repo), n, nid, gitlab.WithContext(ctx))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitLab, "DeleteNote", err)
 	}
@@ -63,7 +75,11 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo string, number in
 }
 
 // CreateDiscussion implements provider.DiffManager.
-func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, number int, opts provider.DiscussionOptions) (string, error) {
+func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
+	n, err := prNumber("CreateDiscussion", number)
+	if err != nil {
+		return "", err
+	}
 	pid := pidOf(owner, repo)
 	discOpts := &gitlab.CreateMergeRequestDiscussionOptions{Body: gitlab.Ptr(opts.Body)}
 	if opts.FilePath != "" {
@@ -95,7 +111,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo string, num
 		}
 		discOpts.Position = position
 	}
-	disc, _, err := p.client.Discussions.CreateMergeRequestDiscussion(pid, int64(number), discOpts, gitlab.WithContext(ctx))
+	disc, _, err := p.client.Discussions.CreateMergeRequestDiscussion(pid, n, discOpts, gitlab.WithContext(ctx))
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitLab, "CreateDiscussion", err)
 	}

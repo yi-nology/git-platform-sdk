@@ -103,8 +103,8 @@ func TestCreateCR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cr.Number != 7 {
-		t.Errorf("expected 7, got %d", cr.Number)
+	if cr.Number != "7" {
+		t.Errorf("expected 7, got %q", cr.Number)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	if ne.Type != "cr.opened" {
 		t.Errorf("expected cr.opened, got %s", ne.Type)
 	}
-	if ne.CR == nil || ne.CR.Number != 1 {
+	if ne.CR == nil || ne.CR.Number != "1" {
 		t.Errorf("expected CR with number 1, got %+v", ne.CR)
 	}
 }

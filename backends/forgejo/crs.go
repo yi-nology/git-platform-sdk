@@ -9,6 +9,17 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
+// prNumber parses the SDK's string change-request number into forgejo's
+// int64 index form. op is the public operation the parse serves; failures
+// surface under it.
+func prNumber(op, number string) (int64, error) {
+	n, err := strconv.ParseInt(number, 10, 64)
+	if err != nil {
+		return 0, provider.Wrapf(provider.PlatformForgejo, op, "invalid pull request number %q", number)
+	}
+	return n, nil
+}
+
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
 	pr, _, err := p.client.CreatePullRequest(opts.Owner, opts.Repo, forgejo.CreatePullRequestOption{
@@ -24,8 +35,12 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
-	pr, _, err := p.client.GetPullRequest(owner, repo, int64(number))
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("GetCR", number)
+	if err != nil {
+		return nil, err
+	}
+	pr, _, err := p.client.GetPullRequest(owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "GetCR", err)
 	}
@@ -54,13 +69,17 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+	n, err := prNumber("MergeCR", number)
+	if err != nil {
+		return nil, err
+	}
 	style := forgejo.MergeStyleMerge
 	if opts.Squash {
 		style = forgejo.MergeStyleSquash
 	}
 	deleteBranch := opts.RemoveSourceBranch
-	_, resp, err := p.client.MergePullRequest(owner, repo, int64(number), forgejo.MergePullRequestOption{
+	_, resp, err := p.client.MergePullRequest(owner, repo, n, forgejo.MergePullRequestOption{
 		Style:                  style,
 		Title:                  opts.MergeCommitMessage,
 		DeleteBranchAfterMerge: deleteBranch,
@@ -79,9 +98,13 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo string, number int, 
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("CloseCR", number)
+	if err != nil {
+		return nil, err
+	}
 	state := forgejo.StateClosed
-	_, _, err := p.client.EditPullRequest(owner, repo, int64(number), forgejo.EditPullRequestOption{State: &state})
+	_, _, err = p.client.EditPullRequest(owner, repo, n, forgejo.EditPullRequestOption{State: &state})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "CloseCR", err)
 	}
@@ -89,9 +112,13 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo string, number int) 
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int) (*provider.ChangeRequest, error) {
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+	n, err := prNumber("ReopenCR", number)
+	if err != nil {
+		return nil, err
+	}
 	state := forgejo.StateOpen
-	pr, _, err := p.client.EditPullRequest(owner, repo, int64(number), forgejo.EditPullRequestOption{State: &state})
+	pr, _, err := p.client.EditPullRequest(owner, repo, n, forgejo.EditPullRequestOption{State: &state})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ReopenCR", err)
 	}
@@ -99,7 +126,11 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo string, number int)
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+	n, err := prNumber("UpdateCR", number)
+	if err != nil {
+		return nil, err
+	}
 	editOpts := forgejo.EditPullRequestOption{}
 	if opts.Title != "" {
 		editOpts.Title = opts.Title
@@ -110,7 +141,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 	if opts.TargetBranch != "" {
 		editOpts.Base = opts.TargetBranch
 	}
-	pr, _, err := p.client.EditPullRequest(owner, repo, int64(number), editOpts)
+	pr, _, err := p.client.EditPullRequest(owner, repo, n, editOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "UpdateCR", err)
 	}
@@ -118,14 +149,18 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo string, number int,
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
+func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	n, err := prNumber("UpdateCRLabels", number)
+	if err != nil {
+		return err
+	}
 	labelIDs := make([]int64, 0, len(labels))
 	for _, l := range labels {
 		if id, err := strconv.ParseInt(l, 10, 64); err == nil {
 			labelIDs = append(labelIDs, id)
 		}
 	}
-	_, _, err := p.client.AddIssueLabels(owner, repo, int64(number), forgejo.IssueLabelsOption{Labels: labelIDs})
+	_, _, err = p.client.AddIssueLabels(owner, repo, n, forgejo.IssueLabelsOption{Labels: labelIDs})
 	if err != nil {
 		return provider.Wrap(provider.PlatformForgejo, "UpdateCRLabels", err)
 	}
@@ -133,8 +168,12 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo string, numbe
 }
 
 // ListCRComments implements provider.ChangeRequestManager.
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, number int) ([]*provider.CRComment, error) {
-	comments, _, err := p.client.ListIssueComments(owner, repo, int64(number), forgejo.ListIssueCommentOptions{})
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
+	n, err := prNumber("ListCRComments", number)
+	if err != nil {
+		return nil, err
+	}
+	comments, _, err := p.client.ListIssueComments(owner, repo, n, forgejo.ListIssueCommentOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListCRComments", err)
 	}
@@ -150,8 +189,12 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo string, numbe
 }
 
 // ListCRCommits implements provider.ChangeRequestManager.
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo string, number int) ([]*provider.CRCommit, error) {
-	commits, _, err := p.client.ListPullRequestCommits(owner, repo, int64(number), forgejo.ListPullRequestCommitsOptions{})
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
+	n, err := prNumber("ListCRCommits", number)
+	if err != nil {
+		return nil, err
+	}
+	commits, _, err := p.client.ListPullRequestCommits(owner, repo, n, forgejo.ListPullRequestCommitsOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListCRCommits", err)
 	}

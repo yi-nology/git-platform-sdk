@@ -91,7 +91,7 @@ func convertPullRequest(pr gitee.PullRequest) *provider.ChangeRequest {
 	}
 	out := &provider.ChangeRequest{
 		ID:          int64(pr.Id),
-		Number:      int(pr.Number),
+		Number:      strconv.Itoa(int(pr.Number)),
 		Title:       pr.Title,
 		Description: pr.Body,
 		State:       state,
