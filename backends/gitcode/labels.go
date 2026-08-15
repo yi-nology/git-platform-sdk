@@ -41,7 +41,12 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 		updateOpts.Name = *opts.NewName
 	}
 	if opts.Color != nil {
-		updateOpts.Color = *opts.Color
+		// GitCode's label API uses '#'-prefixed colors on the wire (docs:
+		// create "eg: #fff", update responses show "#ED4014") — the same
+		// form gitcode_api's create path sends. The public SDK contract
+		// stays '#' free; only the wire form carries it. TrimPrefix keeps a
+		// caller-supplied '#' from doubling.
+		updateOpts.Color = "#" + strings.TrimPrefix(*opts.Color, "#")
 	}
 	label, err := p.client.UpdateIssueLabel(ctx, owner, repo, name, updateOpts)
 	if err != nil {
