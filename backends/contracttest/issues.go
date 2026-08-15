@@ -65,7 +65,9 @@ func testIssuesSuite(t *testing.T, h Harness) {
 
 // RunIssuesSuite executes the issue-management contract suite. The mock
 // routes by method and path shape so platform-specific paths don't matter:
-// GET ending /issues/{digits} → GetResponse; GET containing comments|notes →
+// GET ending /issues/{alphanumeric} → GetResponse (issue numbers are not
+// always numeric — Gitee's are alphanumeric); GET containing
+// comments|notes →
 // CommentsResponse; GET containing labels (not issues) → LabelsResponse;
 // other GET → ListResponse; POST → 201 + MutateResponse (a POST to a labels
 // path — adding labels to an issue — returns LabelsResponse, since

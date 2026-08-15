@@ -25,6 +25,14 @@ type ReviewsHarnessConfig struct {
 	// MutateResponse is the JSON object for POST/PUT/PATCH (same shape as
 	// GetResponse).
 	MutateResponse string
+	// CreateEvent is the wire value the platform's create must carry under
+	// the "event" key for the suite's APPROVE-verdict create. The suite
+	// calls CreateReview with Event "APPROVE": GitHub and GitCode forward
+	// the option verbatim ("APPROVE"), Gitea/Forgejo translate it to their
+	// SDK's review state ("APPROVED"). Empty means the platform's create
+	// carries no verdict on the wire (GitLab's note-based create) and the
+	// event-key assertion is skipped — the body assertion still runs.
+	CreateEvent string
 	// IgnoresRequestReviewers opts the backend out of the RequestReviewers
 	// wire assertion (see ReviewsHarness.IgnoresRequestReviewers).
 	IgnoresRequestReviewers bool
@@ -100,7 +108,7 @@ func RunReviewsSuite(t *testing.T, h ReviewsHarness) {
 	})
 	t.Run("Create_PostsBody", func(t *testing.T) {
 		rm, requests := newRM(t)
-		assertReviewCreateWire(t, rm, requests)
+		assertReviewCreateWire(t, rm, requests, h.CreateEvent)
 	})
 	t.Run("RequestReviewers_PostsReviewers", func(t *testing.T) {
 		rm, requests := newRM(t)
@@ -153,14 +161,34 @@ func assertReviewGet(t *testing.T, rm provider.ReviewManager) {
 
 // assertReviewCreateWire checks that CreateReview succeeds and posts a
 // review-ish payload: the summary body under the "body" key (the key GitHub
-// and GitHub-shaped platforms send).
-func assertReviewCreateWire(t *testing.T, rm provider.ReviewManager, requests *[]recordedRequest) {
+// and GitHub-shaped platforms send), and — unless createEvent is empty — an
+// "event" key carrying exactly createEvent for the suite's APPROVE-verdict
+// create. The value must match exactly (not substring): "APPROVE" and
+// "APPROVED" are different platforms' wire vocabularies and must not pass for
+// each other. An empty createEvent (GitLab's note-based create has no
+// verdict on the wire) skips only the event assertion.
+func assertReviewCreateWire(t *testing.T, rm provider.ReviewManager, requests *[]recordedRequest, createEvent string) {
 	t.Helper()
-	result, err := rm.CreateReview(context.Background(), "owner", "repo", "1", provider.CreateReviewOptions{Body: "looks good"})
+	result, err := rm.CreateReview(context.Background(), "owner", "repo", "1", provider.CreateReviewOptions{Body: "looks good", Event: "APPROVE"})
 	if err != nil || result == nil {
 		t.Fatalf("CreateReview: result=%v err=%v", result, err)
 	}
 	assertBodyHas(t, requests, http.MethodPost, "body", "looks good")
+	if createEvent == "" {
+		return
+	}
+	for i := range *requests {
+		r := &(*requests)[i]
+		if r.Method != http.MethodPost {
+			continue
+		}
+		if v, ok := r.Body["event"]; ok {
+			if s, ok := v.(string); ok && s == createEvent {
+				return
+			}
+		}
+	}
+	t.Errorf("expected a POST whose body carries event=%q, recorded: %v", createEvent, *requests)
 }
 
 // assertRequestReviewersWire checks that RequestReviewers posts the reviewer

@@ -42,6 +42,10 @@ func TestGitCode_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","created_at":"2026-01-01T00:00:00Z"}]`,
 			GetResponse:    `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","created_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","created_at":"2026-01-01T00:00:00Z"}`,
+			// CreateReview forwards CreateReviewOptions.Event verbatim
+			// (client.CreatePullRequestReview posts {"body":..,"event":..}),
+			// so an APPROVE verdict hits the wire as "APPROVE".
+			CreateEvent: "APPROVE",
 		},
 		// GitCode milestone shape: GitHub-like keys but keyed by id
 		// (milestones are ID-addressed, matching MilestoneRef) with a
