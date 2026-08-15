@@ -24,3 +24,4 @@ Thumbs.db
 # ZCode workspace artifacts (plans, scratch) — not project source
 .zcode/
 .worktrees/
+.superpowers/
