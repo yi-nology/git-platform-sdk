@@ -13,22 +13,48 @@ import (
 	"strings"
 	"time"
 
+	gitee "gitee.com/openeuler/go-gitee/gitee"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
+// giteeHookEventFlags maps the platform-neutral webhook event names onto
+// Gitee's per-event request booleans — the only event vocabulary Gitee's
+// create/update hook endpoints accept. Names outside this map (not Gitee
+// events) are dropped on create.
+var giteeHookEventFlags = map[string]string{
+	"push":         "push_events",
+	"tag_push":     "tag_push_events",
+	"issues":       "issues_events",
+	"note":         "note_events",
+	"comment":      "note_events",
+	"pull_request": "merge_requests_events",
+}
+
 // CreateWebhook implements provider.WebhookManager.
+//
+// Routed through the raw transport client rather than the SDK: the generated
+// PostV5ReposOwnerRepoHooks encodes its opts as a multipart body while sending
+// an application/json Content-Type header (upstream client.go prepareRequest
+// bug — same family as the labels patch and releases create detours), which
+// the server cannot parse. The raw body sticks to Gitee's documented
+// vocabulary: the signing secret travels as "password" (the key Gitee HMACs
+// into X-Gitee-Token) and event selections map onto Gitee's *_events
+// booleans (push + pull_request when the caller passes none).
 func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
+	events := opts.Events
+	if len(events) == 0 {
+		events = []string{"push", "pull_request"}
+	}
 	body := map[string]any{
-		"url":    opts.URL,
-		"secret": opts.Secret,
+		"url":      opts.URL,
+		"password": opts.Secret,
 	}
-	if len(opts.Events) > 0 {
-		body["events"] = opts.Events
-	} else {
-		body["events"] = []string{"push", "pull_request"}
+	for _, e := range events {
+		if flag, ok := giteeHookEventFlags[e]; ok {
+			body[flag] = true
+		}
 	}
-	body["push_events"] = true
-	body["merge_requests_events"] = true
 	var hook giteeWebhook
 	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/hooks", esc(opts.Owner), esc(opts.Repo)), body, &hook); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateWebhook", err)
@@ -36,16 +62,26 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	return hook.toPlatformWebhook(), nil
 }
 
-// DeleteWebhook implements provider.WebhookManager.
+// DeleteWebhook implements provider.WebhookManager via the SDK: the delete
+// call passes the token as a query param and has no response body to decode.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	err := p.doRequest(ctx, "DELETE", fmt.Sprintf("/repos/%s/%s/hooks/%d", esc(owner), esc(repo), webhookID), nil, nil)
+	resp, err := p.client.WebhooksApi.DeleteV5ReposOwnerRepoHooksId(ctx, esc(owner), esc(repo), toInt32(int(webhookID)), &gitee.DeleteV5ReposOwnerRepoHooksIdOpts{
+		AccessToken: p.accessToken(),
+	})
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteWebhook", err)
+		return p.sdkErr("DeleteWebhook", resp, err)
 	}
 	return nil
 }
 
 // ListWebhooks implements provider.WebhookManager.
+//
+// Routed through the raw transport client rather than the SDK: the SDK's Hook
+// model types the live wire's numeric id and boolean *_events fields as
+// strings, and the generated list call silently swallows the resulting decode
+// error (its success path only returns early when decoding succeeds), so an
+// SDK-backed list would report an empty result for every populated repo. The
+// raw decode keeps the live wire shape (numeric id, url, events array).
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
 	var hooks []giteeWebhook
 	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/hooks", esc(owner), esc(repo)), nil, &hooks); err != nil {

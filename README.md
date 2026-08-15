@@ -287,12 +287,9 @@ if caps.Labels {
 
 | 能力 | 接口 | 支持平台 |
 |------|------|----------|
-| Issues | `IssueManager` | GitCode / GitHub / GitLab / Gitea / Forgejo |
+| Issues | `IssueManager` | GitCode / GitHub / GitLab / Gitea / Forgejo / Gitee |
 | Search | `SearchManager` | GitCode |
 | Labels | `LabelManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
-
-> **Gitee 说明**: Gitee 的 Issue 实现已就绪但未声明 (真实平台返回字母数字编号,
-> 等待寻址重构, 见 backend 注释)。
 
 ### Tencent 工蜂专属能力
 

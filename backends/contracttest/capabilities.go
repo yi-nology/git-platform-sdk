@@ -27,15 +27,10 @@ func testCapabilities(t *testing.T, h Harness) {
 	_, searchImpl := p.(provider.SearchManager)
 	_, labelsImpl := p.(provider.LabelManager)
 
-	// Declared capabilities must always type-assert. The reverse direction —
-	// implemented must be declared — holds for every capability except a
-	// documented implemented-but-undeclared IssueManager (see Harness.
-	// IssuesImplementedButUndeclared).
-	if caps.Issues && !issuesImpl {
-		t.Errorf("Capabilities().Issues = true, but IssueManager type assertion failed; declaration and implementation have drifted")
-	}
-	if !caps.Issues && issuesImpl && !h.IssuesImplementedButUndeclared {
-		t.Errorf("Capabilities().Issues = false, but IssueManager type assertion succeeded; declaration and implementation have drifted")
+	// Declared capabilities must always type-assert, and implemented ones
+	// must be declared — both directions, uniformly across capabilities.
+	if caps.Issues != issuesImpl {
+		t.Errorf("Capabilities().Issues = %v, but IssueManager type assertion = %v; declaration and implementation have drifted", caps.Issues, issuesImpl)
 	}
 	if caps.Search != searchImpl {
 		t.Errorf("Capabilities().Search = %v, but SearchManager type assertion = %v; declaration and implementation have drifted", caps.Search, searchImpl)

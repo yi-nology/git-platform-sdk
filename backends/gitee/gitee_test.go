@@ -554,6 +554,142 @@ func TestParseWebhookEvent_Push(t *testing.T) {
 	}
 }
 
+// TestIssues_SDKWiring locks the issue wiring after the SDK migration: the
+// alphanumeric string issue number travels in the URL unconverted, the
+// update PATCHes Gitee's owner-scoped issues endpoint with the repo path in
+// the JSON body, and the raw create posts to the documented owner-scoped
+// endpoint (repo in body, comma-joined assignees, no assignees key when
+// none are set).
+func TestIssues_SDKWiring(t *testing.T) {
+	var mu sync.Mutex
+	var got []capturedRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		mu.Lock()
+		got = append(got, capturedRequest{r.Method, r.URL.Path, r.URL.Query(), body})
+		mu.Unlock()
+		writeJSON(w, map[string]any{
+			"id": 1, "number": "IAINVA", "title": "t", "state": "open",
+			"user":      map[string]any{"id": 1, "login": "dev", "name": "Dev"},
+			"milestone": map[string]any{"id": 7, "number": 3, "title": "v1"},
+		})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+
+	if _, err := p.GetIssue(context.Background(), "owner", "repo", "IAINVA"); err != nil {
+		t.Fatal(err)
+	}
+	issue, err := p.CreateIssue(context.Background(), provider.CreateIssueOptions{
+		Owner: "owner", Repo: "repo", Title: "t", Assignees: []string{"a", "b"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issue.Number != "IAINVA" || issue.Milestone == nil || issue.Milestone.Number != "3" || issue.Milestone.Title != "v1" {
+		t.Errorf("issue conversion: number=%q milestone=%+v", issue.Number, issue.Milestone)
+	}
+	if _, err := p.UpdateIssue(context.Background(), "owner", "repo", "IAINVA", provider.UpdateIssueOptions{Title: "t2"}); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 3 {
+		t.Fatalf("expected 3 recorded requests, got %d: %+v", len(got), got)
+	}
+	get, create, update := got[0], got[1], got[2]
+	if get.method != "GET" || get.path != "/api/v5/repos/owner/repo/issues/IAINVA" {
+		t.Errorf("get request: %s %s", get.method, get.path)
+	}
+	if create.method != "POST" || create.path != "/api/v5/repos/owner/issues" {
+		t.Errorf("create request: %s %s (Gitee's create endpoint is owner-scoped)", create.method, create.path)
+	}
+	if create.body["repo"] != "repo" || create.body["title"] != "t" || create.body["assignee"] != "a,b" {
+		t.Errorf("create body keys: got %v", create.body)
+	}
+	if _, ok := create.body["assignees"]; ok {
+		t.Errorf("create body carries undocumented assignees key: %v", create.body["assignees"])
+	}
+	if update.method != "PATCH" || update.path != "/api/v5/repos/owner/issues/IAINVA" {
+		t.Errorf("update request: %s %s", update.method, update.path)
+	}
+	if update.body["repo"] != "repo" || update.body["title"] != "t2" {
+		t.Errorf("update body keys: got %v", update.body)
+	}
+}
+
+// TestWebhooks_CreateBodyAndDeleteWire locks the webhook wiring: create
+// stays on the raw client with Gitee's documented vocabulary (password as
+// the signing key, *_events booleans derived from the event names, no
+// undocumented "events"/"secret" keys), while delete rides the SDK with the
+// per-call access_token query param.
+func TestWebhooks_CreateBodyAndDeleteWire(t *testing.T) {
+	var mu sync.Mutex
+	var got []capturedRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		mu.Lock()
+		got = append(got, capturedRequest{r.Method, r.URL.Path, r.URL.Query(), body})
+		mu.Unlock()
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		writeJSON(w, map[string]any{"id": 9, "url": "https://example.com/hook", "events": []string{"push"}})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+
+	hook, err := p.CreateWebhook(context.Background(), provider.CreateWebhookOptions{
+		Owner: "owner", Repo: "repo", URL: "https://example.com/hook",
+		Secret: "s3cret", Events: []string{"push", "issues", "member"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hook.ID != 9 || len(hook.Events) != 1 || hook.Events[0] != "push" {
+		t.Errorf("hook conversion: %+v", hook)
+	}
+	if err := p.DeleteWebhook(context.Background(), "owner", "repo", 9); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 recorded requests, got %d: %+v", len(got), got)
+	}
+	create, del := got[0], got[1]
+	if create.method != "POST" || create.path != "/api/v5/repos/owner/repo/hooks" {
+		t.Errorf("create request: %s %s", create.method, create.path)
+	}
+	if create.body["password"] != "s3cret" || create.body["push_events"] != true || create.body["issues_events"] != true {
+		t.Errorf("create body keys: got %v", create.body)
+	}
+	if v, ok := create.body["events"]; ok {
+		t.Errorf("create body carries undocumented events key: %v", v)
+	}
+	if v, ok := create.body["secret"]; ok {
+		t.Errorf("create body carries non-Gitee secret key: %v", v)
+	}
+	if v, ok := create.body["member"]; ok {
+		t.Errorf("create body carries non-Gitee event key member: %v", v)
+	}
+	if del.method != "DELETE" || del.path != "/api/v5/repos/owner/repo/hooks/9" {
+		t.Errorf("delete request: %s %s", del.method, del.path)
+	}
+	if del.query.Get("access_token") != "test-token" {
+		t.Errorf("delete access_token: got %q", del.query.Get("access_token"))
+	}
+}
+
 func TestProvider_ImplementsProvider(t *testing.T) {
 	var _ provider.Provider = (*gitee.Provider)(nil)
 }

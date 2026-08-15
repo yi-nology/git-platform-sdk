@@ -12,8 +12,8 @@ import (
 // method/path/body/result signature used throughout the gitee implementation.
 // It serves the surfaces that are still served by the raw transport client —
 // the registered SDK detours (commits, contents, tags/releases, label list
-// and update) plus the not-yet-migrated issues and webhooks surfaces;
-// SDK-covered surfaces call the generated service methods directly.
+// and update, issue create, webhook create and list); SDK-covered surfaces
+// call the generated service methods directly.
 func (p *Provider) doRequest(ctx context.Context, method, path string, body, result any) error {
 	_, err := p.raw().DoJSON(ctx, &transport.Request{
 		Method: method,

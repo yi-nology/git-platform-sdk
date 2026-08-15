@@ -3,76 +3,44 @@ package gitee
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	gitee "gitee.com/openeuler/go-gitee/gitee"
+	"github.com/antihax/optional"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// This file implements the full provider.IssueManager surface over Gitee's
-// native REST endpoints, but the capability is deliberately NOT declared in
-// Capabilities() (see gitee.go): its verification against live Gitee and the
-// contract fixtures is pending the SDK migration. The string-typed issue
-// numbers now match Gitee's alphanumeric identifiers (e.g. "IAINVA")
-// natively. The implementation stays compile-guarded and spike-ready.
+// This file implements the provider.IssueManager surface over the go-gitee
+// SDK. Gitee issue numbers are alphanumeric strings (e.g. "IAINVA"), carried
+// natively by the string-typed interface since the M1 addressing change; the
+// SDK's Issue model types Number as a string as well. CreateIssue keeps a
+// registered raw detour (see the method) because the SDK's generated create
+// call cannot encode its body correctly.
 
-// giteeUser mirrors Gitee's user JSON shape.
-type giteeUser struct {
-	Login string `json:"login"`
-	Name  string `json:"name"`
-}
-
-// giteeMilestone mirrors Gitee's milestone JSON.
-type giteeMilestone struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-}
-
-// giteeIssue mirrors Gitee's v5 issue JSON shape. Number is Gitee's
-// alphanumeric issue identifier as a string.
-type giteeIssue struct {
-	Number    string          `json:"number"`
-	Title     string          `json:"title"`
-	Body      string          `json:"body"`
-	State     string          `json:"state"`
-	User      *giteeUser      `json:"user"`
-	Labels    []gitee.Label   `json:"labels"`
-	Assignees []giteeUser     `json:"assignees"`
-	Milestone *giteeMilestone `json:"milestone"`
-	HTMLURL   string          `json:"html_url"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
-}
-
-// giteeIssueComment mirrors Gitee's issue-comment JSON shape.
-type giteeIssueComment struct {
-	ID        int64      `json:"id"`
-	Body      string     `json:"body"`
-	User      *giteeUser `json:"user"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-}
-
-// ListIssues implements provider.IssueManager.
+// ListIssues implements provider.IssueManager via the SDK. State, labels, and
+// assignee filters travel as query params alongside the normalized
+// pagination.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	path := fmt.Sprintf("/repos/%s/%s/issues?page=%d&per_page=%d", esc(opts.Owner), esc(opts.Repo), page, perPage)
+	listOpts := gitee.GetV5ReposOwnerRepoIssuesOpts{
+		AccessToken: p.accessToken(),
+		Page:        optional.NewInt32(toInt32(page)),
+		PerPage:     optional.NewInt32(toInt32(perPage)),
+	}
 	if opts.State != "" {
-		path += "&state=" + url.QueryEscape(string(opts.State))
+		listOpts.State = optional.NewString(string(opts.State))
 	}
 	if opts.Assignee != "" {
-		path += "&assignee=" + url.QueryEscape(opts.Assignee)
+		listOpts.Assignee = optional.NewString(opts.Assignee)
 	}
 	if opts.Labels != "" {
-		path += "&labels=" + url.QueryEscape(opts.Labels)
+		listOpts.Labels = optional.NewString(opts.Labels)
 	}
-	var issues []giteeIssue
-	if err := p.doRequest(ctx, "GET", path, nil, &issues); err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitee, "ListIssues", err)
+	issues, resp, err := p.client.IssuesApi.GetV5ReposOwnerRepoIssues(ctx, esc(opts.Owner), esc(opts.Repo), &listOpts)
+	if err != nil {
+		return nil, 0, p.sdkErr("ListIssues", resp, err)
 	}
 	result := make([]*provider.Issue, 0, len(issues))
 	for i := range issues {
@@ -81,20 +49,32 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	return result, len(result), nil
 }
 
-// GetIssue implements provider.IssueManager. Gitee addresses issues by
-// their alphanumeric string number directly.
+// GetIssue implements provider.IssueManager via the SDK. Gitee addresses
+// issues by their alphanumeric string number directly — the SDK parameter is
+// a string, so no conversion is needed.
 func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	var issue giteeIssue
-	path := fmt.Sprintf("/repos/%s/%s/issues/%s", esc(owner), esc(repo), esc(number))
-	if err := p.doRequest(ctx, "GET", path, nil, &issue); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetIssue", err)
+	issue, resp, err := p.client.IssuesApi.GetV5ReposOwnerRepoIssuesNumber(ctx, esc(owner), esc(repo), esc(number), &gitee.GetV5ReposOwnerRepoIssuesNumberOpts{
+		AccessToken: p.accessToken(),
+	})
+	if err != nil {
+		return nil, p.sdkErr("GetIssue", resp, err)
 	}
 	return convertIssue(issue), nil
 }
 
 // CreateIssue implements provider.IssueManager.
+//
+// Routed through the raw transport client rather than the SDK: the generated
+// PostV5ReposOwnerIssues encodes its opts as a multipart body while sending an
+// application/json Content-Type header (upstream client.go prepareRequest bug
+// — same family as the labels patch and releases create detours), which the
+// server cannot parse. The raw call uses the documented owner-scoped
+// POST /repos/{owner}/issues endpoint with the repo path in the body, and
+// Gitee's own parameter vocabulary (assignees join onto the single "assignee"
+// param, labels are comma-joined, milestone carries the milestone serial
+// number).
 func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
-	body := map[string]any{"title": opts.Title}
+	body := map[string]any{"repo": opts.Repo, "title": opts.Title}
 	if opts.Body != "" {
 		body["body"] = opts.Body
 	}
@@ -102,7 +82,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		body["labels"] = strings.Join(opts.Labels, ",")
 	}
 	if len(opts.Assignees) > 0 {
-		body["assignees"] = strings.Join(opts.Assignees, ",")
+		body["assignee"] = strings.Join(opts.Assignees, ",")
 	}
 	if opts.Milestone != "" {
 		m, err := strconv.Atoi(opts.Milestone)
@@ -111,41 +91,50 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		}
 		body["milestone"] = m
 	}
-	var issue giteeIssue
-	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/%s/issues", esc(opts.Owner), esc(opts.Repo)), body, &issue); err != nil {
+	var issue gitee.Issue
+	if err := p.doRequest(ctx, "POST", fmt.Sprintf("/repos/%s/issues", esc(opts.Owner)), body, &issue); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
-// UpdateIssue implements provider.IssueManager.
+// UpdateIssue implements provider.IssueManager via the SDK. The update
+// endpoint is owner-scoped (PATCH /repos/{owner}/issues/{number}), so the
+// repo path travels in the JSON body via the SDK's IssueUpdateParam; empty
+// fields drop out of the wire body (omitempty), leaving the issue unchanged.
+// Milestone carries Gitee's milestone serial number, the identifier round
+// tripped by MilestoneRef below; assignees join onto the single "assignee"
+// param.
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
-	body := map[string]any{}
+	param := gitee.IssueUpdateParam{
+		AccessToken: p.token,
+		Repo:        repo,
+	}
 	if opts.Title != "" {
-		body["title"] = opts.Title
+		param.Title = opts.Title
 	}
 	if opts.Body != "" {
-		body["body"] = opts.Body
+		param.Body = opts.Body
 	}
 	if opts.State != "" {
-		body["state"] = string(opts.State)
+		param.State = string(opts.State)
 	}
 	if len(opts.Assignees) > 0 {
-		body["assignees"] = strings.Join(opts.Assignees, ",")
+		param.Assignee = strings.Join(opts.Assignees, ",")
 	}
 	if len(opts.Labels) > 0 {
-		body["labels"] = strings.Join(opts.Labels, ",")
+		param.Labels = strings.Join(opts.Labels, ",")
 	}
 	if opts.Milestone != "" {
 		m, err := strconv.Atoi(opts.Milestone)
 		if err != nil {
 			return nil, provider.Wrapf(provider.PlatformGitee, "UpdateIssue", "invalid milestone number %q", opts.Milestone)
 		}
-		body["milestone"] = m
+		param.Milestone = toInt32(m)
 	}
-	var issue giteeIssue
-	if err := p.doRequest(ctx, "PATCH", fmt.Sprintf("/repos/%s/%s/issues/%s", esc(owner), esc(repo), esc(number)), body, &issue); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "UpdateIssue", err)
+	issue, resp, err := p.client.IssuesApi.PatchV5ReposOwnerIssuesNumber(ctx, esc(owner), esc(number), param)
+	if err != nil {
+		return nil, p.sdkErr("UpdateIssue", resp, err)
 	}
 	return convertIssue(issue), nil
 }
@@ -160,47 +149,63 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	return p.patchIssueState(ctx, owner, repo, number, "open", "ReopenIssue")
 }
 
-// patchIssueState flips an issue's state via PATCH, forwarding the caller's
-// context. op is the public operation this patch serves; failures surface
-// under that op.
+// patchIssueState flips an issue's state via the SDK's owner-scoped update
+// (the repo path travels in the JSON body). op is the public operation this
+// patch serves; failures surface under that op.
 func (p *Provider) patchIssueState(ctx context.Context, owner, repo, number, state, op string) (*provider.Issue, error) {
-	var issue giteeIssue
-	path := fmt.Sprintf("/repos/%s/%s/issues/%s", esc(owner), esc(repo), esc(number))
-	if err := p.doRequest(ctx, "PATCH", path, map[string]any{"state": state}, &issue); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, op, err)
+	issue, resp, err := p.client.IssuesApi.PatchV5ReposOwnerIssuesNumber(ctx, esc(owner), esc(number), gitee.IssueUpdateParam{
+		AccessToken: p.token,
+		Repo:        repo,
+		State:       state,
+	})
+	if err != nil {
+		return nil, p.sdkErr(op, resp, err)
 	}
 	return convertIssue(issue), nil
 }
 
-// ListIssueComments implements provider.IssueManager.
+// ListIssueComments implements provider.IssueManager via the SDK.
+//
+// Registration: the SDK's Note model carries no updated_at field (the live
+// wire does), so IssueComment.UpdatedAt stays zero on Gitee until the SDK
+// model catches up; created_at parses from the wire's timestamp string.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	var comments []giteeIssueComment
-	path := fmt.Sprintf("/repos/%s/%s/issues/%s/comments", esc(owner), esc(repo), esc(number))
-	if err := p.doRequest(ctx, "GET", path, nil, &comments); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListIssueComments", err)
+	notes, resp, err := p.client.IssuesApi.GetV5ReposOwnerRepoIssuesNumberComments(ctx, esc(owner), esc(repo), esc(number), &gitee.GetV5ReposOwnerRepoIssuesNumberCommentsOpts{
+		AccessToken: p.accessToken(),
+	})
+	if err != nil {
+		return nil, p.sdkErr("ListIssueComments", resp, err)
 	}
-	result := make([]*provider.IssueComment, 0, len(comments))
-	for _, c := range comments {
-		result = append(result, convertIssueComment(c))
+	result := make([]*provider.IssueComment, 0, len(notes))
+	for _, n := range notes {
+		result = append(result, convertIssueComment(n))
 	}
 	return result, nil
 }
 
-// CreateIssueComment implements provider.IssueManager.
+// CreateIssueComment implements provider.IssueManager via the SDK: the body
+// param marshals as JSON ({"access_token": ..., "body": ...}).
 func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	var comment giteeIssueComment
-	path := fmt.Sprintf("/repos/%s/%s/issues/%s/comments", esc(owner), esc(repo), esc(number))
-	if err := p.doRequest(ctx, "POST", path, map[string]any{"body": body}, &comment); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CreateIssueComment", err)
+	note, resp, err := p.client.IssuesApi.PostV5ReposOwnerRepoIssuesNumberComments(ctx, esc(owner), esc(repo), esc(number), gitee.IssueCommentPostParam{
+		AccessToken: p.token,
+		Body:        body,
+	})
+	if err != nil {
+		return nil, p.sdkErr("CreateIssueComment", resp, err)
 	}
-	return convertIssueComment(comment), nil
+	return convertIssueComment(note), nil
 }
 
-// ListIssueLabels implements provider.IssueManager: repository-level labels.
+// ListIssueLabels implements provider.IssueManager: repository-level labels
+// via the SDK. The interface takes no pagination, so the SDK's
+// AccessToken-only opts lose nothing (unlike LabelManager.ListLabels, whose
+// pagination contract forces its raw detour in labels.go).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	var labels []gitee.Label
-	if err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/labels", esc(owner), esc(repo)), nil, &labels); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListIssueLabels", err)
+	labels, resp, err := p.client.LabelsApi.GetV5ReposOwnerRepoLabels(ctx, esc(owner), esc(repo), &gitee.GetV5ReposOwnerRepoLabelsOpts{
+		AccessToken: p.accessToken(),
+	})
+	if err != nil {
+		return nil, p.sdkErr("ListIssueLabels", resp, err)
 	}
 	result := make([]*provider.IssueLabel, 0, len(labels))
 	for _, l := range labels {
@@ -209,65 +214,95 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 	return result, nil
 }
 
-// AddIssueLabels implements provider.IssueManager.
+// AddIssueLabels implements provider.IssueManager via the SDK: the generated
+// call posts the bare label-name array as its JSON body (an upstream patch on
+// PullRequestLabelPostParam — the same wire shape as the PR-labels calls in
+// crs.go). That patch drops the param's AccessToken from the wire; the call
+// stays authenticated through the transport pipeline's Bearer header.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	path := fmt.Sprintf("/repos/%s/%s/issues/%s/labels", esc(owner), esc(repo), esc(number))
-	body := map[string]any{"labels": strings.Join(labels, ",")}
-	if err := p.doRequest(ctx, "POST", path, body, nil); err != nil {
-		return provider.Wrap(provider.PlatformGitee, "AddIssueLabels", err)
+	_, resp, err := p.client.LabelsApi.PostV5ReposOwnerRepoIssuesNumberLabels(ctx, esc(owner), esc(repo), esc(number), gitee.PullRequestLabelPostParam{
+		AccessToken: p.token,
+		Body:        labels,
+	})
+	if err != nil {
+		return p.sdkErr("AddIssueLabels", resp, err)
 	}
 	return nil
 }
 
-// RemoveIssueLabel implements provider.IssueManager.
+// RemoveIssueLabel implements provider.IssueManager via the SDK (the
+// name-addressed delete passes the token as a query param).
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	path := fmt.Sprintf("/repos/%s/%s/issues/%s/labels/%s", esc(owner), esc(repo), esc(number), esc(name))
-	if err := p.doRequest(ctx, "DELETE", path, nil, nil); err != nil {
-		return provider.Wrap(provider.PlatformGitee, "RemoveIssueLabel", err)
+	resp, err := p.client.LabelsApi.DeleteV5ReposOwnerRepoIssuesNumberLabelsName(ctx, esc(owner), esc(repo), esc(number), esc(name), &gitee.DeleteV5ReposOwnerRepoIssuesNumberLabelsNameOpts{
+		AccessToken: p.accessToken(),
+	})
+	if err != nil {
+		return p.sdkErr("RemoveIssueLabel", resp, err)
 	}
 	return nil
 }
 
-// convertIssue maps a giteeIssue to a provider.Issue.
-func convertIssue(i giteeIssue) *provider.Issue {
+// convertIssue maps the SDK Issue model to a provider.Issue. Gitee issue
+// numbers are alphanumeric strings, carried as-is. Registration: Gitee's
+// issue payload carries a single assignee (负责人) plus collaborators, mapped
+// onto Issue.Assignees in that order; MilestoneRef.Number carries Gitee's
+// milestone serial number (the SDK Milestone model exposes no id), which is
+// exactly the identifier Gitee's issue write endpoints take, so
+// MilestoneRef round trips through CreateIssue/UpdateIssue.
+func convertIssue(i gitee.Issue) *provider.Issue {
 	issue := &provider.Issue{
-		Number: i.Number,
-		Title:  i.Title,
-		Body:   i.Body,
-		State:  provider.IssueState(i.State),
-		Author: giteeCRUser(i.User),
-		WebURL: i.HTMLURL,
+		Number:    i.Number,
+		Title:     i.Title,
+		Body:      i.Body,
+		State:     provider.IssueState(i.State),
+		Author:    giteeCRUserBasic(i.User),
+		WebURL:    i.HtmlUrl,
+		CreatedAt: i.CreatedAt,
+		UpdatedAt: i.UpdatedAt,
 	}
 	for _, l := range i.Labels {
 		issue.Labels = append(issue.Labels, l.Name)
 	}
-	for _, a := range i.Assignees {
-		issue.Assignees = append(issue.Assignees, a.Login)
+	if i.Assignee != nil {
+		issue.Assignees = append(issue.Assignees, i.Assignee.Login)
+	}
+	for ci := range i.Collaborators {
+		issue.Assignees = append(issue.Assignees, i.Collaborators[ci].Login)
 	}
 	if i.Milestone != nil {
-		issue.Milestone = &provider.MilestoneRef{Number: strconv.Itoa(i.Milestone.ID), Title: i.Milestone.Title}
+		issue.Milestone = &provider.MilestoneRef{Number: strconv.Itoa(int(i.Milestone.Number)), Title: i.Milestone.Title}
 	}
-	issue.CreatedAt, issue.UpdatedAt = i.CreatedAt, i.UpdatedAt
 	return issue
 }
 
-// convertIssueComment maps a giteeIssueComment to a provider.IssueComment.
-func convertIssueComment(c giteeIssueComment) *provider.IssueComment {
+// convertIssueComment maps the SDK Note model to a provider.IssueComment
+// (updated_at omission registered on ListIssueComments; created_at parses
+// from the wire's timestamp string).
+func convertIssueComment(n gitee.Note) *provider.IssueComment {
 	return &provider.IssueComment{
-		ID:        c.ID,
-		Body:      c.Body,
-		Author:    giteeCRUser(c.User),
-		CreatedAt: c.CreatedAt,
-		UpdatedAt: c.UpdatedAt,
+		ID:        int64(n.Id),
+		Body:      n.Body,
+		Author:    giteeCRUser(n.User),
+		CreatedAt: parseGiteeTime(n.CreatedAt),
 	}
 }
 
-// giteeCRUser maps a giteeUser to a provider.CRUser.
-func giteeCRUser(u *giteeUser) *provider.CRUser {
+// giteeCRUserBasic maps the SDK UserBasic model (issues' author/assignee
+// shape) to a provider.CRUser.
+func giteeCRUserBasic(u *gitee.UserBasic) *provider.CRUser {
 	if u == nil {
 		return nil
 	}
-	return &provider.CRUser{Username: u.Login, Name: u.Name}
+	return &provider.CRUser{ID: int64(u.Id), Username: u.Login, Name: u.Name}
+}
+
+// giteeCRUser maps the SDK User model (issue comments' author shape) to a
+// provider.CRUser.
+func giteeCRUser(u *gitee.User) *provider.CRUser {
+	if u == nil {
+		return nil
+	}
+	return &provider.CRUser{ID: int64(u.Id), Username: u.Login, Name: u.Name}
 }
 
 var _ provider.IssueManager = (*Provider)(nil)

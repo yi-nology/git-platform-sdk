@@ -50,15 +50,6 @@ type Harness struct {
 	// Issues, when non-nil, auto-mounts the issue-management suite inside
 	// Run, with the same bidirectional drift checks as Labels.
 	Issues *IssuesHarnessConfig
-	// IssuesImplementedButUndeclared, when true, documents a deliberate
-	// implemented-but-undeclared state: the backend's concrete type carries
-	// the IssueManager methods but does not declare Capabilities().Issues
-	// because the live API cannot honor the interface's contract (Gitee:
-	// every current repo returns alphanumeric string issue numbers the
-	// int-typed interface can neither decode nor address). The capabilities
-	// consistency check tolerates exactly this documented state; the issues
-	// suite still auto-skips without an Issues config.
-	IssuesImplementedButUndeclared bool
 }
 
 // Run executes the full contract suite against h. Each subtest is independent.

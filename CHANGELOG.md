@@ -25,6 +25,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (milestone number on GitHub, milestone ID on GitLab, Gitea, Forgejo, and
   GitCode).
 
+### Added
+
+- **The gitee backend now declares `Capabilities().Issues`.** The
+  IssueManager implementation is fully migrated onto the go-gitee SDK —
+  Gitee's alphanumeric issue numbers (e.g. "IAINVA") flow through the
+  string-typed interface natively — with one registered raw detour: issue
+  create keeps the raw transport client because the SDK's generated create
+  call posts an unparseable multipart body (upstream codegen bug), so it
+  uses Gitee's documented owner-scoped `POST /repos/{owner}/issues`
+  endpoint. `MilestoneRef.Number` carries Gitee's milestone serial number,
+  the identifier Gitee's issue write endpoints take. The
+  `IssuesImplementedButUndeclared` contract-harness flag is gone; the
+  Issues capability check is bidirectional for every platform again.
+- **The gitee backend's webhook CRUD migrated to the go-gitee SDK** where
+  the SDK is usable: `DeleteWebhook` rides the generated delete call.
+  `CreateWebhook`/`ListWebhooks` keep registered raw detours (the SDK's
+  create posts an unparseable multipart body; its Hook model mis-types the
+  live wire's numeric id and boolean event flags as strings, and the
+  generated list swallows the decode error into an empty result). Create
+  now uses Gitee's documented vocabulary: the signing secret travels as
+  `password` (the key Gitee HMACs into `X-Gitee-Token`) and event
+  selections map onto Gitee's `*_events` booleans.
+
 ## [v0.39.0] - 2026-08-15
 
 ### ⚠️ Breaking changes

@@ -8,13 +8,14 @@
 // DELETE /repos/{owner}/{repo}/branches/{branch}), generated with a broken
 // signature (the user-repos list methods decode into a single Project instead
 // of an array; the commit, compare, contents, and release models type live
-// objects/arrays/booleans as plain strings; the tags method returns a single
-// Tag for an array endpoint; the labels list opts carry no pagination; the
-// labels patch and releases create methods post multipart bodies labeled
-// application/json) — and keep using the retained transport.Client via
-// Provider.raw(). Each such detour is registered in a doc comment on the
-// method that takes it. All Provider methods are split across the
-// per-responsibility files in this package:
+// objects/arrays/booleans as plain strings, as does the webhook Hook model
+// whose list decode is then silently swallowed; the tags method returns a
+// single Tag for an array endpoint; the labels list opts carry no pagination;
+// the labels patch, releases create, webhook create, and issue create methods
+// post multipart bodies labeled application/json) — and keep using the
+// retained transport.Client via Provider.raw(). Each such detour is
+// registered in a doc comment on the method that takes it. All Provider
+// methods are split across the per-responsibility files in this package:
 //
 //   - gitee.go:   constructor + identity (Platform, TestConnection, Capabilities)
 //   - init.go:    provider registration with the global registry
@@ -28,8 +29,7 @@
 //   - files.go:   GetFileContent, CreateFile, UpdateFile, DeleteFile
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
 //   - labels.go:  repository label CRUD (LabelManager)
-//   - issues.go:  issue CRUD, comments, and issue labels (implemented but
-//     undeclared pending the string-identifier spike; see Capabilities)
+//   - issues.go:  issue CRUD, comments, and issue labels (IssueManager)
 //   - types.go:   SDK model conversions and raw-wire types/helpers
 package gitee
 
@@ -156,13 +156,11 @@ func (p *Provider) sdkErr(op string, resp *http.Response, err error) error {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee }
 
 // Capabilities implements provider.Provider. Gitee implements the optional
-// LabelManager interface (see labels.go). An IssueManager implementation
-// exists (issues.go) but is deliberately NOT declared: every current Gitee
-// repo returns alphanumeric string issue numbers (e.g. "IAINVA"), which the
-// int-typed IssueManager can neither decode nor address. Re-enable after the
-// issue-addressing spike redesigns the interface around string identifiers.
+// LabelManager (see labels.go) and IssueManager (see issues.go) interfaces.
+// Gitee issue numbers are alphanumeric strings (e.g. "IAINVA"), addressed
+// natively by the string-typed IssueManager.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true}
+	return provider.CapabilitySet{Labels: true, Issues: true}
 }
 
 // TestConnection implements provider.Provider.
