@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -286,5 +287,90 @@ func TestRetryingRoundTripper_NetworkErrorReturnsError(t *testing.T) {
 	}
 	if resp != nil {
 		t.Errorf("expected nil response on transport error, got %+v", resp)
+	}
+}
+
+// TestRedactURL_MasksCredentialQueryParams covers each credential-bearing
+// parameter type that must be masked before a URL reaches log output.
+// Gitee authenticates with access_token on the query string; GitLab variants
+// use private_token; plain token covers GitHub-compatible hosts.
+func TestRedactURL_MasksCredentialQueryParams(t *testing.T) {
+	for _, param := range []string{"access_token", "token", "private_token"} {
+		raw := "https://gitee.com/api/v5/repos/myorg/myrepo?" + param + "=super-secret-token"
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("parse %q: %v", raw, err)
+		}
+		got := redactURL(*u)
+		if strings.Contains(got, "super-secret-token") {
+			t.Errorf("%s: credential leaked into logged URL %q", param, got)
+		}
+		parsed, err := url.Parse(got)
+		if err != nil {
+			t.Fatalf("parse redacted URL %q: %v", got, err)
+		}
+		if v := parsed.Query().Get(param); v != "***" {
+			t.Errorf("%s: want masked value ***, got %q (full: %q)", param, v, got)
+		}
+		if u.Query().Get(param) != "super-secret-token" {
+			t.Errorf("%s: original URL was mutated; the outgoing request must keep its real credential", param)
+		}
+	}
+}
+
+// TestRedactURL_NoCredentialsUnchanged verifies that URLs without credential
+// parameters pass through byte-for-byte, so non-credential logs keep their
+// exact structure (no re-encoding or reordering side effects).
+func TestRedactURL_NoCredentialsUnchanged(t *testing.T) {
+	for _, raw := range []string{
+		"https://api.github.com/repos/octocat/hello-world/issues?state=all&page=2&per_page=30",
+		"https://gitee.com/api/v5/repos/myorg/myrepo/hooks?zebra=1&alpha=2",
+		"https://gitlab.com/api/v4/projects", // no query at all
+	} {
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("parse %q: %v", raw, err)
+		}
+		if got := redactURL(*u); got != raw {
+			t.Errorf("credential-free URL changed: want %q, got %q", raw, got)
+		}
+	}
+}
+
+// TestRedactURL_MultipleParamsCoexist verifies that when a credential
+// parameter travels alongside ordinary parameters, the path and every
+// non-credential parameter survive redaction (structure preserved), while
+// each credential parameter is masked.
+func TestRedactURL_MultipleParamsCoexist(t *testing.T) {
+	raw := "https://gitee.com/api/v5/repos/myorg/myrepo/issues?state=all&access_token=sec&page=2&private_token=sec2"
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse %q: %v", raw, err)
+	}
+	got := redactURL(*u)
+
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("parse redacted URL %q: %v", got, err)
+	}
+	if parsed.Path != "/api/v5/repos/myorg/myrepo/issues" {
+		t.Errorf("path not preserved: got %q (full: %q)", parsed.Path, got)
+	}
+	q := parsed.Query()
+	for k, want := range map[string]string{"state": "all", "page": "2"} {
+		if v := q.Get(k); v != want {
+			t.Errorf("param %s not preserved: want %q, got %q (full: %q)", k, want, v, got)
+		}
+	}
+	for _, cred := range []string{"access_token", "private_token"} {
+		if v := q.Get(cred); v != "***" {
+			t.Errorf("param %s not masked: got %q (full: %q)", cred, v, got)
+		}
+	}
+	if len(q) != 4 {
+		t.Errorf("query param count changed: want 4, got %d (full: %q)", len(q), got)
+	}
+	if strings.Contains(got, "sec") {
+		t.Errorf("credential value leaked into logged URL %q", got)
 	}
 }

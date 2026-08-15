@@ -48,6 +48,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `password` (the key Gitee HMACs into `X-Gitee-Token`) and event
   selections map onto Gitee's `*_events` booleans.
 
+### Security
+
+- **Credential query parameters are now masked in transport logs.** The
+  transport's round-tripper and retry logging redact `access_token`,
+  `token`, and `private_token` values to `***` before logging request
+  URLs. Gitee's query-string token auth is the motivating case: its
+  `access_token` parameter previously appeared verbatim in logged URLs.
+  Only the logged form is masked; the outgoing request keeps its real
+  credential.
+
 ## [v0.39.0] - 2026-08-15
 
 ### ⚠️ Breaking changes

@@ -459,7 +459,7 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	if err != nil {
 		rt.client.log().Error("transport roundtrip failed",
 			"method", req.Method,
-			"url", req.URL.String(),
+			"url", redactURL(*req.URL),
 			"duration", duration,
 			"err", err,
 		)
@@ -468,7 +468,7 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	if resp.StatusCode >= 400 {
 		rt.client.log().Warn("transport roundtrip error",
 			"method", req.Method,
-			"url", req.URL.String(),
+			"url", redactURL(*req.URL),
 			"status", resp.StatusCode,
 			"duration", duration,
 		)
@@ -532,7 +532,7 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 			lastErr = err
 			rt.logger.Warn("transport retry: network error",
 				"method", req.Method,
-				"url", req.URL.String(),
+				"url", redactURL(*req.URL),
 				"attempt", attempt,
 				"err", err,
 			)
@@ -561,7 +561,7 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 		lastBody = body
 		rt.logger.Warn("transport retry: retryable status",
 			"method", req.Method,
-			"url", req.URL.String(),
+			"url", redactURL(*req.URL),
 			"status", resp.StatusCode,
 			"attempt", attempt,
 		)
@@ -610,6 +610,27 @@ func readAndClose(resp *http.Response, maxBodySize int64) ([]byte, error) {
 		return body, nil
 	}
 	return io.ReadAll(resp.Body)
+}
+
+// redactURL masks credential-bearing query parameters in logged URLs. Some
+// platforms authenticate via query string (e.g. Gitee's access_token, GitLab's
+// private_token), and those tokens must never reach log output. The receiver
+// URL is a value copy, so the outgoing request keeps its real credentials;
+// only the logged form is masked.
+func redactURL(u url.URL) string {
+	q := u.Query()
+	changed := false
+	for _, k := range []string{"access_token", "token", "private_token"} {
+		if q.Get(k) != "" {
+			q.Set(k, "***")
+			changed = true
+		}
+	}
+	if !changed {
+		return u.String()
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // truncateForLog returns a string representation of body, capped at maxLen
