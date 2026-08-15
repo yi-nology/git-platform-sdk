@@ -256,10 +256,14 @@ type Issue struct {
 
 // MilestoneRef references a milestone from an issue. Number carries the
 // platform's milestone addressing identifier as a string: the milestone
-// *number* on GitHub, and the platform milestone *ID* on GitLab, Gitea,
+// *number* on GitHub, the platform milestone *ID* on GitLab, Gitea,
 // Forgejo, and GitCode (whose write endpoints take exactly that identifier,
-// so per-platform round-trips hold). A future MilestoneManager will
-// reconcile this field with a unified addressing scheme.
+// so per-platform round-trips hold), and Gitee's milestone *serial number*
+// (the "number" field of Gitee's milestone payload — the identifier Gitee's
+// own issue and milestone write endpoints take; the SDK model exposes no
+// id). This is the same identifier Milestone.Number exposes and
+// MilestoneManager methods accept, so refs round-trip through the
+// milestone manager on the platform they came from.
 type MilestoneRef struct {
 	Number string `json:"number"`
 	Title  string `json:"title,omitempty"`
@@ -345,6 +349,57 @@ type UpdateLabelOptions struct {
 	NewName     *string `json:"new_name,omitempty"`
 	Color       *string `json:"color,omitempty"`
 	Description *string `json:"description,omitempty"`
+}
+
+// --- Milestones ---
+
+// MilestoneState represents the state of a milestone.
+type MilestoneState string
+
+const (
+	MilestoneStateOpen   MilestoneState = "open"
+	MilestoneStateClosed MilestoneState = "closed"
+)
+
+// Milestone represents a repository milestone. Number carries the
+// platform's milestone addressing identifier as a string — the same value
+// MilestoneRef.Number uses and MilestoneManager methods accept: the
+// milestone number on GitHub, the platform milestone ID on GitLab, Gitea,
+// Forgejo, and GitCode, and the milestone serial number on Gitee (see
+// MilestoneManager for the per-platform truth).
+type Milestone struct {
+	Number      string         `json:"number"`
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	State       MilestoneState `json:"state"`
+	DueOn       *time.Time     `json:"due_on,omitempty"`
+}
+
+// ListMilestonesOptions contains options for listing repository
+// milestones. State filters by "open" or "closed"; an empty State lists
+// whatever the platform defaults to (GitHub/Gitea/Forgejo/Gitee default to
+// open, GitLab to all).
+type ListMilestonesOptions struct {
+	State   string `json:"state,omitempty"`
+	Page    int    `json:"page,omitempty"`
+	PerPage int    `json:"per_page,omitempty"`
+}
+
+// CreateMilestoneOptions contains options for creating a repository
+// milestone.
+type CreateMilestoneOptions struct {
+	Title       string     `json:"title"`
+	Description string     `json:"description,omitempty"`
+	DueOn       *time.Time `json:"due_on,omitempty"`
+}
+
+// UpdateMilestoneOptions contains options for updating a repository
+// milestone. Nil fields are left unchanged.
+type UpdateMilestoneOptions struct {
+	Title       *string        `json:"title,omitempty"`
+	Description *string        `json:"description,omitempty"`
+	State       MilestoneState `json:"state,omitempty"`
+	DueOn       *time.Time     `json:"due_on,omitempty"`
 }
 
 // --- Search ---

@@ -30,6 +30,7 @@
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
 //   - labels.go:  repository label CRUD (LabelManager)
 //   - issues.go:  issue CRUD, comments, and issue labels (IssueManager)
+//   - milestones.go: repository milestone CRUD (MilestoneManager)
 //   - types.go:   SDK model conversions and raw-wire types/helpers
 package gitee
 
@@ -160,7 +161,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee 
 // Gitee issue numbers are alphanumeric strings (e.g. "IAINVA"), addressed
 // natively by the string-typed IssueManager.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Milestones: true}
 }
 
 // TestConnection implements provider.Provider.

@@ -18,6 +18,7 @@
 //   - labels.go:   repository label CRUD (LabelManager)
 //   - issues.go:   issue CRUD, comments (notes), and issue labels (IssueManager)
 //   - reviews.go:  code reviews via approvals mappings (ReviewManager)
+//   - milestones.go: repository milestone CRUD (MilestoneManager)
 //   - types.go:    internal GitLab-API types and conversion helpers
 package gitlab
 
@@ -88,7 +89,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitLab
 // LabelManager (see labels.go), IssueManager (see issues.go), and
 // ReviewManager (see reviews.go) interfaces.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true}
 }
 
 // TestConnection implements provider.Provider.

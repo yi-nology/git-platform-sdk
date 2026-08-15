@@ -53,6 +53,10 @@ type Harness struct {
 	// Reviews, when non-nil, auto-mounts the review-management suite inside
 	// Run, with the same bidirectional drift checks as Labels and Issues.
 	Reviews *ReviewsHarnessConfig
+	// Milestones, when non-nil, auto-mounts the milestone-management suite
+	// inside Run, with the same bidirectional drift checks as Labels,
+	// Issues, and Reviews.
+	Milestones *MilestonesHarnessConfig
 	// Releases auto-mounts the release-management suite inside Run. Unlike
 	// the fields above, ReleaseManager is a core interface composed into
 	// provider.Provider (every backend implements it), so there is no
@@ -75,6 +79,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("LabelsSuite", func(t *testing.T) { testLabelsSuite(t, h) })
 	t.Run("IssuesSuite", func(t *testing.T) { testIssuesSuite(t, h) })
 	t.Run("ReviewsSuite", func(t *testing.T) { testReviewsSuite(t, h) })
+	t.Run("MilestonesSuite", func(t *testing.T) { testMilestonesSuite(t, h) })
 	t.Run("ReleaseSuite", func(t *testing.T) { testReleaseSuite(t, h) })
 }
 

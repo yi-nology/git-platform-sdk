@@ -41,6 +41,13 @@ func TestGitee_Contract(t *testing.T) {
 		// payload — see backends/gitee/releases.go): github-like keys with
 		// html_url, served by the same mock for by-tag fetches and the
 		// tag→id resolution that precedes update/delete.
+		// Gitee milestone shape: keyed by the serial "number" (the write
+		// endpoints address milestones by it), date-only due_on. Create and
+		// update ride the raw transport (SDK multipart bug), the rest the SDK.
+		Milestones: &contracttest.MilestonesHarnessConfig{
+			ListResponse:   `[{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}]`,
+			MutateResponse: `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}`,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,

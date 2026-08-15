@@ -23,7 +23,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   string (`""` = don't set on create / leave unchanged on update);
   `MilestoneRef.Number` is the same identifier as returned by the platform
   (milestone number on GitHub, milestone ID on GitLab, Gitea, Forgejo, and
-  GitCode).
+  GitCode, milestone serial number on Gitee).
 - **`CreateReview` moved from `DiffManager` to the new optional
   `ReviewManager` capability interface, and `DiffManager` is slimmed to five
   methods** (`GetCRDiff`, `GetCRFiles`, `CreateNote`, `DeleteNote`,
@@ -142,6 +142,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   now uses Gitee's documented vocabulary: the signing secret travels as
   `password` (the key Gitee HMACs into `X-Gitee-Token`) and event
   selections map onto Gitee's `*_events` booleans.
+
+- **New optional `MilestoneManager` capability interface with five methods**
+  (`ListMilestones`, `GetMilestone`, `CreateMilestone`, `UpdateMilestone`,
+  `DeleteMilestone` — all milestone-addressed by `number string`, the same
+  identifier `MilestoneRef.Number` and the new `Milestone.Number` carry:
+  milestone number on GitHub, milestone ID on GitLab, Gitea, Forgejo, and
+  GitCode, milestone serial number on Gitee), plus the `Milestone` model,
+  normalized `MilestoneState` constants (`open`, `closed`), and
+  `ListMilestonesOptions`/`CreateMilestoneOptions`/`UpdateMilestoneOptions`
+  (nil = leave unchanged). A cross-platform milestones contract suite
+  (`contracttest.RunMilestonesSuite`, auto-mounted via `Harness.Milestones`)
+  verifies list parsing/normalization (identifier as string, state), the
+  create/update wire bodies (POST/PATCH/PUT carrying the title), and a
+  non-GET delete, with the same bidirectional capability-declaration drift
+  checks as the labels, issues, and reviews suites. Six backends implement
+  it and declare `Capabilities().Milestones`: GitHub and GitCode through
+  their SDK's number/ID-addressed CRUD as-is; GitLab via the project
+  `MilestonesService` with two registered vocabulary mappings (wire state
+  `active` ↔ SDK `open`, so state changes travel as the `state_event`
+  verbs `activate`/`close`; and a date-only `ISOTime` due date, so
+  `DueOn`'s time-of-day is lost on GitLab's wire); Gitea and Forgejo via
+  their ID-addressed milestone CRUD; and Gitee via the go-gitee SDK with
+  registered raw detours on create/update — the generated Post/Patch
+  milestone calls encode their parameters as form values under an
+  `application/json` Content-Type (upstream prepareRequest bug, same
+  family as the labels/issue/release detours), so those two methods post
+  documented JSON bodies through the raw transport client while
+  list/get/delete ride the SDK. TencentCode does not implement the
+  interface (out of this release's designed milestone platform set);
+  note for a future phase: the gongfeng SDK actually ships a complete
+  GitLab-shaped `MilestonesService` (list/get/create/edit/delete), so the
+  capability is implementable there if ever prioritized.
 
 ### Security
 

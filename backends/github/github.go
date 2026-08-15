@@ -17,6 +17,7 @@
 //   - labels.go:   repository label CRUD (LabelManager)
 //   - issues.go:   issue CRUD, comments, and issue labels (IssueManager)
 //   - reviews.go:  PR review list/get/create/dismiss/request-reviewers (ReviewManager)
+//   - milestones.go: repository milestone CRUD (MilestoneManager)
 //   - types.go:    internal GitHub-API types and conversion helpers
 package github
 
@@ -99,7 +100,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitHub
 // LabelManager interface (see labels.go), the IssueManager interface
 // (see issues.go), and the ReviewManager interface (see reviews.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true}
 }
 
 // TestConnection implements provider.Provider.

@@ -47,6 +47,12 @@ func TestGitea_Contract(t *testing.T) {
 			GetResponse:    `{"id":1,"user":{"id":7,"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}`,
 			MutateResponse: `{"id":1,"user":{"id":7,"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}`,
 		},
+		// Gitea milestone shape: keyed by id (milestones are ID-addressed),
+		// github-like state/due_on keys.
+		Milestones: &contracttest.MilestonesHarnessConfig{
+			ListResponse:   `[{"id":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}]`,
+			MutateResponse: `{"id":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
+		},
 		// Gitea release shape: github-like keys (tag_name/name/body/draft/
 		// prerelease), url for the release page.
 		Releases: &contracttest.ReleasesHarnessConfig{

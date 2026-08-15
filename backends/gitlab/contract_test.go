@@ -51,6 +51,13 @@ func TestGitLab_Contract(t *testing.T) {
 			// the wire subtest only asserts a silent no-op.
 			IgnoresRequestReviewers: true,
 		},
+		// GitLab milestone shape: keyed by id (milestones are ID-addressed),
+		// date-only due_date, and wire state "active" (the backend maps
+		// active→open and open→activate on writes).
+		Milestones: &contracttest.MilestonesHarnessConfig{
+			ListResponse:   `[{"id":1,"iid":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}]`,
+			MutateResponse: `{"id":1,"iid":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}`,
+		},
 		// GitLab release shape: name/description/_links.self (released_at is
 		// the publish timestamp). Update is a tag-addressed PUT carrying
 		// name/description; Draft/Prerelease have no GitLab counterpart

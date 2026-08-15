@@ -19,6 +19,7 @@
 //   - search.go:   SearchManager: SearchRepos, SearchIssues, SearchUsers
 //   - labels.go:   repository label CRUD (LabelManager)
 //   - reviews.go:  ReviewManager: list/get/create/request/dismiss PR reviews
+//   - milestones.go: repository milestone CRUD (MilestoneManager)
 package gitcode
 
 import (
@@ -87,10 +88,11 @@ func New(cfg provider.Config) (provider.Provider, error) {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitCode }
 
 // Capabilities implements provider.Provider. GitCode implements the optional
-// IssueManager, SearchManager, LabelManager, and ReviewManager interfaces
-// (see issues.go, search.go, labels.go, reviews.go).
+// IssueManager, SearchManager, LabelManager, ReviewManager, and
+// MilestoneManager interfaces (see issues.go, search.go, labels.go,
+// reviews.go, milestones.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Issues: true, Search: true, Labels: true, Reviews: true}
+	return provider.CapabilitySet{Issues: true, Search: true, Labels: true, Reviews: true, Milestones: true}
 }
 
 // TestConnection implements provider.Provider.

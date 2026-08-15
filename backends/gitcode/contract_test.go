@@ -43,6 +43,13 @@ func TestGitCode_Contract(t *testing.T) {
 			GetResponse:    `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","created_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","created_at":"2026-01-01T00:00:00Z"}`,
 		},
+		// GitCode milestone shape: GitHub-like keys but keyed by id
+		// (milestones are ID-addressed, matching MilestoneRef) with a
+		// date-time due_date.
+		Milestones: &contracttest.MilestonesHarnessConfig{
+			ListResponse:   `[{"id":1,"title":"v1","state":"open","description":"first","due_date":"2026-01-01T00:00:00Z"}]`,
+			MutateResponse: `{"id":1,"title":"v1","state":"open","description":"first","due_date":"2026-01-01T00:00:00Z"}`,
+		},
 		// GitCode release payloads are GitHub-shaped (id/tag_name/name/body/
 		// draft/prerelease/html_url).
 		Releases: &contracttest.ReleasesHarnessConfig{

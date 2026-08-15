@@ -36,8 +36,8 @@ type CapabilitySet struct {
 	Issues     bool // provider.IssueManager
 	Search     bool // provider.SearchManager
 	Labels     bool // provider.LabelManager
-	Milestones bool // provider.MilestoneManager (future phase)
-	Reviews    bool // provider.ReviewManager (future phase)
+	Milestones bool // provider.MilestoneManager
+	Reviews    bool // provider.ReviewManager
 }
 
 // Provider is the unified interface for all Git hosting platforms.
