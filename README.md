@@ -329,7 +329,7 @@ if caps.Labels {
 - **Tencent Code 工蜂 `Label.ID` 恒为 0**: 工蜂标签按名寻址（更新/删除经
   options 携带当前名，无需 name→ID 解析扫描），gongfeng Label 模型无 id
   字段，`Label.ID` 在该平台恒为 0（标签端到端按名操作）。
-- **Tencent Code 工蜂 issue 三处登记忽略/缺省**: `Assignees` 字段被忽略且
+- **Tencent Code 工蜂 issue 四处登记忽略/缺省**: `Assignees` 字段被忽略且
   `ListIssuesOptions.Assignee` 过滤不携带——工蜂 issue 写面收 `assignee_ids`
   （数值用户 ID csv），username→ID 需 Users API 而 SDK 无按名查询面；移除
   issue 的最后一个标签是 no-op——空 label csv 因 `omitempty` 上不了 PUT 体，

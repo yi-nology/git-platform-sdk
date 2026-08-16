@@ -33,7 +33,7 @@ import (
 // CreateReview implements provider.ReviewManager by posting a merge-request
 // note: the body becomes the note text and the event maps to the note's
 // reviewer_state verdict verb (same vocabulary the reviews/{id} commit-note
-// surface uses — docs/api/notes.md). See the file doc for the registered
+// surface uses — the gongfeng SDK's bundled docs/api/notes.md). See the file doc for the registered
 // unmapped fields (Comments, CommitID) and the verdict vocabulary.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
 	n, err := prNumber("CreateReview", number)
@@ -105,7 +105,9 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 }
 
 // DismissReview implements provider.ReviewManager as a registered stub —
-// the only stub registration in the SDK.
+// the only registered stub among the optional-capability interfaces (the
+// SDK's other stubs, e.g. ChangeRequestManager.UpdateCRLabels, live on core
+// interfaces).
 //
 // Registered mapping: STUB. 工蜂's review surface has no dismissal verb:
 // review notes can be created, listed, fetched, and edited
