@@ -70,7 +70,7 @@ func main() {
 | Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
 | Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Search |
 | GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
-| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Milestones + exclusive features |
+| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews + exclusive features |
 
 ### Installation
 
@@ -125,7 +125,7 @@ cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
 | Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://codeberg.org` |
 | Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Search | `https://gitee.com/api/v5` |
 | GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://api.gitcode.com/api/v5` |
-| Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Milestones + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
+| Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
 
 ## 安装
 
@@ -287,11 +287,11 @@ if caps.Labels {
 
 | 能力 | 接口 | 支持平台 |
 |------|------|----------|
-| Issues | `IssueManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
+| Issues | `IssueManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode / Tencent Code |
 | Search | `SearchManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
-| Labels | `LabelManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode |
+| Labels | `LabelManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode / Tencent Code |
 | Milestones | `MilestoneManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode / Tencent Code |
-| Reviews | `ReviewManager` | GitHub / GitLab / Gitea / Forgejo / GitCode |
+| Reviews | `ReviewManager` | GitHub / GitLab / Gitea / Forgejo / GitCode / Tencent Code |
 
 说明：
 
@@ -326,6 +326,24 @@ if caps.Labels {
 - **Search 的 `Sort`/`Order` 走各平台自身词表**: 取值随平台不同（如 GitHub 的
   stars/forks/updated + asc/desc）；Gitea/Forgejo 对未知值返回 HTTP 422，
   GitLab 搜索 API 无 sort/order 参数（登记忽略）。请按目标平台文档取值。
+- **Tencent Code 工蜂 `Label.ID` 恒为 0**: 工蜂标签按名寻址（更新/删除经
+  options 携带当前名，无需 name→ID 解析扫描），gongfeng Label 模型无 id
+  字段，`Label.ID` 在该平台恒为 0（标签端到端按名操作）。
+- **Tencent Code 工蜂 issue 三处登记忽略/缺省**: `Assignees` 字段被忽略且
+  `ListIssuesOptions.Assignee` 过滤不携带——工蜂 issue 写面收 `assignee_ids`
+  （数值用户 ID csv），username→ID 需 Users API 而 SDK 无按名查询面；移除
+  issue 的最后一个标签是 no-op——空 label csv 因 `omitempty` 上不了 PUT 体，
+  标签保留；`Issue.WebURL` 恒为空、`Issue.ClosedAt` 恒为 nil——gongfeng
+  issue 模型无这两个字段。
+- **Tencent Code 工蜂 Reviews 是 MR notes 映射（已登记）**: 工蜂原生评审以
+  携带 `reviewer_state` verdict 的 MR note 表达，与普通 MR 评论共用同一集合
+  ——普通评论会以 `commented` 评审混入 `ListReviews`（工蜂 system 记账 note
+  已过滤）；读侧无 verdict 字段，`Review.State` 恒为 `commented`；
+  `CreateReview` 的 `Comments`/`CommitID` 不映射（一条 note 至多携带一个行内
+  位置，且无 commit 概念）；`RequestReviewers` 为登记忽略（工蜂 MR 更新面
+  不收评审人，原生邀请端点按数值 user ID 寻址，username→ID 不可达）；
+  `DismissReview` 为登记桩返回 `provider.ErrNotImplemented`（工蜂无评审
+  撤销面）。
 
 ### Tencent 工蜂专属能力
 
