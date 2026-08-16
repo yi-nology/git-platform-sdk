@@ -1,0 +1,165 @@
+package tencentcode
+
+import (
+	"context"
+	"strconv"
+
+	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+
+	"github.com/yi-nology/git-platform-sdk/provider"
+)
+
+// This file implements provider.ReviewManager over the gongfeng SDK's
+// NotesService: 工蜂's native reviews are expressed as review notes — notes
+// hanging off the review of a change request — so CreateReview posts a note
+// on the review, ListReviews lists the review's notes, and GetReview fetches
+// a single note by ID. Four registered limitations apply:
+//
+//   - state on reads: the gongfeng Note model has no state field (the
+//     reviewer_state verdict travels on writes only and never comes back),
+//     so every review read normalizes to provider.ReviewStateCommented.
+//   - verdict vocabulary: only APPROVE and REQUEST_CHANGES map to 工蜂's
+//     reviewer_state verbs (approved / change_required); comment-style
+//     events post a plain note with no verdict. 工蜂's third verb
+//     (change_denied) has no SDK-side event and is never produced.
+//   - inline comments and commit pinning: opts.Comments and opts.CommitID
+//     have no review-note equivalent — a note carries at most one inline
+//     position (path/line), and posting one note per comment would fabricate
+//     separate review records — so they are ignored.
+//   - dismissal: 工蜂 exposes no review-dismissal surface at all (see
+//     DismissReview's registered stub).
+
+// CreateReview implements provider.ReviewManager by posting a native review
+// note: the body becomes the note text and the event maps to 工蜂's
+// reviewer_state verdict verb. See the file doc for the registered
+// unmapped fields (Comments, CommitID) and the verdict vocabulary.
+func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
+	n, err := prNumber("CreateReview", number)
+	if err != nil {
+		return nil, err
+	}
+	createOpts := &gongfeng.CreateReviewNoteOptions{Body: gongfeng.Ptr(opts.Body)}
+	if state := reviewNoteState(opts.Event); state != "" {
+		createOpts.ReviewerState = gongfeng.Ptr(state)
+	}
+	note, _, err := p.client.Notes.CreateReviewNote(ctx, pid(owner, repo), n, createOpts)
+	if err != nil {
+		return nil, sdkError("CreateReview", err)
+	}
+	return convertReviewNoteResult(note), nil
+}
+
+// ListReviews implements provider.ReviewManager by listing the change
+// request's review notes. The collection can mix in 工蜂's system
+// bookkeeping notes ("milestone removed" and the like); those are not
+// reviews and are filtered out.
+func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
+	n, err := prNumber("ListReviews", number)
+	if err != nil {
+		return nil, err
+	}
+	notes, _, err := p.client.Notes.ListReviewNotes(ctx, pid(owner, repo), n, nil)
+	if err != nil {
+		return nil, sdkError("ListReviews", err)
+	}
+	reviews := make([]provider.Review, 0, len(notes))
+	for _, note := range notes {
+		if note == nil || note.System {
+			continue
+		}
+		reviews = append(reviews, convertReviewNote(note))
+	}
+	return reviews, nil
+}
+
+// GetReview implements provider.ReviewManager by fetching the single note
+// backing the review: reviewID is the note ID (the same identifier
+// CreateReview returns as ReviewResult.ID) on the change request's notes
+// collection.
+func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
+	n, err := prNumber("GetReview", number)
+	if err != nil {
+		return nil, err
+	}
+	note, _, err := p.client.Notes.GetMergeRequestNote(ctx, pid(owner, repo), n, int(reviewID))
+	if err != nil {
+		return nil, sdkError("GetReview", err)
+	}
+	review := convertReviewNote(note)
+	return &review, nil
+}
+
+// RequestReviewers implements provider.ReviewManager as a registered ignore.
+//
+// Registered mapping: IGNORED. 工蜂's merge-request update surface cannot
+// add reviewers (gongfeng's UpdateMergeRequestOptions carries no reviewer
+// field), and the native invite endpoint addresses reviewers by numeric user
+// ID (InviteMRReviewer's reviewer_id) while the SDK's callers supply
+// usernames — the Users API offers no by-username lookup to bridge them
+// (the same class of limitation as CreateIssue's ignored Assignees). The
+// call therefore succeeds without effect and touches no wire.
+func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
+	return nil
+}
+
+// DismissReview implements provider.ReviewManager as a registered stub —
+// the only stub registration in the SDK.
+//
+// Registered mapping: STUB. 工蜂's review surface has no dismissal verb:
+// review notes can be created, listed, fetched, and edited
+// (UpdateReviewNote rewrites the body or reviewer_state), but no endpoint
+// removes or voids a review, and the dismissal message has no 工蜂
+// equivalent. The call fails fast with a platform error wrapping
+// provider.ErrNotImplemented.
+func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
+	return provider.Wrap(provider.PlatformTencentCode, "DismissReview", provider.ErrNotImplemented)
+}
+
+// reviewNoteState maps the SDK's review-event vocabulary to 工蜂's
+// reviewer_state verbs. Comment-style events carry no verdict (registered;
+// see the file doc).
+func reviewNoteState(event string) string {
+	switch event {
+	case "APPROVE":
+		return "approved"
+	case "REQUEST_CHANGES":
+		return "change_required"
+	default:
+		return ""
+	}
+}
+
+// convertReviewNote maps a gongfeng review note to a provider.Review. The
+// note model carries no verdict field, so State is always commented
+// (registered limitation); SubmittedAt carries the note's creation time.
+func convertReviewNote(n *gongfeng.Note) provider.Review {
+	if n == nil {
+		return provider.Review{}
+	}
+	review := provider.Review{
+		ID:          int64(n.ID),
+		State:       provider.ReviewStateCommented,
+		Body:        n.Body,
+		SubmittedAt: n.CreatedAt.Time,
+	}
+	if n.Author != nil {
+		review.User = n.Author.Username
+	}
+	return review
+}
+
+// convertReviewNoteResult maps the created review note to a
+// provider.ReviewResult; ID carries the note ID, the identifier GetReview
+// addresses the review by.
+func convertReviewNoteResult(n *gongfeng.Note) *provider.ReviewResult {
+	if n == nil {
+		return nil
+	}
+	return &provider.ReviewResult{
+		ID:   strconv.Itoa(n.ID),
+		Body: n.Body,
+		User: convertUser(n.Author),
+	}
+}
+
+var _ provider.ReviewManager = (*Provider)(nil)

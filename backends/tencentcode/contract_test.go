@@ -44,6 +44,22 @@ func TestTencentCode_Contract(t *testing.T) {
 			CommentsResponse: `[{"id":1,"body":"a comment","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			LabelsResponse:   `[{"name":"bug","color":"#4cc917","description":"something broke"}]`,
 		},
+		// Gongfeng review-note shape (GitLab-shaped notes carrying the
+		// review): id/body/author/created_at with system bookkeeping notes
+		// mixed into lists (filtered out by ListReviews). The note model
+		// carries no state field, so reads normalize to commented
+		// (registered) and the List subtest asserts that; create verdicts
+		// travel as reviewer_state — not under the suite's "event" key — so
+		// CreateEvent stays empty. RequestReviewers is a registered ignore
+		// and DismissReview a registered stub, both flagged.
+		Reviews: &contracttest.ReviewsHarnessConfig{
+			ListResponse:            `[{"id":1,"body":"looks good","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","system":false},{"id":2,"body":"milestone removed","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","system":true}]`,
+			GetResponse:             `{"id":1,"body":"looks good","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","system":false}`,
+			MutateResponse:          `{"id":1,"body":"looks good","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","system":false}`,
+			IgnoresRequestReviewers: true,
+			IgnoresDismissal:        true,
+			ListStateIsCommented:    true,
+		},
 		// Gongfeng release shape: tag_name/description only — the model has
 		// no name/id/url fields, and the update surface cannot carry a name
 		// (registered limitation), so the suite asserts the description key.

@@ -36,6 +36,16 @@ type ReviewsHarnessConfig struct {
 	// IgnoresRequestReviewers opts the backend out of the RequestReviewers
 	// wire assertion (see ReviewsHarness.IgnoresRequestReviewers).
 	IgnoresRequestReviewers bool
+	// IgnoresDismissal opts the backend out of the DismissReview verb
+	// assertion (see ReviewsHarness.IgnoresDismissal). It is for platforms
+	// whose ONLY dismissal gap is a registered stub: the platform exposes no
+	// dismiss surface at all, so DismissReview returns a wrapped
+	// provider.ErrNotImplemented and the subtest asserts that registration
+	// instead of a state-changing verb.
+	IgnoresDismissal bool
+	// ListStateIsCommented declares that the platform's review reads cannot
+	// carry a verdict state (see ReviewsHarness.ListStateIsCommented).
+	ListStateIsCommented bool
 }
 
 // ReviewsHarness is the full harness RunReviewsSuite consumes; auto-mounting
@@ -53,6 +63,22 @@ type ReviewsHarness struct {
 	// wire subtest then only asserts a silent, error-free no-op — anything
 	// reaching the network would mean the registration drifted.
 	IgnoresRequestReviewers bool
+	// IgnoresDismissal declares that the backend's DismissReview is a
+	// registered stub: the platform's review surface has no dismissal
+	// endpoint at all (Tencent 工蜂 review notes expose no dismiss verb), so
+	// the method documents the gap and returns a provider error wrapping
+	// provider.ErrNotImplemented without touching the wire. The subtest then
+	// asserts exactly that registration — a successful call or any recorded
+	// request would mean the stub drifted.
+	IgnoresDismissal bool
+	// ListStateIsCommented declares that the backend's review reads carry no
+	// verdict state: the SDK model behind ListReviews/GetReview has no state
+	// field (Tencent 工蜂 review notes — the verdict travels only on the
+	// create/update writes as reviewer_state and never comes back), so every
+	// read review normalizes to provider.ReviewStateCommented, a registered
+	// limitation. The List subtest then asserts that commented normalization
+	// instead of the default approved one.
+	ListStateIsCommented bool
 }
 
 // testReviewsSuite auto-mounts RunReviewsSuite from a main Harness with the
@@ -76,16 +102,18 @@ func testReviewsSuite(t *testing.T, h Harness) {
 			NewProvider:             h.NewProvider,
 			ReviewsHarnessConfig:    *h.Reviews,
 			IgnoresRequestReviewers: h.Reviews.IgnoresRequestReviewers,
+			IgnoresDismissal:        h.Reviews.IgnoresDismissal,
+			ListStateIsCommented:    h.Reviews.ListStateIsCommented,
 		})
 	}
 }
 
 // RunReviewsSuite executes the review-management contract suite. The mock
 // routes by method and path shape so platform-specific paths don't matter:
-// GET ending /reviews/{digits} → GetResponse; other GET → ListResponse;
-// POST → 201 + MutateResponse; PUT/PATCH → MutateResponse (GitHub's dismiss
-// is a PUT to a .../dismissals sub-resource); DELETE → 204. Requests are
-// recorded for wire assertions.
+// GET ending /reviews/{digits} or /notes/{digits} → GetResponse; other GET →
+// ListResponse; POST → 201 + MutateResponse; PUT/PATCH → MutateResponse
+// (GitHub's dismiss is a PUT to a .../dismissals sub-resource); DELETE → 204.
+// Requests are recorded for wire assertions.
 func RunReviewsSuite(t *testing.T, h ReviewsHarness) {
 	newRM := func(t *testing.T) (provider.ReviewManager, *[]recordedRequest) {
 		srv, requests := reviewStubServer(h)
@@ -100,7 +128,7 @@ func RunReviewsSuite(t *testing.T, h ReviewsHarness) {
 
 	t.Run("List_ParsesAndNormalizes", func(t *testing.T) {
 		rm, _ := newRM(t)
-		assertReviewListNormalized(t, rm)
+		assertReviewListNormalized(t, rm, h.ListStateIsCommented)
 	})
 	t.Run("Get_ReturnsReview", func(t *testing.T) {
 		rm, _ := newRM(t)
@@ -120,14 +148,21 @@ func RunReviewsSuite(t *testing.T, h ReviewsHarness) {
 	})
 	t.Run("Dismiss_NotGet", func(t *testing.T) {
 		rm, requests := newRM(t)
+		if h.IgnoresDismissal {
+			assertReviewDismissStubbed(t, rm, requests)
+			return
+		}
 		assertReviewDismissWire(t, rm, requests)
 	})
 }
 
 // assertReviewListNormalized checks that ListReviews returns parsed,
 // normalized reviews: id 1, user "dev", and the UPPERCASE wire state
-// "APPROVED" normalized to provider.ReviewStateApproved.
-func assertReviewListNormalized(t *testing.T, rm provider.ReviewManager) {
+// "APPROVED" normalized to provider.ReviewStateApproved. Platforms whose
+// review reads carry no verdict state (commentedList; a registered
+// limitation — see ReviewsHarness.ListStateIsCommented) assert the
+// commented normalization instead.
+func assertReviewListNormalized(t *testing.T, rm provider.ReviewManager, commentedList bool) {
 	t.Helper()
 	reviews, err := rm.ListReviews(context.Background(), "owner", "repo", "1")
 	if err != nil {
@@ -142,8 +177,12 @@ func assertReviewListNormalized(t *testing.T, rm provider.ReviewManager) {
 	if reviews[0].User != "dev" {
 		t.Errorf("expected review user %q, got %q", "dev", reviews[0].User)
 	}
-	if reviews[0].State != provider.ReviewStateApproved {
-		t.Errorf("expected normalized state %q, got %q", provider.ReviewStateApproved, reviews[0].State)
+	wantState := provider.ReviewStateApproved
+	if commentedList {
+		wantState = provider.ReviewStateCommented
+	}
+	if reviews[0].State != wantState {
+		t.Errorf("expected normalized state %q, got %q", wantState, reviews[0].State)
 	}
 }
 
@@ -234,6 +273,26 @@ func assertRequestReviewersIgnored(t *testing.T, rm provider.ReviewManager, requ
 	}
 }
 
+// assertReviewDismissStubbed checks a registered-stub DismissReview: the
+// call must fail with an error wrapping provider.ErrNotImplemented (the
+// platform exposes no dismissal surface; see
+// ReviewsHarness.IgnoresDismissal) and must stay completely off the wire.
+// A nil error or any recorded request means the stub registration has
+// drifted from the implementation.
+func assertReviewDismissStubbed(t *testing.T, rm provider.ReviewManager, requests *[]recordedRequest) {
+	t.Helper()
+	err := rm.DismissReview(context.Background(), "owner", "repo", "1", 1, "stale review")
+	if err == nil {
+		t.Fatal("expected the registered stub to return an error, got nil")
+	}
+	if !provider.IsNotImplemented(err) {
+		t.Fatalf("expected the registered stub to wrap provider.ErrNotImplemented, got %v", err)
+	}
+	if len(*requests) != 0 {
+		t.Errorf("expected the registered stub to make no HTTP requests, recorded %s", methodsOf(*requests))
+	}
+}
+
 // assertReviewDismissWire checks that DismissReview reached the server with a
 // state-changing verb. Platforms differ: GitHub PUTs a dismissal sub-resource,
 // others DELETE the review. A GET-only recording means the dismissal never
@@ -254,9 +313,12 @@ func assertReviewDismissWire(t *testing.T, rm provider.ReviewManager, requests *
 	t.Errorf("expected a non-GET dismissal request, recorded %s", methodsOf(*requests))
 }
 
-// reviewPathID matches a path that addresses a single review, e.g.
-// "/repos/owner/repo/pulls/1/reviews/42".
-var reviewPathID = regexp.MustCompile(`/reviews/\d+$`)
+// reviewPathID matches a path that addresses a single review or a single
+// review-bearing note, e.g. "/repos/owner/repo/pulls/1/reviews/42" (GitHub,
+// Gitea) or "/api/v3/projects/1/merge_requests/1/notes/42" (Tencent 工蜂's
+// note-based reviews). No platform's review-LIST GET ends in either shape,
+// so both route to the single-review fixture.
+var reviewPathID = regexp.MustCompile(`/(reviews|notes)/\d+$`)
 
 // reviewStubServer returns the method/shape-routed recording mock.
 func reviewStubServer(h ReviewsHarness) (*httptest.Server, *[]recordedRequest) {

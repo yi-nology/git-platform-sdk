@@ -23,6 +23,9 @@
 //   - labels.go:   repository label CRUD (LabelManager)
 //   - issues.go:   issue CRUD, state transitions, comments (via notes),
 //     and issue-label writes (IssueManager)
+//   - reviews.go:  code reviews over native review notes, reviewer
+//     requests (registered ignore), and dismissals (registered stub)
+//     (ReviewManager)
 //   - extras.go:  TencentCodeExtras (native code reviews, commit comments,
 //     repository tree, branch protection)
 //   - types.go:   gongfeng model -> provider model conversions
@@ -131,9 +134,9 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformTencen
 
 // Capabilities implements provider.Provider. The backend declares the
 // optional capability interfaces it implements (currently Labels,
-// Milestones, and Issues).
+// Milestones, Issues, and Reviews).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Milestones: true, Issues: true}
+	return provider.CapabilitySet{Labels: true, Milestones: true, Issues: true, Reviews: true}
 }
 
 // TestConnection implements provider.Provider.
