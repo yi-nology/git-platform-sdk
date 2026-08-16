@@ -6,6 +6,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Upgraded the GitCode backend to gitcode_api v0.7.0** (from v0.6.0) and
+  unlocked the backend's last two registered stubs, both riding real
+  endpoints the new SDK surface exposes — no behavior mappings or harness
+  opt-outs involved. `GetArchive` rides
+  `GetRepositoryArchive` (GET `/repos/{o}/{r}/archive/{archive}`): the
+  provider's (ref, format) pair folds into GitCode's single `ref.ext` path
+  segment — format `tar.gz` → `ref.tar.gz`, format `zip`/empty/anything
+  else → `ref.zip` (default-zip semantics mirroring the gitee backend's
+  format mapping, adapted to GitCode's extension-in-path scheme; gitee's
+  zipball/tarball keyword URLs do not apply). `CreateCommitStatus` rides
+  `CreateCommitStatus` (POST `/repos/{o}/{r}/statuses/{sha}`):
+  `provider.CommitStatusOptions` map 1:1 onto the SDK options, with state
+  passed through verbatim (GitCode expects the GitHub-shaped
+  pending/success/error/failure verbs). Targeted wire tests pin both the
+  request paths and the archive format mapping / status body keys.
+
 ## [v0.42.0] - 2026-08-16
 
 ### Added

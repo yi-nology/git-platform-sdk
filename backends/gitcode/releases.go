@@ -109,15 +109,23 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 
 // GetArchive implements provider.ReleaseManager.
 //
-// The GitCode platform API (/api/v5) does not expose an archive download
-// endpoint (equivalent to GitHub's GET /repos/{owner}/{repo}/archive/{ref}.{format}).
-// The SDK does offer ArchiveRepository/GetArchiveStatus for toggling a repo's
-// archived flag, but those manage repository state, not downloadable tarballs.
-// This is a platform-level limitation. If GitCode adds archive downloads in the
-// future, this method should be implemented using raw HTTP to handle the binary
-// response body.
+// GitCode's archive endpoint carries the ref and extension as a single
+// `ref.ext` path segment (GET /repos/{o}/{r}/archive/{archive}), so the
+// provider's (ref, format) pair maps: format "tar.gz" → ref+".tar.gz";
+// format "zip", empty, or anything else → ref+".zip" (default-zip
+// semantics, mirroring the gitee backend's format mapping, adapted to
+// GitCode's extension-in-path scheme — gitee's zipball/tarball keyword
+// URLs do not apply here). Returns the raw archive bytes.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	return nil, provider.Wrap(provider.PlatformGitCode, "GetArchive", provider.ErrNotImplemented)
+	ext := "zip"
+	if format == "tar.gz" {
+		ext = "tar.gz"
+	}
+	data, err := p.client.GetRepositoryArchive(ctx, owner, repo, ref+"."+ext)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "GetArchive", err)
+	}
+	return data, nil
 }
 
 func convertRelease(r *gitcode.Release) *provider.ReleaseInfo {
