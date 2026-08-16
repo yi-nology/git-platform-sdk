@@ -329,3 +329,230 @@ func TestProvider_ImplementsProvider(t *testing.T) {
 func TestProvider_ImplementsExtras(t *testing.T) {
 	var _ tencentcode.TencentCodeExtras = (*tencentcode.Provider)(nil)
 }
+
+// tcIssueResponse builds a gongfeng-shaped issue payload with the given
+// iid, state, and label set.
+func tcIssueResponse(iid int, state string, labels []string) map[string]any {
+	return map[string]any{
+		"id": 100, "iid": iid, "title": "bug", "description": "broke",
+		"state": state, "labels": labels,
+		"author":     map[string]any{"id": 1, "username": "dev", "name": "Developer"},
+		"assignees":  []any{map[string]any{"id": 1, "username": "dev", "name": "Developer"}},
+		"milestone":  map[string]any{"id": 5, "title": "v1"},
+		"created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+	}
+}
+
+// TestIssueStateTransitions_SendStateEventVerbs checks that CloseIssue and
+// ReopenIssue travel as 工蜂's documented state_event verbs (close/reopen).
+func TestIssueStateTransitions_SendStateEventVerbs(t *testing.T) {
+	var mu sync.Mutex
+	var events []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			mu.Lock()
+			events = append(events, body["state_event"].(string))
+			mu.Unlock()
+		}
+		writeJSON(w, tcIssueResponse(3, "closed", []string{"bug"}))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if _, err := p.CloseIssue(context.Background(), "owner", "repo", "3"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.ReopenIssue(context.Background(), "owner", "repo", "3"); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || events[0] != "close" || events[1] != "reopen" {
+		t.Errorf("expected state_event verbs [close reopen], got %v", events)
+	}
+}
+
+// TestListIssues_FiltersCarryWireVocabulary checks the state and labels
+// list filters reach the query string in 工蜂's vocabulary (state=opened,
+// labels csv).
+func TestListIssues_FiltersCarryWireVocabulary(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		writeJSON(w, []any{tcIssueResponse(3, "opened", []string{"bug"})})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if _, _, err := p.ListIssues(context.Background(), provider.ListIssuesOptions{
+		Owner: "owner", Repo: "repo", State: provider.IssueStateOpen, Labels: "a,b",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"state=opened", "labels=a%2Cb"} {
+		if !strings.Contains(gotQuery, want) {
+			t.Errorf("expected query to carry %s, got %q", want, gotQuery)
+		}
+	}
+}
+
+// TestUpdateIssue_WireMappings checks the update mappings: state becomes a
+// state_event verb, labels become a csv, and the milestone ref becomes the
+// numeric milestone_id.
+func TestUpdateIssue_WireMappings(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			body = map[string]any{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		writeJSON(w, tcIssueResponse(3, "opened", []string{"bug"}))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if _, err := p.UpdateIssue(context.Background(), "owner", "repo", "3", provider.UpdateIssueOptions{
+		Title: "fixed", Body: "no more", State: provider.IssueStateOpen,
+		Labels: []string{"a", "b"}, Milestone: "5",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]any{"title": "fixed", "description": "no more", "state_event": "reopen", "labels": "a,b", "milestone_id": float64(5)} {
+		if body[key] != want {
+			t.Errorf("expected %s=%v on the wire, got body %v", key, want, body)
+		}
+	}
+}
+
+// TestCreateIssue_IgnoresAssignees checks the registered Assignees
+// limitation: usernames cannot reach 工蜂's assignee_ids surface, so the
+// create body carries no assignee_ids key while title/description/labels
+// csv do travel.
+func TestCreateIssue_IgnoresAssignees(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			body = map[string]any{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		writeJSON(w, tcIssueResponse(9, "opened", []string{"bug"}))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if _, err := p.CreateIssue(context.Background(), provider.CreateIssueOptions{
+		Owner: "owner", Repo: "repo", Title: "bug", Body: "broke",
+		Assignees: []string{"dev"}, Labels: []string{"a", "b"}, Milestone: "5",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := body["assignee_ids"]; ok {
+		t.Errorf("expected no assignee_ids on the wire (registered ignore), got body %v", body)
+	}
+	if body["labels"] != "a,b" || body["milestone_id"] != float64(5) {
+		t.Errorf("expected labels csv and milestone_id, got body %v", body)
+	}
+}
+
+// TestGetIssue_MapsModelToProvider checks convertIssue's mappings: Number
+// carries the IID, state opened→open, the milestone ref carries the
+// milestone ID, and WebURL stays empty (the gongfeng model has no field).
+func TestGetIssue_MapsModelToProvider(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, tcIssueResponse(3, "opened", []string{"bug", "enhancement"}))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	issue, err := p.GetIssue(context.Background(), "owner", "repo", "3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issue.Number != "3" || issue.State != provider.IssueStateOpen {
+		t.Errorf("unexpected number/state: %+v", issue)
+	}
+	if issue.WebURL != "" {
+		t.Errorf("expected empty WebURL (registered), got %q", issue.WebURL)
+	}
+	if issue.Milestone == nil || issue.Milestone.Number != "5" || issue.Milestone.Title != "v1" {
+		t.Errorf("expected milestone ref {5, v1}, got %+v", issue.Milestone)
+	}
+	if len(issue.Assignees) != 1 || issue.Assignees[0] != "dev" {
+		t.Errorf("expected assignee usernames [dev], got %v", issue.Assignees)
+	}
+}
+
+// TestAddIssueLabels_UnionsAndRewrites checks the read-union-rewrite
+// shape: 工蜂's update surface takes the full label set only.
+func TestAddIssueLabels_UnionsAndRewrites(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			body = map[string]any{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		writeJSON(w, tcIssueResponse(3, "opened", []string{"bug", "enhancement"}))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if err := p.AddIssueLabels(context.Background(), "owner", "repo", "3", []string{"urgent", "bug"}); err != nil {
+		t.Fatal(err)
+	}
+	if body["labels"] != "bug,enhancement,urgent" {
+		t.Errorf("expected union csv bug,enhancement,urgent, got body %v", body)
+	}
+}
+
+// TestRemoveIssueLabel_RewritesWithoutName checks the read-filter-rewrite
+// shape when a label survives the filter.
+func TestRemoveIssueLabel_RewritesWithoutName(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			body = map[string]any{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		writeJSON(w, tcIssueResponse(3, "opened", []string{"bug", "enhancement"}))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if err := p.RemoveIssueLabel(context.Background(), "owner", "repo", "3", "bug"); err != nil {
+		t.Fatal(err)
+	}
+	if body["labels"] != "enhancement" {
+		t.Errorf("expected surviving csv enhancement, got body %v", body)
+	}
+}
+
+// TestRemoveIssueLabel_LastLabelNoOp checks the registered limitation:
+// removing an issue's only label yields an empty csv that omitempty drops
+// from the PUT body, so the rewrite carries no labels key at all.
+func TestRemoveIssueLabel_LastLabelNoOp(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			body = map[string]any{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		writeJSON(w, tcIssueResponse(3, "opened", []string{"bug"}))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if err := p.RemoveIssueLabel(context.Background(), "owner", "repo", "3", "bug"); err != nil {
+		t.Fatal(err)
+	}
+	if body == nil {
+		t.Fatal("expected a PUT rewrite")
+	}
+	if _, ok := body["labels"]; ok {
+		t.Errorf("expected no labels key on the wire (registered no-op), got body %v", body)
+	}
+}
+
+// TestIssueNumber_AtoiGuard checks the string-entry parse guard.
+func TestIssueNumber_AtoiGuard(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, tcIssueResponse(1, "opened", nil))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	_, err := p.GetIssue(context.Background(), "owner", "repo", "not-a-number")
+	if err == nil || !strings.Contains(err.Error(), `invalid issue number "not-a-number"`) {
+		t.Errorf("expected invalid issue number error, got %v", err)
+	}
+}

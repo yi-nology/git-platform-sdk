@@ -32,6 +32,18 @@ func TestTencentCode_Contract(t *testing.T) {
 			ListResponse:   `[{"name":"bug","color":"#4cc917","description":"something broke"}]`,
 			MutateResponse: `{"name":"bug","color":"#4cc917","description":"something broke"}`,
 		},
+		// Gongfeng issue shape (GitLab-shaped): iid/description, state
+		// "opened", plain-string labels, milestone keyed by id, no web_url
+		// (registered). GetResponse carries two labels so label removal has
+		// a survivor — removing an issue's last label is a registered no-op
+		// (the empty csv cannot travel on the update body).
+		Issues: &contracttest.IssuesHarnessConfig{
+			ListResponse:     `[{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:      `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse:   `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			CommentsResponse: `[{"id":1,"body":"a comment","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			LabelsResponse:   `[{"name":"bug","color":"#4cc917","description":"something broke"}]`,
+		},
 		// Gongfeng release shape: tag_name/description only — the model has
 		// no name/id/url fields, and the update surface cannot carry a name
 		// (registered limitation), so the suite asserts the description key.

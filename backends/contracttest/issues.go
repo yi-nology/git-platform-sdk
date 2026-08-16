@@ -220,13 +220,17 @@ func assertIssueLabelOps(t *testing.T, im provider.IssueManager, requests *[]rec
 	}
 }
 
-// sawLabelRemoval reports whether label removal used one of the two wire
-// shapes platforms have: a dedicated DELETE endpoint (GitHub, Gitea,
-// Forgejo, GitCode), or a PATCH/PUT write whose body carries a non-empty
+// sawLabelRemoval reports whether label removal used one of the three wire
+// shapes platforms have: a dedicated DELETE endpoint (GitHub, Gitee, Gitea,
+// Forgejo, GitCode); a PATCH/PUT write whose body carries a non-empty
 // remove_labels key (GitLab — go-gitlab sends the update form-encoded, and
-// the recorded Body map normalizes form keys). Bare method matching is not
-// enough: GitLab's AddIssueLabels is also a PUT, so a RemoveIssueLabel that
-// silently stopped sending remove_labels would otherwise pass.
+// the recorded Body map normalizes form keys); or a non-empty PATCH/PUT
+// labels replacement whose value no longer contains the removed name
+// (Tencent 工蜂 — its issue update surface accepts the full label set only,
+// so the backend reads, filters, and rewrites). Bare method matching is not
+// enough: GitLab's AddIssueLabels is also a PUT, and 工蜂's AddIssueLabels
+// is a labels-carrying PUT too, so a RemoveIssueLabel that silently stopped
+// writing would otherwise pass.
 func sawLabelRemoval(requests []recordedRequest) bool {
 	for _, r := range requests {
 		switch r.Method {
@@ -236,7 +240,34 @@ func sawLabelRemoval(requests []recordedRequest) bool {
 			if v, ok := r.Body["remove_labels"]; ok && nonEmptyBodyValue(v) {
 				return true
 			}
+			if v, ok := r.Body["labels"]; ok && nonEmptyBodyValue(v) && labelsOmitName(v, "bug") {
+				return true
+			}
 		}
+	}
+	return false
+}
+
+// labelsOmitName reports whether a recorded labels body value — a csv
+// string (工蜂) or a JSON array of names — carries no element equal to
+// name. Empty values don't count as evidence: the removal-as-replacement
+// write must carry a surviving label set.
+func labelsOmitName(v any, name string) bool {
+	switch labels := v.(type) {
+	case string:
+		for _, l := range strings.Split(labels, ",") {
+			if l == name {
+				return false
+			}
+		}
+		return true
+	case []any:
+		for _, l := range labels {
+			if s, ok := l.(string); ok && s == name {
+				return false
+			}
+		}
+		return true
 	}
 	return false
 }
