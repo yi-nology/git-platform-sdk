@@ -8,6 +8,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Tencent Code 工蜂 now declares the optional `Issues` capability.**
+  `IssueManager` is implemented over the gongfeng SDK's GitLab-shaped
+  issues and notes surfaces (all eleven methods: `ListIssues`, `GetIssue`,
+  `CreateIssue`, `UpdateIssue`, `CloseIssue`, `ReopenIssue`,
+  `ListIssueComments`, `CreateIssueComment`, `ListIssueLabels`,
+  `AddIssueLabels`, `RemoveIssueLabel`). Issues are addressed by IID and
+  carried as `Issue.Number`; state changes travel as the platform's
+  `state_event` verbs (`close`/`reopen`), wire state `opened` normalizes
+  to `open`, labels exchange as csv strings, and the milestone reference
+  exchanges as the numeric milestone ID (`MilestoneRef.Number` on this
+  platform). Three registered limitations: the `Assignees` fields on
+  create/update are ignored and the `ListIssuesOptions.Assignee` filter is
+  not carried — 工蜂's issue surfaces take assignee IDs, and resolving
+  usernames to IDs requires the Users API; removing an issue's only label
+  is a no-op — the empty label csv drops off the update body (`omitempty`),
+  so the label stays; and `Issue.WebURL` is always empty — the gongfeng
+  issue model carries no web URL field.
+
 - **Tencent Code 工蜂 now declares the optional `Labels` capability.**
   `LabelManager` is implemented over the gongfeng SDK's GitLab-shaped labels
   surface (all four methods: `ListLabels`, `CreateLabel`, `UpdateLabel`,

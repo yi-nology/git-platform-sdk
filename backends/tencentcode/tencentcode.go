@@ -21,6 +21,8 @@
 //     UpdateRelease, DeleteRelease, GetArchive
 //   - milestones.go: repository milestone CRUD (MilestoneManager)
 //   - labels.go:   repository label CRUD (LabelManager)
+//   - issues.go:   issue CRUD, state transitions, comments (via notes),
+//     and issue-label writes (IssueManager)
 //   - extras.go:  TencentCodeExtras (native code reviews, commit comments,
 //     repository tree, branch protection)
 //   - types.go:   gongfeng model -> provider model conversions
@@ -128,10 +130,10 @@ func sdkError(op string, err error) error {
 func (p *Provider) Platform() provider.Platform { return provider.PlatformTencentCode }
 
 // Capabilities implements provider.Provider. The backend declares the
-// optional capability interfaces it implements (currently Labels and
-// Milestones).
+// optional capability interfaces it implements (currently Labels,
+// Milestones, and Issues).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Milestones: true}
+	return provider.CapabilitySet{Labels: true, Milestones: true, Issues: true}
 }
 
 // TestConnection implements provider.Provider.
