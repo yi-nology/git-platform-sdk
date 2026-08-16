@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.43.0] - 2026-08-16
+
 ### Changed
 
 - **Upgraded the GitCode backend to gitcode_api v0.7.0** (from v0.6.0) and
