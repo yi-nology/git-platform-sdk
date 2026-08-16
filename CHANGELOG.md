@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.42.0] - 2026-08-16
+
 ### Added
 
 - **Tencent Code 工蜂 now declares the optional `Reviews` capability.**
