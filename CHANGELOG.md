@@ -8,6 +8,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Tencent Code 工蜂 now declares the optional `Reviews` capability.**
+  `ReviewManager` is implemented over the gongfeng SDK's native review
+  notes (`NotesService`): `CreateReview` posts a review note
+  (`CreateReviewNote`), `ListReviews` lists the review's notes
+  (`ListReviewNotes`, dropping 工蜂's system bookkeeping notes), and
+  `GetReview` fetches a single note by ID (`GetMergeRequestNote`).
+  Create verdicts map to the platform's `reviewer_state` verbs
+  (`APPROVE`→`approved`, `REQUEST_CHANGES`→`change_required`); note IDs
+  are the review identifiers end to end. Four registered limitations:
+  review reads carry no verdict state — the note model has no state
+  field, so `Review.State` is always `commented`; `CreateReview` ignores
+  `Comments` and `CommitID` (a review note carries at most one inline
+  position and is commit-less); `RequestReviewers` is a registered
+  ignore — 工蜂's merge-request update surface takes no reviewers and the
+  native invite endpoint addresses reviewers by numeric user IDs the
+  username-based SDK cannot resolve; and `DismissReview` is a registered
+  stub returning `provider.ErrNotImplemented` — 工蜂 exposes no review
+  dismissal surface (the SDK's only stub registration).
+- **The contract-test reviews suite learned two platform-declaration
+  flags.** `ReviewsHarnessConfig.IgnoresDismissal` (asserts a registered
+  `DismissReview` stub wraps `provider.ErrNotImplemented` and stays off
+  the wire, instead of asserting a state-changing verb) and
+  `ReviewsHarnessConfig.ListStateIsCommented` (asserts the registered
+  commented read state of platforms whose review model carries no
+  verdict). The single-review mock route also accepts note-style paths
+  (`.../notes/{id}`) beside review-style ones (`.../reviews/{id}`). The
+  six other review platforms are unaffected.
+
 - **Tencent Code 工蜂 now declares the optional `Issues` capability.**
   `IssueManager` is implemented over the gongfeng SDK's GitLab-shaped
   issues and notes surfaces (all eleven methods: `ListIssues`, `GetIssue`,

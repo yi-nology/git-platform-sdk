@@ -556,3 +556,159 @@ func TestIssueNumber_AtoiGuard(t *testing.T) {
 		t.Errorf("expected invalid issue number error, got %v", err)
 	}
 }
+
+func tcReviewNoteResponse(id int, body string, system bool) map[string]any {
+	return map[string]any{
+		"id": id, "body": body, "system": system,
+		"author":     map[string]any{"id": 1, "username": "dev", "name": "Developer"},
+		"created_at": "2026-01-01T00:00:00Z",
+		"updated_at": "2026-01-01T00:00:00Z",
+	}
+}
+
+// TestCreateReview_ReviewerStateWire checks the create mapping: the review
+// note posts to the reviews/{n}/notes collection with the body text and the
+// event mapped to 工蜂's reviewer_state verb (APPROVE→approved,
+// REQUEST_CHANGES→change_required, comment verdicts carry no state).
+func TestCreateReview_ReviewerStateWire(t *testing.T) {
+	var bodies []map[string]any
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			body := map[string]any{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			bodies = append(bodies, body)
+			paths = append(paths, r.URL.Path)
+		}
+		writeJSON(w, tcReviewNoteResponse(1, "looks good", false))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	for _, event := range []string{"APPROVE", "REQUEST_CHANGES", "COMMENT"} {
+		result, err := p.CreateReview(context.Background(), "owner", "repo", "1",
+			provider.CreateReviewOptions{Body: "looks good", Event: event})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result == nil || result.ID != "1" || result.Body != "looks good" {
+			t.Errorf("unexpected create result %+v", result)
+		}
+	}
+	wantStates := []any{"approved", "change_required", nil}
+	for i, want := range wantStates {
+		if got := bodies[i]["reviewer_state"]; got != want {
+			t.Errorf("event %d: expected reviewer_state %v, got %v (body %v)", i, want, got, bodies[i])
+		}
+		if got, want := bodies[i]["body"], any("looks good"); got != want {
+			t.Errorf("event %d: expected body %v, got %v", i, want, got)
+		}
+	}
+	for _, path := range paths {
+		if stripAPIPrefix(path) != "/projects/owner/repo/reviews/1/notes" {
+			t.Errorf("unexpected review-note path %q", path)
+		}
+	}
+}
+
+// TestListReviews_FiltersSystemNotes checks that the review list drops
+// 工蜂's system bookkeeping notes and maps the rest (state stays commented
+// — registered: the note model carries no verdict).
+func TestListReviews_FiltersSystemNotes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, []any{
+			tcReviewNoteResponse(1, "looks good", false),
+			tcReviewNoteResponse(2, "milestone removed", true),
+		})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	reviews, err := p.ListReviews(context.Background(), "owner", "repo", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reviews) != 1 {
+		t.Fatalf("expected 1 review (system note filtered), got %d", len(reviews))
+	}
+	r := reviews[0]
+	if r.ID != 1 || r.User != "dev" || r.Body != "looks good" {
+		t.Errorf("unexpected review mapping %+v", r)
+	}
+	if r.State != provider.ReviewStateCommented {
+		t.Errorf("expected commented state (registered), got %q", r.State)
+	}
+	if r.SubmittedAt.IsZero() {
+		t.Error("expected SubmittedAt to carry the note creation time")
+	}
+}
+
+// TestGetReview_FetchesNoteByID checks the single-review fetch addresses the
+// merge-request note collection by note ID.
+func TestGetReview_FetchesNoteByID(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = stripAPIPrefix(r.URL.Path)
+		writeJSON(w, tcReviewNoteResponse(7, "looks good", false))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	review, err := p.GetReview(context.Background(), "owner", "repo", "1", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/projects/owner/repo/merge_requests/1/notes/7" {
+		t.Errorf("unexpected note path %q", gotPath)
+	}
+	if review == nil || review.ID != 7 || review.User != "dev" {
+		t.Errorf("unexpected review %+v", review)
+	}
+}
+
+// TestRequestReviewers_RegisteredIgnore checks the registered ignore: the
+// call succeeds and nothing reaches the wire.
+func TestRequestReviewers_RegisteredIgnore(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		writeJSON(w, tcReviewNoteResponse(1, "looks good", false))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if err := p.RequestReviewers(context.Background(), "owner", "repo", "1", []string{"dev"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("expected the registered ignore to stay off the wire, got %d requests", n)
+	}
+}
+
+// TestDismissReview_RegisteredStub checks the registered stub: the call
+// fails with provider.ErrNotImplemented and nothing reaches the wire.
+func TestDismissReview_RegisteredStub(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		writeJSON(w, tcReviewNoteResponse(1, "looks good", false))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	err := p.DismissReview(context.Background(), "owner", "repo", "1", 1, "stale review")
+	if !provider.IsNotImplemented(err) {
+		t.Fatalf("expected a wrapped provider.ErrNotImplemented, got %v", err)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("expected the registered stub to stay off the wire, got %d requests", n)
+	}
+}
+
+// TestReviews_PRNumberAtoiGuard checks the string-entry parse guard.
+func TestReviews_PRNumberAtoiGuard(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, tcReviewNoteResponse(1, "looks good", false))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	_, err := p.ListReviews(context.Background(), "owner", "repo", "not-a-number")
+	if err == nil || !strings.Contains(err.Error(), `invalid pull request number "not-a-number"`) {
+		t.Errorf("expected invalid pull request number error, got %v", err)
+	}
+}
