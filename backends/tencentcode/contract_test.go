@@ -26,6 +26,12 @@ func TestTencentCode_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"iid":1,"project_id":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}]`,
 			MutateResponse: `{"id":1,"iid":1,"project_id":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}`,
 		},
+		// Gongfeng label shape (GitLab-shaped): name-addressed, colors carry
+		// a leading '#'.
+		Labels: &contracttest.LabelsHarnessConfig{
+			ListResponse:   `[{"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			MutateResponse: `{"name":"bug","color":"#4cc917","description":"something broke"}`,
+		},
 		// Gongfeng release shape: tag_name/description only — the model has
 		// no name/id/url fields, and the update surface cannot carry a name
 		// (registered limitation), so the suite asserts the description key.

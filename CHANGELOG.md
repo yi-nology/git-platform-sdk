@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Tencent Code 工蜂 now declares the optional `Labels` capability.**
+  `LabelManager` is implemented over the gongfeng SDK's GitLab-shaped labels
+  surface (all four methods: `ListLabels`, `CreateLabel`, `UpdateLabel`,
+  `DeleteLabel`). 工蜂 addresses labels by name natively — the current name
+  travels in the update/delete bodies — so no name→ID resolution scan is
+  needed. Colors exchange in GitLab form with a leading `#` on the wire and
+  normalize to bare 6-digit hex in the SDK. Registered limitation: the
+  gongfeng label model carries no id field, so `Label.ID` stays zero on this
+  platform (labels are name-addressed end to end).
+
 ## [v0.41.0] - 2026-08-16
 
 ### ⚠️ Breaking changes
