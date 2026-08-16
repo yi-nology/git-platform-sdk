@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -363,10 +362,9 @@ func (t *Provider) ReopenCodeReview(ctx context.Context, owner, repo string, rev
 func (t *Provider) GetCodeReviewChangedFiles(ctx context.Context, owner, repo string, reviewID int) ([]*provider.ChangedFile, error) {
 	// The SDK provides DownloadCommitReviewChangedFiles which writes to an io.Writer.
 	// For JSON parsing, use a raw API call via the SDK client.
-	encoded := owner + "/" + repo
 	var files []*provider.ChangedFile
 	err := t.doRequest(ctx, "GetCodeReviewChangedFiles", "GET",
-		fmt.Sprintf("projects/%s/review/%d/changed_files", encoded, reviewID), nil, &files)
+		fmt.Sprintf("projects/%s/review/%d/changed_files", esc(pid(owner, repo)), reviewID), nil, &files)
 	if err != nil {
 		return nil, err
 	}
@@ -573,13 +571,12 @@ func (t *Provider) GetRepoTree(ctx context.Context, owner, repo, path, ref strin
 
 func (t *Provider) GetBlob(ctx context.Context, owner, repo, sha string) ([]byte, error) {
 	// The SDK does not expose a blob endpoint directly. Use a raw API call.
-	encoded := owner + "/" + repo
 	var blob struct {
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
 	}
 	err := t.doRequest(ctx, "GetBlob", "GET",
-		fmt.Sprintf("projects/%s/repository/blobs/%s", url.PathEscape(encoded), url.PathEscape(sha)), nil, &blob)
+		fmt.Sprintf("projects/%s/repository/blobs/%s", esc(pid(owner, repo)), esc(sha)), nil, &blob)
 	if err != nil {
 		return nil, err
 	}
@@ -599,18 +596,18 @@ func (t *Provider) GetBlob(ctx context.Context, owner, repo, sha string) ([]byte
 
 func (t *Provider) ProtectBranch(ctx context.Context, owner, repo, branch string, opts ProtectBranchOptions) error {
 	return t.doRequest(ctx, "ProtectBranch", "PUT",
-		fmt.Sprintf("projects/%s/repository/branches/%s/protect", pid(owner, repo), url.PathEscape(branch)), opts, nil)
+		fmt.Sprintf("projects/%s/repository/branches/%s/protect", esc(pid(owner, repo)), esc(branch)), opts, nil)
 }
 
 func (t *Provider) UnprotectBranch(ctx context.Context, owner, repo, branch string) error {
 	return t.doRequest(ctx, "UnprotectBranch", "PUT",
-		fmt.Sprintf("projects/%s/repository/branches/%s/unprotect", pid(owner, repo), url.PathEscape(branch)), nil, nil)
+		fmt.Sprintf("projects/%s/repository/branches/%s/unprotect", esc(pid(owner, repo)), esc(branch)), nil, nil)
 }
 
 func (t *Provider) ListProtectedBranchMembers(ctx context.Context, owner, repo, branch string) ([]*ProtectedBranchMember, error) {
 	var members []*ProtectedBranchMember
 	err := t.doRequest(ctx, "ListProtectedBranchMembers", "GET",
-		fmt.Sprintf("projects/%s/branches/protected/%s/members", pid(owner, repo), url.PathEscape(branch)), nil, &members)
+		fmt.Sprintf("projects/%s/branches/protected/%s/members", esc(pid(owner, repo)), esc(branch)), nil, &members)
 	if err != nil {
 		return nil, err
 	}
@@ -623,7 +620,7 @@ func (t *Provider) AddProtectedBranchMember(ctx context.Context, owner, repo, br
 		body["access_level"] = opts.AccessLevel
 	}
 	return t.doRequest(ctx, "AddProtectedBranchMember", "POST",
-		fmt.Sprintf("projects/%s/branches/protected/%s/members", pid(owner, repo), url.PathEscape(branch)), body, nil)
+		fmt.Sprintf("projects/%s/branches/protected/%s/members", esc(pid(owner, repo)), esc(branch)), body, nil)
 }
 
 func (t *Provider) UpdateProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int, opts ProtectedBranchMemberOptions) error {
@@ -632,12 +629,12 @@ func (t *Provider) UpdateProtectedBranchMember(ctx context.Context, owner, repo,
 		body["access_level"] = opts.AccessLevel
 	}
 	return t.doRequest(ctx, "UpdateProtectedBranchMember", "PUT",
-		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", pid(owner, repo), url.PathEscape(branch), userID), body, nil)
+		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", esc(pid(owner, repo)), esc(branch), userID), body, nil)
 }
 
 func (t *Provider) RemoveProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int) error {
 	return t.doRequest(ctx, "RemoveProtectedBranchMember", "DELETE",
-		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", pid(owner, repo), url.PathEscape(branch), userID), nil, nil)
+		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", esc(pid(owner, repo)), esc(branch), userID), nil, nil)
 }
 
 // ===========================================================================
