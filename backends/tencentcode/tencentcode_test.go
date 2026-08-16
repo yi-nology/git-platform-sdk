@@ -566,10 +566,11 @@ func tcReviewNoteResponse(id int, body string, system bool) map[string]any {
 	}
 }
 
-// TestCreateReview_ReviewerStateWire checks the create mapping: the review
-// note posts to the reviews/{n}/notes collection with the body text and the
-// event mapped to 工蜂's reviewer_state verb (APPROVE→approved,
-// REQUEST_CHANGES→change_required, comment verdicts carry no state).
+// TestCreateReview_ReviewerStateWire checks the create mapping: the MR
+// review note posts to the merge_requests/{n}/notes collection with the
+// body text and the event mapped to 工蜂's reviewer_state verb
+// (APPROVE→approved, REQUEST_CHANGES→change_required, comment verdicts
+// carry no state).
 func TestCreateReview_ReviewerStateWire(t *testing.T) {
 	var bodies []map[string]any
 	var paths []string
@@ -604,17 +605,20 @@ func TestCreateReview_ReviewerStateWire(t *testing.T) {
 		}
 	}
 	for _, path := range paths {
-		if stripAPIPrefix(path) != "/projects/owner/repo/reviews/1/notes" {
-			t.Errorf("unexpected review-note path %q", path)
+		if stripAPIPrefix(path) != "/projects/owner/repo/merge_requests/1/notes" {
+			t.Errorf("unexpected MR-note path %q", path)
 		}
 	}
 }
 
-// TestListReviews_FiltersSystemNotes checks that the review list drops
-// 工蜂's system bookkeeping notes and maps the rest (state stays commented
-// — registered: the note model carries no verdict).
+// TestListReviews_FiltersSystemNotes checks that the review list reads the
+// merge_requests/{n}/notes collection, drops 工蜂's system bookkeeping
+// notes, and maps the rest (state stays commented — registered: the note
+// model carries no verdict).
 func TestListReviews_FiltersSystemNotes(t *testing.T) {
+	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = stripAPIPrefix(r.URL.Path)
 		writeJSON(w, []any{
 			tcReviewNoteResponse(1, "looks good", false),
 			tcReviewNoteResponse(2, "milestone removed", true),
@@ -625,6 +629,9 @@ func TestListReviews_FiltersSystemNotes(t *testing.T) {
 	reviews, err := p.ListReviews(context.Background(), "owner", "repo", "1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if gotPath != "/projects/owner/repo/merge_requests/1/notes" {
+		t.Errorf("unexpected MR-note path %q", gotPath)
 	}
 	if len(reviews) != 1 {
 		t.Fatalf("expected 1 review (system note filtered), got %d", len(reviews))
