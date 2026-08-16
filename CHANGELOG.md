@@ -35,7 +35,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   commented read state of platforms whose review model carries no
   verdict). The single-review mock route also accepts note-style paths
   (`.../notes/{id}`) beside review-style ones (`.../reviews/{id}`). The
-  six other review platforms are unaffected.
+  five other review platforms are unaffected.
 
 - **Tencent Code 工蜂 now declares the optional `Issues` capability.**
   `IssueManager` is implemented over the gongfeng SDK's GitLab-shaped
@@ -47,13 +47,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `state_event` verbs (`close`/`reopen`), wire state `opened` normalizes
   to `open`, labels exchange as csv strings, and the milestone reference
   exchanges as the numeric milestone ID (`MilestoneRef.Number` on this
-  platform). Three registered limitations: the `Assignees` fields on
+  platform). Four registered limitations: the `Assignees` fields on
   create/update are ignored and the `ListIssuesOptions.Assignee` filter is
   not carried — 工蜂's issue surfaces take assignee IDs, and resolving
   usernames to IDs requires the Users API; removing an issue's only label
   is a no-op — the empty label csv drops off the update body (`omitempty`),
-  so the label stays; and `Issue.WebURL` is always empty — the gongfeng
-  issue model carries no web URL field.
+  so the label stays; `Issue.WebURL` is always empty — the gongfeng
+  issue model carries no web URL field; and `Issue.ClosedAt` is always
+  nil — the model carries no closed-at field either.
 
 - **Tencent Code 工蜂 now declares the optional `Labels` capability.**
   `LabelManager` is implemented over the gongfeng SDK's GitLab-shaped labels
@@ -64,6 +65,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   normalize to bare 6-digit hex in the SDK. Registered limitation: the
   gongfeng label model carries no id field, so `Label.ID` stays zero on this
   platform (labels are name-addressed end to end).
+
+### Changed
+
+- **TencentCode's hand-built raw request paths now escape their variable
+  segments.** Nine request paths that interpolate into the URL by hand —
+  the `DiffManager` note delete and discussion create, the code-review
+  changed-files read, and the six branch-protection endpoints on the
+  extras surface — previously carried the owner/repo project path (and
+  the note ID) raw, so `#`, `?`, `%`, or spaces in an owner, repo, or
+  note ID corrupted the request URL. The whole project path now travels
+  percent-encoded as `owner%2Frepo` — the same wire form the gongfeng
+  SDK's typed methods have always produced (`parseID`) — and the escaping
+  is pinned by a dedicated wire-shape test asserting both the encoded
+  and the server-decoded path forms.
 
 ## [v0.41.0] - 2026-08-16
 

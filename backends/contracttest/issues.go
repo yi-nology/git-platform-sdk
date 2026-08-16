@@ -199,7 +199,9 @@ func assertIssueComments(t *testing.T, im provider.IssueManager, requests *[]rec
 
 // assertIssueLabelOps checks repository-label listing (color normalization),
 // adding labels to an issue, and removing one — via a dedicated DELETE
-// endpoint (GitHub-style) or via a PATCH/PUT write (GitLab's remove_labels).
+// endpoint (GitHub-style), a PATCH/PUT write carrying GitLab's
+// remove_labels, or a non-empty PATCH/PUT labels replacement that omits
+// the removed name (Tencent 工蜂; see sawLabelRemoval for the shapes).
 func assertIssueLabelOps(t *testing.T, im provider.IssueManager, requests *[]recordedRequest) {
 	t.Helper()
 	labels, err := im.ListIssueLabels(context.Background(), "owner", "repo")
@@ -216,7 +218,7 @@ func assertIssueLabelOps(t *testing.T, im provider.IssueManager, requests *[]rec
 		t.Fatalf("RemoveIssueLabel: %v", err)
 	}
 	if !sawLabelRemoval(*requests) {
-		t.Errorf("expected label removal via DELETE or a PATCH/PUT write carrying remove_labels, recorded %s", methodsOf(*requests))
+		t.Errorf("expected label removal via DELETE, a PATCH/PUT write carrying remove_labels, or a non-empty PATCH/PUT labels replacement omitting the removed name, recorded %s", methodsOf(*requests))
 	}
 }
 

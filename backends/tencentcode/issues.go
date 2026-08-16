@@ -12,7 +12,7 @@ import (
 
 // This file implements provider.IssueManager over the gongfeng SDK's
 // IssuesService and NotesService (工蜂 models issue comments as notes).
-// Three registered limitations apply:
+// Four registered limitations apply:
 //
 //   - assignees: 工蜂's issue write surface takes assignee_ids — a csv of
 //     numeric user IDs — so the SDK's username-based Assignees fields on
@@ -25,6 +25,9 @@ import (
 //     no-op (the label stays).
 //   - web URL: gongfeng's Issue model carries no web_url field, so
 //     Issue.WebURL is always empty on this platform.
+//   - closed-at: the model carries no closed_at field either, so
+//     Issue.ClosedAt is always nil (the wire state still round-trips via
+//     Issue.State).
 
 // issueNumber parses the SDK's string issue number into gongfeng's int IID
 // form. op is the public operation the parse serves; failures surface
