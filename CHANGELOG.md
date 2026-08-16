@@ -9,11 +9,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **Tencent Code 工蜂 now declares the optional `Reviews` capability.**
-  `ReviewManager` is implemented over the gongfeng SDK's native review
-  notes (`NotesService`): `CreateReview` posts a review note
-  (`CreateReviewNote`), `ListReviews` lists the review's notes
-  (`ListReviewNotes`, dropping 工蜂's system bookkeeping notes), and
-  `GetReview` fetches a single note by ID (`GetMergeRequestNote`).
+  `ReviewManager` is implemented over the gongfeng SDK's merge-request
+  notes (`NotesService`): `CreateReview` posts an MR note carrying the
+  review (`CreateMergeRequestNote`), `ListReviews` lists the MR's notes
+  (`ListMergeRequestNotes`, dropping 工蜂's system bookkeeping notes), and
+  `GetReview` fetches a single note by ID (`GetMergeRequestNote`) — the
+  same collection end to end, so created reviews round-trip.
   Create verdicts map to the platform's `reviewer_state` verbs
   (`APPROVE`→`approved`, `REQUEST_CHANGES`→`change_required`); note IDs
   are the review identifiers end to end. Four registered limitations:
