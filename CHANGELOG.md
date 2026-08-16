@@ -26,7 +26,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   native invite endpoint addresses reviewers by numeric user IDs the
   username-based SDK cannot resolve; and `DismissReview` is a registered
   stub returning `provider.ErrNotImplemented` — 工蜂 exposes no review
-  dismissal surface (the SDK's only stub registration).
+  dismissal surface (the only registered stub among the optional-capability
+  interfaces; the SDK's other stubs live on core interfaces).
 - **The contract-test reviews suite learned two platform-declaration
   flags.** `ReviewsHarnessConfig.IgnoresDismissal` (asserts a registered
   `DismissReview` stub wraps `provider.ErrNotImplemented` and stays off
