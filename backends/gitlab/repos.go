@@ -21,8 +21,11 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 			ListOptions: gitlab.ListOptions{Page: page64, PerPage: perPage64},
 		}, gitlab.WithContext(ctx))
 	} else {
+		// 无 Owner 时限定 membership,只列当前 token 用户参与的项目;
+		// 否则 /projects 会返回全实例可见项目(公共 GitLab 上是海量数据)。
 		projects, _, err = p.client.Projects.ListProjects(&gitlab.ListProjectsOptions{
 			ListOptions: gitlab.ListOptions{Page: page64, PerPage: perPage64},
+			Membership:  gitlab.Ptr(true),
 		}, gitlab.WithContext(ctx))
 	}
 	if err != nil {

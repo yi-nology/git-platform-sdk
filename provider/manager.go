@@ -288,5 +288,7 @@ func (m *Manager) Stop() {
 // appears in the key. This avoids accidental leakage via logs, error
 // messages, or heap dumps.
 func (m *Manager) buildKey(cfg Config) string {
-	return fmt.Sprintf("%s:%s:%s", cfg.Platform, cfg.BaseURL, m.hasher(cfg.Token))
+	// SkipTLS 参与 key:TLS 策略变化必须产生新 provider,
+	// 否则更新平台配置后仍命中旧缓存的严格 TLS client,直到重启才生效。
+	return fmt.Sprintf("%s:%s:%s:%t", cfg.Platform, cfg.BaseURL, m.hasher(cfg.Token), cfg.SkipTLS)
 }
