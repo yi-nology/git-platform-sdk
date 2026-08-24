@@ -6,6 +6,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.44.0] - 2026-08-24
+
+### Fixed
+
+- **GitLab `ListRepos` now scopes project listings to the token user.** Without
+  an `Owner`, the backend called `GET /projects` with no filters, which returns
+  every project visible to the token on the instance (on public GitLab that is
+  the entire instance; on self-hosted instances far more than the user's own
+  repos), in unstable order. It now sends `membership=true` so only projects
+  the user belongs to are listed.
+- **Provider cache key now includes `SkipTLS`.** The Manager's cache key was
+  `platform:baseURL:tokenHash`, so flipping a platform's skip-TLS setting kept
+  hitting the cached strict-TLS client until process restart. TLS policy
+  changes now take effect immediately.
+- **gogit `Push` treats `already up-to-date` as idempotent success.** Re-pushing
+  an unchanged ref returned go-git's `NoErrAlreadyUpToDate` sentinel, which
+  surfaced as an error and made no-op syncs fail. It is now a success with an
+  empty `PushedRefs`.
+
 ## [v0.43.0] - 2026-08-16
 
 ### Changed
