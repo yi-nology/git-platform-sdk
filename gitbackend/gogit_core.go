@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -136,6 +137,11 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 
 	err = repo.PushContext(ctx, pushOpts)
 	if err != nil {
+		// "already up-to-date" 表示远端已与本地一致(无变化),是幂等成功,
+		// 不是错误;否则重复同步同一 commit 会被误判为失败。
+		if errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return &PushResult{PushedRefs: nil}, nil
+		}
 		return nil, newGitError("Push", opts.RepoPath, "", err)
 	}
 	// go-git's PushContext does not expose per-ref success/failure details,
