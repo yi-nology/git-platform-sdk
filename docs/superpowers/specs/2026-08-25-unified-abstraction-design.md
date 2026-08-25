@@ -209,7 +209,7 @@ Divergences() []Divergence
 
 ### Phase 2:能力矩阵硬化(决策 B)——估 1 天
 
-1. `Capabilities_Consistency` 扩展:stub/能力声明互斥校验;
+1. `Capabilities_Consistency` 扩展覆盖新增能力字段(`CommitStatuses`)。注意:方法级 stub 与已声明的可选能力并存是合法形态(部分缺席,如 tencentcode 的 DismissReview);全能力缺席已由既有双向一致性测试强制走 Capabilities 声明,无需额外互斥校验(2026-08-25 计划阶段精化);
 2. CONTRIBUTING 固化"新增可选能力 checklist"(CapabilitySet 字段 → 各后端 → 契约套件 → 台账登记,四处联动清单)。
 
 ### Phase 3:清洁 API 收口——估 2~3 天(2026-08-25 拍板:由触发式改为立即实施)
