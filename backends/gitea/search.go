@@ -10,7 +10,7 @@ import (
 )
 
 // This file implements the provider.SearchManager surface over the Gitea
-// SDK. Mappings and registrations (design spec §4.6 ledger):
+// SDK. Mappings and registrations (divergence ledger):
 //   - SearchRepos rides the global keyword repo search (/repos/search);
 //     Sort passes through in Gitea's own vocabulary (alpha/created/updated/
 //     size/id) — values from other platforms' vocabularies are ignored

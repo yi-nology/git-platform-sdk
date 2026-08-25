@@ -11,7 +11,7 @@ import (
 // This file implements the provider.SearchManager surface over the GitLab
 // client-go SDK, via the typed SearchService scopes (projects/issues/users).
 //
-// Registrations (design spec §4.6 mapping ledger):
+// Registrations (divergence ledger):
 //   - SearchIssuesOptions.Repo routes to Search.IssuesByProject (the
 //     project-scoped search endpoint) when set; otherwise the global
 //     Search.Issues runs.

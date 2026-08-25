@@ -12,7 +12,7 @@ import (
 
 // This file implements the provider.SearchManager surface over go-github.
 //
-// Registrations (design spec §4.6 mapping ledger):
+// Registrations (divergence ledger):
 //   - GitHub's search API is global: SearchReposOptions carries no repo
 //     scoping, so the query travels as-is. SearchIssuesOptions.Repo becomes
 //     a "repo:owner/name" qualifier, State a "state:" qualifier.

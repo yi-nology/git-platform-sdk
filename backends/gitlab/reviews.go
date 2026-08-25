@@ -12,7 +12,7 @@ import (
 
 // ListReviews implements provider.ReviewManager.
 //
-// Registered mapping (spec §4.6): GitLab has no per-review list — approvals
+// Registered mapping (divergence ledger): GitLab has no per-review list — approvals
 // are a single state on the merge request. ListReviews maps to
 // MergeRequestApprovalsService.GetApprovalState(pid, mrIID) and synthesizes
 // one summary review per approver: Review{ID: MR IID, User: approver
@@ -33,7 +33,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 
 // GetReview implements provider.ReviewManager.
 //
-// Registered mapping (spec §4.6): the same GetApprovalState call as
+// Registered mapping (divergence ledger): the same GetApprovalState call as
 // ListReviews. GitLab approvals expose no per-review IDs, so reviewID cannot
 // be matched; this returns the first synthesized approver review as an
 // approximation. When nobody has approved yet the call reports NotFound.
@@ -55,7 +55,7 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 
 // CreateReview implements provider.ReviewManager.
 //
-// Registered mapping (spec §4.6): GitLab has no native review object, so a
+// Registered mapping (divergence ledger): GitLab has no native review object, so a
 // review is expressed as a comment-style review — a merge-request note via
 // Notes.CreateMergeRequestNote(pid, iid, {Body}), the same shape the
 // pre-ReviewManager DiffManager.CreateReview used for its summary. Inline
@@ -76,7 +76,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 }
 
 // RequestReviewers implements provider.ReviewManager as a registered ignore
-// (spec §4.6).
+// (divergence ledger).
 //
 // Registered mapping: IGNORED. GitLab's UpdateMergeRequest takes
 // ReviewerIDs ([]int64), but the SDK addresses reviewers by username and
@@ -89,7 +89,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 
 // DismissReview implements provider.ReviewManager.
 //
-// Registered mapping (spec §4.6): UnapproveMergeRequest(pid, mrIID). GitLab
+// Registered mapping (divergence ledger): UnapproveMergeRequest(pid, mrIID). GitLab
 // approvals hang off the merge request as a whole (per user), not off
 // individual review objects, so reviewID is not addressable and the
 // dismissal message has no GitLab equivalent (ignored).
