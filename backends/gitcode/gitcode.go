@@ -1,6 +1,6 @@
 // Package gitcode implements the GitCode Provider for the git-platform-sdk.
 //
-// It builds on top of the yi-nology/gitcode_api client SDK and adds
+// It builds on top of the yi-nology/go-gitcode client SDK and adds
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
 // provided by the parent project's transport package. All Provider methods
 // are split across the per-responsibility files in this package:
@@ -27,7 +27,7 @@ import (
 	"net/http"
 	"time"
 
-	gitcode "github.com/yi-nology/gitcode_api"
+	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -51,8 +51,9 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		logger = provider.NewNoopLogger()
 	}
 
+	baseURL := backendutil.DefaultBaseURL(cfg.BaseURL, "https://api.gitcode.com/api/v5")
 	transportClient := transport.NewClient(
-		backendutil.DefaultBaseURL(cfg.BaseURL, "https://api.gitcode.com/api/v5"),
+		baseURL,
 		transport.BearerToken{Token: cfg.Token},
 	)
 	transportClient.Logger = logger
@@ -67,7 +68,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	// Build an http.Client whose transport flows through the unified
-	// auth/retry/hooks pipeline, then inject it into the gitcode_api SDK
+	// auth/retry/hooks pipeline, then inject it into the go-gitcode SDK
 	// via SetHTTPClient.
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
@@ -77,12 +78,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		),
 	}
 
-	var client *gitcode.Client
-	if cfg.BaseURL == "" {
-		client = gitcode.NewClient(cfg.Token)
-	} else {
-		client = gitcode.NewClientWithBaseURL(cfg.BaseURL, cfg.Token)
-	}
+	client := gitcode.NewClientWithBaseURL(baseURL, cfg.Token)
 	client.SetHTTPClient(httpClient)
 
 	return &Provider{client: client, rawClient: transportClient, logger: logger}, nil

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
-	gitcode "github.com/yi-nology/gitcode_api"
+	gitcode "github.com/yi-nology/go-gitcode"
 )
 
 // SearchRepos implements provider.SearchManager.

@@ -6,6 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Replaced `gitcode_api` with `go-gitcode` v0.7.2** (module rename of the
+  same SDK). The GitCode backend now imports
+  `github.com/yi-nology/go-gitcode` instead of the deprecated
+  `github.com/yi-nology/gitcode_api`. The new module's API is a strict
+  superset (adds private-deployment support: `SetBaseURL`/`BaseURL`,
+  `NewClientFromEnv`, OAuth with custom base URL), so no behavior changes.
+  The backend constructor was also simplified to always construct the client
+  via `NewClientWithBaseURL` with a single resolved base URL.
+
 ## [v0.44.0] - 2026-08-24
 
 ### Fixed

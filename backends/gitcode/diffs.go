@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	gitcode "github.com/yi-nology/gitcode_api"
+	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )

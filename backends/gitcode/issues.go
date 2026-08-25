@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
-	gitcode "github.com/yi-nology/gitcode_api"
+	gitcode "github.com/yi-nology/go-gitcode"
 )
 
 // issueNumber parses the SDK's string issue number into gitcode's int form.

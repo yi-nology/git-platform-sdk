@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
-	gitcode "github.com/yi-nology/gitcode_api"
+	gitcode "github.com/yi-nology/go-gitcode"
 )
 
 // ListLabels implements provider.LabelManager. GitCode's list endpoint does
@@ -43,7 +43,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	if opts.Color != nil {
 		// GitCode's label API uses '#'-prefixed colors on the wire (docs:
 		// create "eg: #fff", update responses show "#ED4014") — the same
-		// form gitcode_api's create path sends. The public SDK contract
+		// form go-gitcode's create path sends. The public SDK contract
 		// stays '#' free; only the wire form carries it. TrimPrefix keeps a
 		// caller-supplied '#' from doubling.
 		updateOpts.Color = "#" + strings.TrimPrefix(*opts.Color, "#")

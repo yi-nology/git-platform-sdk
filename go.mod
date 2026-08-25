@@ -9,7 +9,7 @@ require (
 	github.com/antihax/optional v1.0.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/google/go-github/v69 v69.2.0
-	github.com/yi-nology/gitcode_api v0.7.0
+	github.com/yi-nology/go-gitcode v0.7.2
 	gitlab.com/gitlab-org/api/client-go/v2 v2.55.1
 	golang.org/x/crypto v0.54.0
 )

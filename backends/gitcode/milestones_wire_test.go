@@ -13,7 +13,7 @@ import (
 )
 
 // TestGitCode_MilestoneMutations_OmitDueOn verifies the wire form of the
-// milestone mutation bodies: gitcode_api's create/update option structs
+// milestone mutation bodies: go-gitcode's create/update option structs
 // marshal `due_on` without omitempty, so riding the SDK would post
 // `"due_on": ""` on every call without a due date — on GitCode's
 // GitHub-shaped API that conventionally clears (or errors on) the value,
