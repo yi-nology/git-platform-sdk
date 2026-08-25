@@ -71,5 +71,8 @@ func TestGitea_Contract(t *testing.T) {
 			IssuesResponse: `[{"number":1,"title":"found","state":"open","body":"b","html_url":"https://gitea.example.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z","repository":{"full_name":"owner/repo"}}]`,
 			UsersResponse:  `{"ok":true,"data":[{"login":"dev","full_name":"Dev","avatar_url":"https://gitea.example.com/avatars/1","html_url":"https://gitea.example.com/dev"}]}`,
 		},
+		// CommitStatus is zero-config: the suite self-drives against the
+		// recording server and asserts a single status-reporting request.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
 	})
 }

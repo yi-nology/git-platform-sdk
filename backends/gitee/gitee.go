@@ -25,7 +25,7 @@
 //   - webhooks.go: webhook CRUD + signature validation + event parsing
 //   - branches.go: ListBranches, CreateBranch, DeleteBranch
 //   - diffs.go:   GetCRDiff, GetCRFiles, CreateNote/DeleteNote, CreateDiscussion
-//   - commits.go: GetCommit, ListCommits, CompareCommits, CreateCommitStatus
+//   - commits.go: GetCommit, ListCommits, CompareCommits
 //   - files.go:   GetFileContent, CreateFile, UpdateFile, DeleteFile
 //   - releases.go: ListTags, ListReleases, CreateRelease, GetArchive
 //   - labels.go:  repository label CRUD (LabelManager)

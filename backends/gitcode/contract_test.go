@@ -67,5 +67,8 @@ func TestGitCode_Contract(t *testing.T) {
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 		},
+		// CommitStatus is zero-config: the suite self-drives against the
+		// recording server and asserts a single status-reporting request.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
 	})
 }

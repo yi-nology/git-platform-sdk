@@ -68,5 +68,8 @@ func TestTencentCode_Contract(t *testing.T) {
 			UpdateResponse:             `{"tag_name":"v1.0.0","description":"updated notes","created_at":"2026-01-01T00:00:00Z"}`,
 			UpdateSendsDescriptionOnly: true,
 		},
+		// CommitStatus is zero-config: the suite self-drives against the
+		// recording server and asserts a single status-reporting request.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
 	})
 }

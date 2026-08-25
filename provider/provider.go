@@ -33,11 +33,12 @@ const (
 // here and update every backend's Capabilities method; the contract suite
 // enforces that declarations match implementations.
 type CapabilitySet struct {
-	Issues     bool // provider.IssueManager
-	Search     bool // provider.SearchManager
-	Labels     bool // provider.LabelManager
-	Milestones bool // provider.MilestoneManager
-	Reviews    bool // provider.ReviewManager
+	Issues         bool // provider.IssueManager
+	Search         bool // provider.SearchManager
+	Labels         bool // provider.LabelManager
+	Milestones     bool // provider.MilestoneManager
+	Reviews        bool // provider.ReviewManager
+	CommitStatuses bool // provider.CommitStatusManager
 }
 
 // Provider is the unified interface for all Git hosting platforms.
@@ -46,12 +47,14 @@ type CapabilitySet struct {
 // Consumers can depend on smaller interfaces (e.g., WebhookManager)
 // when they don't need full Provider capabilities.
 //
-// IssueManager and SearchManager are NOT part of Provider: only some platforms
-// support them. Consumers that need issues or search should type-assert against
-// the optional capability interfaces:
+// IssueManager, SearchManager, and CommitStatusManager are NOT part of
+// Provider: only some platforms support them. Consumers that need issues,
+// search, or commit statuses should type-assert against the optional
+// capability interfaces:
 //
 //	if ism, ok := p.(provider.IssueManager); ok { ... }
 //	if sm, ok := p.(provider.SearchManager); ok { ... }
+//	if csm, ok := p.(provider.CommitStatusManager); ok { ... }
 //
 //	Caps declares the same information programmatically: consumers can route
 //	on p.Capabilities() instead of probing with type assertions.
