@@ -772,7 +772,7 @@ func TestRenderMatchesCommittedLedger(t *testing.T) {
 - [x] **Step 3: go:generate 指令与首跑** — 在 `provider/divergence.go` 文件头(package 行之前)加:
 
 ```go
-//go:generate go run ../../internal/tools/genledger
+//go:generate go run ../internal/tools/genledger
 ```
 
 Run: `go generate ./... && go test ./internal/tools/genledger/`;预期:生成 `docs/divergence-ledger.md`,golden 测试 PASS。
