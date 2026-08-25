@@ -75,15 +75,25 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 	return convertNoteReviewResult(note), nil
 }
 
-// RequestReviewers implements provider.ReviewManager as a registered ignore
-// (divergence ledger).
-//
-// Registered mapping: IGNORED. GitLab's UpdateMergeRequest takes
-// ReviewerIDs ([]int64), but the SDK addresses reviewers by username and
-// exposes no Users API to resolve username→ID — the same class of
-// limitation as CreateIssue's ignored Assignees. The call therefore
-// succeeds without effect and touches no wire.
+// RequestReviewers implements provider.ReviewManager. Reviewer usernames
+// are resolved to user IDs via the Users API (cached) and written through
+// UpdateMergeRequest's reviewer_ids.
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
+	iid, err := prNumber("RequestReviewers", number)
+	if err != nil {
+		return err
+	}
+	if len(reviewers) == 0 {
+		return nil
+	}
+	ids, err := p.resolveUserIDs(ctx, "RequestReviewers", reviewers)
+	if err != nil {
+		return err
+	}
+	if _, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), iid,
+		&gitlab.UpdateMergeRequestOptions{ReviewerIDs: &ids}, gitlab.WithContext(ctx)); err != nil {
+		return provider.Wrap(provider.PlatformGitLab, "RequestReviewers", err)
+	}
 	return nil
 }
 

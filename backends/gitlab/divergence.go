@@ -14,8 +14,6 @@ var divergences = []provider.Divergence{
 		Reason: "A review is created as a merge-request note; verdicts and inline comments have no GitLab mapping, so every created review is in the commented state."},
 	{Capability: "ReviewManager", Method: "DismissReview", Field: "reviewID, message", Kind: provider.DivergenceMapping,
 		Reason: "Maps to UnapproveMergeRequest: approvals hang off the merge request as a whole, so per-review IDs are not addressable and the message has no equivalent."},
-	{Capability: "ReviewManager", Method: "RequestReviewers", Kind: provider.DivergenceIgnore,
-		Reason: "UpdateMergeRequest takes reviewer IDs while the SDK addresses reviewers by username; the resolver is not wired, so the call succeeds without effect."}, // REMOVE in Task 12
 	{Capability: "ReleaseManager", Method: "UpdateRelease", Field: "opts.Draft, opts.Prerelease", Kind: provider.DivergenceIgnore,
 		Reason: "GitLab releases expose no draft or prerelease flags."},
 	{Capability: "SearchManager", Method: "SearchRepos", Field: "sort, order, state", Kind: provider.DivergenceIgnore,

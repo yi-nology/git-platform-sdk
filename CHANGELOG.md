@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **GitLab `RequestReviewers` now really requests reviewers instead of
+  silently doing nothing.** The reviewer usernames are resolved to GitLab
+  user IDs through the Users API (`GET /users?username=<name>`, exact-match
+  filter, memoized in the same per-provider TTL cache as issue assignees)
+  and are written as `reviewer_ids` via `UpdateMergeRequest`. Behavior
+  change: the call was previously a registered ignore that succeeded
+  without any effect; it now takes real effect, and an unknown reviewer
+  username fails the call with a `NotFound` error (`provider.IsNotFound`)
+  instead of succeeding without the assignment. The registered-ignore
+  ledger entry for `RequestReviewers` is removed, and the reviews contract
+  suite gained a `RequestReviewersByID` harness flag asserting the
+  lookup-then-write-by-ID wire shape.
 - **GitLab `CreateIssue`/`UpdateIssue` now honor `Assignees` instead of
   silently ignoring them.** The usernames are resolved to GitLab user IDs
   through the Users API (`GET /users?username=<name>`, exact-match filter)

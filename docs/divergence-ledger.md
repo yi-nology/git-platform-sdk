@@ -33,7 +33,6 @@ This document is generated from the backends' registered divergence ledgers
 | ReviewManager | GetReview |  | mapping | Backed by the approval state; returns the first approver's synthesized review and reports NotFound when nobody has approved yet. |
 | ReviewManager | CreateReview | opts.Event, opts.CommitID, opts.Comments | mapping | A review is created as a merge-request note; verdicts and inline comments have no GitLab mapping, so every created review is in the commented state. |
 | ReviewManager | DismissReview | reviewID, message | mapping | Maps to UnapproveMergeRequest: approvals hang off the merge request as a whole, so per-review IDs are not addressable and the message has no equivalent. |
-| ReviewManager | RequestReviewers |  | ignore | UpdateMergeRequest takes reviewer IDs while the SDK addresses reviewers by username; the resolver is not wired, so the call succeeds without effect. |
 | ReleaseManager | UpdateRelease | opts.Draft, opts.Prerelease | ignore | GitLab releases expose no draft or prerelease flags. |
 | SearchManager | SearchRepos | sort, order, state | ignore | GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored. |
 | SearchManager | SearchIssues | sort, order, state | ignore | GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored. |
