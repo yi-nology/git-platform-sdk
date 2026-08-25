@@ -2,12 +2,13 @@ package gitea
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	gitea "code.gitea.io/sdk/gitea"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -78,33 +79,36 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 	return nil
 }
 
-// resolveLabelID finds the numeric ID of the named label. Gitea's update and
+// resolveLabelID finds the numeric ID of the named label via the shared
+// paginated resolver with a per-provider TTL cache. Gitea's update and
 // delete endpoints address labels by ID while the SDK's surface addresses
-// them by name. Labels are scanned with server-side pagination (100 per
-// page, bounded to 50 pages); a label beyond that bound may be reported as
-// not found even though it exists. op is the public operation the resolution
-// serves; failures surface under that op rather than under this unexported
-// helper's name. The gitea SDK's label methods accept no context, so this
-// helper carries none either.
+// them by name. Exhausting the 50-page budget surfaces a scan-limit error
+// (distinct from a definitive 404). op is the public operation the
+// resolution serves; failures surface under that op rather than under this
+// unexported helper's name. The gitea SDK's label methods accept no
+// context, so this helper carries none either.
 func (p *Provider) resolveLabelID(op, owner, repo, name string) (int64, error) {
-	const pageSize = 100
-	for page := 1; page <= 50; page++ {
+	id, err := p.labelIDs.ResolveLabel(owner+"/"+repo, name, func(page, perPage int) ([]backendutil.LabelRef, error) {
 		labels, _, err := p.client.ListRepoLabels(owner, repo, gitea.ListLabelsOptions{
-			ListOptions: gitea.ListOptions{Page: page, PageSize: pageSize},
+			ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
 		})
 		if err != nil {
-			return 0, provider.Wrap(provider.PlatformGitea, op, err)
+			return nil, err
 		}
-		for _, l := range labels {
-			if l.Name == name {
-				return l.ID, nil
-			}
+		refs := make([]backendutil.LabelRef, len(labels))
+		for i, l := range labels {
+			refs[i] = backendutil.LabelRef{ID: l.ID, Name: l.Name}
 		}
-		if len(labels) < pageSize {
-			break
+		return refs, nil
+	}, 50, 100)
+	if err != nil {
+		if errors.Is(err, backendutil.ErrLabelScanLimit) {
+			msg := fmt.Sprintf("label %q not found within 50 pages (scan limit)", name)
+			return 0, provider.Wrap(provider.PlatformGitea, op, backendutil.NewScanLimitError(msg))
 		}
+		return 0, provider.Wrap(provider.PlatformGitea, op, err)
 	}
-	return 0, provider.New(provider.PlatformGitea, op, http.StatusNotFound, fmt.Sprintf("label %q not found", name))
+	return id, nil
 }
 
 // convertLabel maps a gitea.Label to a provider.Label. Gitea colors may

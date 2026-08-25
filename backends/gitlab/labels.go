@@ -2,12 +2,13 @@ package gitlab
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -80,32 +81,34 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 	return nil
 }
 
-// resolveLabelID finds the numeric ID of the named label. GitLab's update and
+// resolveLabelID finds the numeric ID of the named label via the shared
+// paginated resolver with a per-provider TTL cache. GitLab's update and
 // delete endpoints address labels by ID while the SDK's surface addresses
-// them by name. Labels are scanned with server-side pagination (100 per
-// page, bounded to 50 pages); a label beyond that bound may be reported as
-// not found even though it exists. op is the public operation the resolution
-// serves; failures surface under that op rather than under this unexported
-// helper's name.
+// them by name. Exhausting the 50-page budget surfaces a scan-limit error
+// (distinct from a definitive 404). op is the public operation the
+// resolution serves; failures surface under that op.
 func (p *Provider) resolveLabelID(ctx context.Context, op, owner, repo, name string) (int64, error) {
-	const perPage = 100
-	for page := 1; page <= 50; page++ {
+	id, err := p.labelIDs.ResolveLabel(owner+"/"+repo, name, func(page, perPage int) ([]backendutil.LabelRef, error) {
 		labels, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
-			&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: perPage}},
+			&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)}},
 			gitlab.WithContext(ctx))
 		if err != nil {
-			return 0, provider.Wrap(provider.PlatformGitLab, op, err)
+			return nil, err
 		}
-		for _, l := range labels {
-			if l.Name == name {
-				return l.ID, nil
-			}
+		refs := make([]backendutil.LabelRef, len(labels))
+		for i, l := range labels {
+			refs[i] = backendutil.LabelRef{ID: l.ID, Name: l.Name}
 		}
-		if len(labels) < perPage {
-			break
+		return refs, nil
+	}, 50, 100)
+	if err != nil {
+		if errors.Is(err, backendutil.ErrLabelScanLimit) {
+			msg := fmt.Sprintf("label %q not found within 50 pages (scan limit)", name)
+			return 0, provider.Wrap(provider.PlatformGitLab, op, backendutil.NewScanLimitError(msg))
 		}
+		return 0, provider.Wrap(provider.PlatformGitLab, op, err)
 	}
-	return 0, provider.New(provider.PlatformGitLab, op, http.StatusNotFound, fmt.Sprintf("label %q not found", name))
+	return id, nil
 }
 
 // convertLabel maps a gitlab.Label to a provider.Label. GitLab colors carry

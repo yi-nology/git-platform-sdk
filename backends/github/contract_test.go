@@ -65,6 +65,9 @@ func TestGitHub_Contract(t *testing.T) {
 			IssuesResponse:  `{"total_count":1,"items":[{"number":1,"title":"found","state":"open","body":"b","html_url":"https://github.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z"}]}`,
 			UsersResponse:   `{"total_count":1,"items":[{"login":"dev","name":"Dev","avatar_url":"https://github.com/avatars/u/1","html_url":"https://github.com/dev"}]}`,
 		},
+		// CommitStatus is zero-config: the suite self-drives against the
+		// recording server and asserts a single status-reporting request.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
 	})
 }
 

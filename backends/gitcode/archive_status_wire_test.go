@@ -99,7 +99,7 @@ func TestGitCode_CreateCommitStatus_WireFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
-	cm := p.(provider.CommitManager)
+	cm := p.(provider.CommitStatusManager)
 
 	err = cm.CreateCommitStatus(context.Background(), "o", "r", "abc123", provider.CommitStatusOptions{
 		State:       "success",
