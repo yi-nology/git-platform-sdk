@@ -43,7 +43,7 @@ func TestGitCode_GetArchive_WireFormat(t *testing.T) {
 		t.Fatalf("GetArchive: %v", err)
 	}
 	if errors.Is(err, provider.ErrNotImplemented) {
-		t.Fatal("GetArchive still returns ErrNotImplemented; archive is a real endpoint since gitcode_api v0.7.0")
+		t.Fatal("GetArchive still returns ErrNotImplemented; archive is a real endpoint since go-gitcode v0.7.0")
 	}
 	if string(got) != payload {
 		t.Errorf("archive bytes = %q, want %q", got, payload)
@@ -111,7 +111,7 @@ func TestGitCode_CreateCommitStatus_WireFormat(t *testing.T) {
 		t.Fatalf("CreateCommitStatus: %v", err)
 	}
 	if errors.Is(err, provider.ErrNotImplemented) {
-		t.Fatal("CreateCommitStatus still returns ErrNotImplemented; statuses are a real endpoint since gitcode_api v0.7.0")
+		t.Fatal("CreateCommitStatus still returns ErrNotImplemented; statuses are a real endpoint since go-gitcode v0.7.0")
 	}
 
 	mu.Lock()

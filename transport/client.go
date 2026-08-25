@@ -14,7 +14,7 @@
 //     RoundTripper returned by Client.RoundTripper is a standard
 //     http.RoundTripper that performs auth/retry/hooks on every request made by
 //     any client that builds on net/http. This is how go-github, gitlab
-//     client-go, gitea-sdk, forgejo-sdk and gitcode_api are wired up so they
+//     client-go, gitea-sdk, forgejo-sdk and go-gitcode are wired up so they
 //     benefit from the same cross-cutting behavior without code duplication.
 package transport
 

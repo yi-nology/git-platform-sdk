@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"time"
 
-	gitcode "github.com/yi-nology/gitcode_api"
+	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
 )
 
-// This file implements provider.MilestoneManager over gitcode_api's
+// This file implements provider.MilestoneManager over go-gitcode's
 // milestones surface. GitCode addresses milestones by their ID (the wire's
 // "id" — the SDK's Get/Update/Delete path parameter, whatever its
 // "number" spelling) — the same value MilestoneRef.Number and
@@ -132,7 +132,7 @@ func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number stri
 // into raw-client paths (owner, repo, ...) must pass through this — the
 // transport client joins BaseURL and Path by plain concatenation, so
 // characters like '#', '?', '%', or spaces would otherwise corrupt or
-// truncate the URL. (SDK-covered calls are handed to gitcode_api's typed
+// truncate the URL. (SDK-covered calls are handed to go-gitcode's typed
 // methods and are out of scope here.)
 func esc(s string) string { return url.PathEscape(s) }
 

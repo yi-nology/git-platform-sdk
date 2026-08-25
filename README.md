@@ -493,7 +493,7 @@ git-platform-sdk/
 │   ├── gitlab/                  # GitLab (client-go SDK + transport 包装)
 │   ├── gitea/                   # Gitea (gitea SDK + transport 包装)
 │   ├── forgejo/                 # Forgejo (forgejo SDK + transport 包装)
-│   ├── gitcode/                 # GitCode (gitcode_api SDK)
+│   ├── gitcode/                 # GitCode (go-gitcode SDK)
 │   ├── gitee/                   # Gitee (go-gitee SDK + transport 包装, 个别写端点登记 raw 绕行)
 │   ├── tencentcode/             # Tencent 工蜂 (transport.Client + Extras)
 │   ├── all/                     # 一行 blank import 注册所有平台
@@ -552,7 +552,7 @@ git push origin v0.28.0
 
 ## 相关项目
 
-- [gitcode_api](https://github.com/yi-nology/gitcode_api) - GitCode 专用 API 客户端
+- [go-gitcode](https://github.com/yi-nology/go-gitcode) - GitCode 专用 API 客户端
 
 ## 许可证
 
