@@ -41,6 +41,7 @@ type Provider struct {
 	client   *gitlab.Client
 	logger   provider.Logger
 	labelIDs *backendutil.IDCache
+	userIDs  *backendutil.IDCache
 }
 
 // New builds a GitLab Provider from the given config.
@@ -81,7 +82,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: failed to create client: %w", err)
 	}
-	return &Provider{client: client, logger: logger, labelIDs: backendutil.NewIDCache(5 * time.Minute)}, nil
+	return &Provider{
+		client:   client,
+		logger:   logger,
+		labelIDs: backendutil.NewIDCache(5 * time.Minute),
+		userIDs:  backendutil.NewIDCache(5 * time.Minute),
+	}, nil
 }
 
 // Platform implements provider.Provider.

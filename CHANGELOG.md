@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitLab `CreateIssue`/`UpdateIssue` now honor `Assignees` instead of
+  silently ignoring them.** The usernames are resolved to GitLab user IDs
+  through the Users API (`GET /users?username=<name>`, exact-match filter)
+  memoized in a per-provider TTL cache, and are sent as `assignee_ids` on the
+  issue write. Behavior change: callers who previously passed `Assignees`
+  with no effect will now see real assignments, and an unknown username
+  fails the call with a `NotFound` error (`provider.IsNotFound`) instead of
+  succeeding without the assignment. The two registered-ignore ledger
+  entries for `opts.Assignees` are removed.
+
 ### Added
 
 - **Divergence ledger**: every backend now registers the places where its
