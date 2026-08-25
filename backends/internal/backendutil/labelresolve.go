@@ -54,3 +54,17 @@ func (c *IDCache) ResolveLabel(key, name string, scan LabelPageFunc, maxPages, p
 	c.Put(key+"/"+name, id)
 	return id, nil
 }
+
+// ScanLimitError wraps ErrLabelScanLimit with a platform-specific message
+// (errors.Is reports it as ErrLabelScanLimit). Callers that need to
+// distinguish "not found within the scan budget" from other failures use
+// errors.Is(err, backendutil.ErrLabelScanLimit).
+type ScanLimitError struct {
+	Msg string
+}
+
+func (e *ScanLimitError) Error() string { return e.Msg }
+func (e *ScanLimitError) Unwrap() error { return ErrLabelScanLimit }
+
+// NewScanLimitError builds a ScanLimitError with the given message.
+func NewScanLimitError(msg string) error { return &ScanLimitError{Msg: msg} }

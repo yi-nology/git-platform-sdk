@@ -60,3 +60,14 @@ func TestIDCacheResolveLabelCaches(t *testing.T) {
 		t.Fatalf("scans = %d, want 1 (second and third resolve must hit the cache)", scans)
 	}
 }
+
+func TestNewScanLimitErrorPreservesSentinel(t *testing.T) {
+	const msg = `label "missing" not found within 50 pages (scan limit)`
+	err := NewScanLimitError(msg)
+	if !errors.Is(err, ErrLabelScanLimit) {
+		t.Fatalf("errors.Is(err, ErrLabelScanLimit) = false for %v, want true", err)
+	}
+	if err.Error() != msg {
+		t.Fatalf("err.Error() = %q, want %q", err.Error(), msg)
+	}
+}

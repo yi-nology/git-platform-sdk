@@ -2,6 +2,7 @@ package gitlab_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -100,6 +102,9 @@ func TestGitLab_ResolveLabelID_NotFoundStopsOnShortPage(t *testing.T) {
 	}
 	if provider.IsNotFound(err) {
 		t.Fatalf("scan-limit exhaustion must not surface as NotFound, got %v", err)
+	}
+	if !errors.Is(err, backendutil.ErrLabelScanLimit) {
+		t.Fatalf("ErrLabelScanLimit sentinel must survive provider.Wrap, got %v", err)
 	}
 	if !strings.Contains(err.Error(), "scan limit") {
 		t.Fatalf("expected scan-limit error message, got %v", err)

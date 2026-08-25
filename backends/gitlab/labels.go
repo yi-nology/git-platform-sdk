@@ -3,6 +3,7 @@ package gitlab
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
@@ -102,7 +103,8 @@ func (p *Provider) resolveLabelID(ctx context.Context, op, owner, repo, name str
 	}, 50, 100)
 	if err != nil {
 		if errors.Is(err, backendutil.ErrLabelScanLimit) {
-			return 0, provider.Wrapf(provider.PlatformGitLab, op, "label %q not found within 50 pages (scan limit)", name)
+			msg := fmt.Sprintf("label %q not found within 50 pages (scan limit)", name)
+			return 0, provider.Wrap(provider.PlatformGitLab, op, backendutil.NewScanLimitError(msg))
 		}
 		return 0, provider.Wrap(provider.PlatformGitLab, op, err)
 	}
