@@ -74,8 +74,7 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 }
 
 // CreateIssue implements provider.IssueManager.
-// opts.Assignees is ignored: GitLab's API takes assignee IDs, and resolving
-// usernames to IDs requires the Users API (a future UserManager round).
+// Assignees are resolved to user IDs via the Users API (cached).
 func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
 	createOpts := &gitlab.CreateIssueOptions{Title: gitlab.Ptr(opts.Title)}
 	if opts.Body != "" {
@@ -84,6 +83,13 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	if len(opts.Labels) > 0 {
 		lo := gitlab.LabelOptions(opts.Labels)
 		createOpts.Labels = &lo
+	}
+	if len(opts.Assignees) > 0 {
+		assigneeIDs, err := p.resolveUserIDs(ctx, "CreateIssue", opts.Assignees)
+		if err != nil {
+			return nil, err
+		}
+		createOpts.AssigneeIDs = &assigneeIDs
 	}
 	if opts.Milestone != "" {
 		m, err := milestoneNumber("CreateIssue", opts.Milestone)
@@ -100,7 +106,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 }
 
 // UpdateIssue implements provider.IssueManager.
-// opts.Assignees is ignored (see CreateIssue).
+// Assignees are resolved to user IDs via the Users API (cached).
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
 	n, err := issueNumber("UpdateIssue", number)
 	if err != nil {
@@ -123,6 +129,13 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	if len(opts.Labels) > 0 {
 		lo := gitlab.LabelOptions(opts.Labels)
 		updateOpts.Labels = &lo
+	}
+	if len(opts.Assignees) > 0 {
+		assigneeIDs, err := p.resolveUserIDs(ctx, "UpdateIssue", opts.Assignees)
+		if err != nil {
+			return nil, err
+		}
+		updateOpts.AssigneeIDs = &assigneeIDs
 	}
 	if opts.Milestone != "" {
 		m, err := milestoneNumber("UpdateIssue", opts.Milestone)
