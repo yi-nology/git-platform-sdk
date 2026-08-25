@@ -80,6 +80,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("Webhook_ValidateSignature", func(t *testing.T) { testWebhookSignature(t, h) })
 	t.Run("Context_Cancel", func(t *testing.T) { testContextCancel(t, h) })
 	t.Run("Capabilities_Consistency", func(t *testing.T) { testCapabilities(t, h) })
+	t.Run("DivergenceSuite", func(t *testing.T) { testDivergenceSuite(t, h) })
 	t.Run("LabelsSuite", func(t *testing.T) { testLabelsSuite(t, h) })
 	t.Run("IssuesSuite", func(t *testing.T) { testIssuesSuite(t, h) })
 	t.Run("ReviewsSuite", func(t *testing.T) { testReviewsSuite(t, h) })
