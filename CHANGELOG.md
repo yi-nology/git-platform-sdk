@@ -46,6 +46,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: `SearchManager` total return changed from `int` to `*int`.**
+  The three methods (`SearchRepos`, `SearchIssues`, `SearchUsers`) now return
+  `*int` for the server-side total: non-nil with the platform-reported count
+  when available (GitHub), nil when the platform does not report a total
+  (GitLab, Gitea, Forgejo, GitCode, Gitee). Callers that previously relied on
+  the total being a concrete `int` must now nil-check before dereferencing.
+  The old behavior of returning `len(results)` as a fake total is removed.
 - **BREAKING: `CreateCommitStatus` moved out of the core `CommitManager`
   into a new optional `CommitStatusManager` capability interface**
   (`provider/iface_commitstatus.go`). Commit statuses are a CI reporting

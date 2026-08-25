@@ -17,7 +17,7 @@ import (
 // search calls are plain GETs).
 
 // SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := gitee.GetV5SearchRepositoriesOpts{
 		AccessToken: p.accessToken(),
@@ -32,7 +32,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 	}
 	repos, resp, err := p.client.SearchApi.GetV5SearchRepositories(ctx, opts.Query, &searchOpts)
 	if err != nil {
-		return nil, 0, p.sdkErr("SearchRepos", resp, err)
+		return nil, nil, p.sdkErr("SearchRepos", resp, err)
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(repos))
 	for i := range repos {
@@ -47,12 +47,12 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 			Private:       r.Private,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchIssues implements provider.SearchManager. Gitee issue numbers are
 // alphanumeric strings on the wire and carry through as-is.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := gitee.GetV5SearchIssuesOpts{
 		AccessToken: p.accessToken(),
@@ -73,7 +73,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 	}
 	issues, resp, err := p.client.SearchApi.GetV5SearchIssues(ctx, opts.Query, &searchOpts)
 	if err != nil {
-		return nil, 0, p.sdkErr("SearchIssues", resp, err)
+		return nil, nil, p.sdkErr("SearchIssues", resp, err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(issues))
 	for i := range issues {
@@ -93,11 +93,11 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 			CreatedAt: issue.CreatedAt,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchUsers implements provider.SearchManager.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := gitee.GetV5SearchUsersOpts{
 		AccessToken: p.accessToken(),
@@ -112,7 +112,7 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 	}
 	users, resp, err := p.client.SearchApi.GetV5SearchUsers(ctx, opts.Query, &searchOpts)
 	if err != nil {
-		return nil, 0, p.sdkErr("SearchUsers", resp, err)
+		return nil, nil, p.sdkErr("SearchUsers", resp, err)
 	}
 	out := make([]*provider.SearchUserResult, 0, len(users))
 	for i := range users {
@@ -124,7 +124,7 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 			WebURL:    u.HtmlUrl,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 var _ provider.SearchManager = (*Provider)(nil)
