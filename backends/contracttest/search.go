@@ -26,8 +26,8 @@ type SearchHarnessConfig struct {
 	// ReposTotalCount is the server-side total the repos fixture reports
 	// (GitHub's envelope carries total_count; the suite then asserts
 	// SearchRepos returns exactly this total). Zero means the platform
-	// reports no server-side total — the backend derives the total from the
-	// returned page and the suite keeps the weaker total >= len(results)
+	// reports no server-side total — the backend returns nil for total and
+	// the suite keeps the weaker total == nil || *total >= len(results)
 	// assertion.
 	ReposTotalCount int
 	// IssuesResponse is the JSON body for issue-search GETs, same per-
