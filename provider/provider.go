@@ -63,6 +63,13 @@ type Provider interface {
 	// Capabilities statically declares the optional capability interfaces
 	// this provider implements. See CapabilitySet.
 	Capabilities() CapabilitySet
+	// Divergences statically declares this backend's divergence ledger: the
+	// registered places where its behavior departs from the unified
+	// semantics (stub / ignore / mapping / detour). Consumers can route on
+	// these entries — e.g. provider.Ignores — and docs/divergence-ledger.md
+	// is generated from them. Like CapabilitySet this is a compile-time
+	// declaration; the contract suite locks ledger entries to behavior.
+	Divergences() []Divergence
 
 	RepoManager
 	ChangeRequestManager
