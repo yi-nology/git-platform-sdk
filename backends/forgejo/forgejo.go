@@ -38,8 +38,9 @@ import (
 
 // Provider is the Forgejo implementation of provider.Provider.
 type Provider struct {
-	client *forgejo.Client
-	logger provider.Logger
+	client   *forgejo.Client
+	logger   provider.Logger
+	labelIDs *backendutil.IDCache
 }
 
 // New builds a Forgejo Provider from the given config.
@@ -75,7 +76,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("forgejo: failed to create client: %w", err)
 	}
-	return &Provider{client: client, logger: logger}, nil
+	return &Provider{client: client, logger: logger, labelIDs: backendutil.NewIDCache(5 * time.Minute)}, nil
 }
 
 // Platform implements provider.Provider.
