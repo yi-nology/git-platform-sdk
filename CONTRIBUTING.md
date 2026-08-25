@@ -52,6 +52,23 @@ Run `make check` before pushing — it mirrors what CI runs.
 5. Add the platform constant to `provider/provider.go` and the README platform
    list.
 
+## Adding an optional capability
+
+1. Define the interface in `provider/iface_<name>.go` and add a
+   `CapabilitySet` field (e.g. `CommitStatuses`).
+2. Implement it in every backend that supports it; declare the field in each
+   backend's `Capabilities()`. Platforms that cannot serve the capability do
+   not implement it at all — absence is expressed by the declaration, never
+   by a stub.
+3. Extend `backends/contracttest/capabilities.go` with the bidirectional
+   assertion for the new field, and add a mounted suite
+   (`backends/contracttest/<name>.go` + `Harness` field + `Run` wiring).
+4. Register any partial divergences (per-method stubs, ignored fields,
+   semantic mappings, raw detours) in the affected backends'
+   `divergence.go`, then run `go generate ./...` to refresh
+   `docs/divergence-ledger.md`.
+5. Update this checklist if the coupling points change.
+
 ## Breaking changes
 
 This project follows SemVer. Breaking changes to the public API require a new
