@@ -1,3 +1,5 @@
+//go:generate go run ../internal/tools/genledger
+
 package provider
 
 // DivergenceKind classifies how a backend's behavior departs from the

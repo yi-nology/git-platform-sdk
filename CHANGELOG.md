@@ -6,6 +6,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Divergence ledger**: every backend now registers the places where its
+  behavior departs from the unified semantics (stub / ignore / mapping /
+  detour) as machine-readable `provider.Divergence` entries, surfaced by the
+  new `Provider.Divergences()` interface method and package-level
+  `<backend>.Divergences()` functions, with helper predicates
+  `provider.Ignores`, `provider.Stubs`, and `provider.FindByMethod` for
+  querying the ledger. The rendered document is generated into
+  `docs/divergence-ledger.md` by `internal/tools/genledger` — run
+  `go generate ./...` after editing any backend's `divergence.go`; a golden
+  test keeps the committed document in sync, and the contract-test
+  divergence suite fails when a ledger entry drifts from actual behavior.
+
 ### Changed
 
 - **Replaced `gitcode_api` with `go-gitcode` v0.7.2** (module rename of the
