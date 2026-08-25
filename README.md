@@ -64,13 +64,13 @@ func main() {
 
 | Platform | Status | Coverage |
 |----------|--------|----------|
-| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
-| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
-| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
-| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
+| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
+| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
+| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
+| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
 | Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Search |
-| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search |
-| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews + exclusive features |
+| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
+| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/CommitStatuses + exclusive features |
 
 ### Installation
 
@@ -102,6 +102,16 @@ cmd := mgr.BuildSSHCommand("/path/to/key")
 cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
 ```
 
+## Divergence ledger
+
+Every backend registers the places where its behavior departs from the
+unified semantics (stub / ignore / mapping / detour) in a machine-readable
+ledger, surfaced by `Provider.Divergences()` and helper predicates such as
+`provider.Ignores`. The rendered document lives at
+[docs/divergence-ledger.md](docs/divergence-ledger.md); regenerate it with
+`go generate ./...` after editing any backend's `divergence.go`. The
+contract suite fails when a ledger entry drifts from actual behavior.
+
 ---
 
 ## 简介
@@ -119,13 +129,13 @@ cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
 
 | 平台 | 状态 | API 覆盖 | 默认 API |
 |------|------|----------|----------|
-| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://api.github.com` |
-| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://gitlab.com/api/v4` |
-| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://gitea.com/api/v1` |
-| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://codeberg.org` |
+| GitHub | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses | `https://api.github.com` |
+| GitLab | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses | `https://gitlab.com/api/v4` |
+| Gitea | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses | `https://gitea.com/api/v1` |
+| Forgejo | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses | `https://codeberg.org` |
 | Gitee | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Search | `https://gitee.com/api/v5` |
-| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search | `https://api.gitcode.com/api/v5` |
-| Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
+| GitCode | ✅ 稳定 | 仓库/PR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses | `https://api.gitcode.com/api/v5` |
+| Tencent Code | ✅ 稳定 | 仓库/MR/Webhook/分支/提交/文件/Release/Labels/Issues/Milestones/Reviews/CommitStatuses + 工蜂专属能力 | `https://git.code.tencent.com/api/v3` |
 
 ## 安装
 
@@ -244,7 +254,7 @@ type Provider interface {
     WebhookManager       // CreateWebhook, DeleteWebhook, ListWebhooks, ParseWebhookEvent, ...
     BranchManager        // ListBranches, CreateBranch, DeleteBranch
     DiffManager          // GetCRDiff, GetCRFiles, CreateNote, DeleteNote, CreateDiscussion
-    CommitManager        // GetCommit, ListCommits, CompareCommits, CreateCommitStatus
+    CommitManager        // GetCommit, ListCommits, CompareCommits
     FileManager          // GetFileContent, CreateFile, UpdateFile, DeleteFile
     ReleaseManager       // ListTags, ListReleases, CreateRelease, GetReleaseByTag, UpdateRelease, DeleteRelease, GetArchive
 }
@@ -264,7 +274,7 @@ func (h *WebhookHandler) HandleEvent(r *http.Request) error {
 }
 ```
 
-### 可选能力（Issues / Search / Labels / Milestones / Reviews）
+### 可选能力（Issues / Search / Labels / Milestones / Reviews / CommitStatuses）
 
 并非所有平台都支持全部可选能力。这些接口**不在** `Provider` 组合中，调用方通过
 `Capabilities()` 声明式判断（或直接类型断言）：
@@ -292,11 +302,16 @@ if caps.Labels {
 | Labels | `LabelManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode / Tencent Code |
 | Milestones | `MilestoneManager` | GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode / Tencent Code |
 | Reviews | `ReviewManager` | GitHub / GitLab / Gitea / Forgejo / GitCode / Tencent Code |
+| CommitStatuses | `CommitStatusManager` | GitHub / GitLab / Gitea / Forgejo / GitCode / Tencent Code |
 
 说明：
 
 - **Gitee 不声明 Reviews**: Gitee API 只有 PR 审查人员（Testers）指派，没有
   review 列表/创建/驳回端点，不满足能力门槛（spec §4.6），整接口不做。
+- **Gitee 不声明 CommitStatuses**: `CreateCommitStatus` 已从核心 `CommitManager`
+  拆入可选 `CommitStatusManager`（`Capabilities().CommitStatuses` 门控）；Gitee 公开
+  REST API 没有 commit-status 端点，原来的 `ErrNotImplemented` 桩已随拆分移除——
+  能力缺失以不声明表达，而非桩方法。
 - **Release 加厚属于核心接口而非可选能力**: `ReleaseManager` 新增
   `GetReleaseByTag` / `UpdateRelease` / `DeleteRelease`（一律按 tag 寻址），
   7 个平台全部实现。

@@ -10,7 +10,7 @@ import (
 )
 
 // This file implements the provider.SearchManager surface over the Gitea
-// SDK. Mappings and registrations (design spec §4.6 ledger):
+// SDK. Mappings and registrations (divergence ledger):
 //   - SearchRepos rides the global keyword repo search (/repos/search);
 //     Sort passes through in Gitea's own vocabulary (alpha/created/updated/
 //     size/id) — values from other platforms' vocabularies are ignored
@@ -25,11 +25,11 @@ import (
 //     repo-scoped results and totals stay exact (no client-side
 //     filtering). State forwards natively.
 //   - SearchUsers rides /users/search.
-//   - The SDK returns no totals, so the page size is reported. The SDK
+//   - The SDK returns no totals (nil). The SDK
 //     takes no per-call context (as with the rest of this backend).
 
 // SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	repos, _, err := p.client.SearchRepos(gitea.SearchRepoOptions{
 		Keyword:     opts.Query,
@@ -38,7 +38,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 		ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
 	})
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitea, "SearchRepos", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchRepos", err)
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(repos))
 	for _, r := range repos {
@@ -52,13 +52,13 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 			Private:       r.Private,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchIssues implements provider.SearchManager. Repo routes to the
 // server-side repo-scoped listing (ListRepoIssues); without it the global
 // keyword search runs.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := gitea.ListIssueOption{
 		KeyWord:     opts.Query,
@@ -71,14 +71,14 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 	if opts.Repo != "" {
 		owner, repo := provider.SplitFullName(opts.Repo)
 		if owner == "" || repo == "" {
-			return nil, 0, provider.Wrapf(provider.PlatformGitea, "SearchIssues", "invalid repo %q, want owner/name", opts.Repo)
+			return nil, nil, provider.Wrapf(provider.PlatformGitea, "SearchIssues", "invalid repo %q, want owner/name", opts.Repo)
 		}
 		issues, _, err = p.client.ListRepoIssues(owner, repo, listOpts)
 	} else {
 		issues, _, err = p.client.ListIssues(listOpts)
 	}
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitea, "SearchIssues", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchIssues", err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(issues))
 	for _, i := range issues {
@@ -97,18 +97,18 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 			CreatedAt: i.Created,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchUsers implements provider.SearchManager.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	users, _, err := p.client.SearchUsers(gitea.SearchUsersOption{
 		KeyWord:     opts.Query,
 		ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
 	})
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitea, "SearchUsers", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchUsers", err)
 	}
 	out := make([]*provider.SearchUserResult, 0, len(users))
 	for _, u := range users {
@@ -119,7 +119,7 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 			WebURL:    u.HTMLURL,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 var _ provider.SearchManager = (*Provider)(nil)

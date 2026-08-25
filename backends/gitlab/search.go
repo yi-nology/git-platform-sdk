@@ -11,24 +11,24 @@ import (
 // This file implements the provider.SearchManager surface over the GitLab
 // client-go SDK, via the typed SearchService scopes (projects/issues/users).
 //
-// Registrations (design spec §4.6 mapping ledger):
+// Registrations (divergence ledger):
 //   - SearchIssuesOptions.Repo routes to Search.IssuesByProject (the
 //     project-scoped search endpoint) when set; otherwise the global
 //     Search.Issues runs.
 //   - GitLab's search API exposes no state, sort, or order parameters, so
 //     SearchIssuesOptions.State/Sort/Order and the sort/order fields of the
 //     repo/user options are not forwarded (registered ignore).
-//   - The SDK returns no total for searches, so the page size is reported.
+//   - The SDK returns no total for searches (nil).
 //   - Wire states "opened"/"reopened" normalize to open (as elsewhere).
 
 // SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	projects, _, err := p.client.Search.Projects(opts.Query, &gitlab.SearchOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
 	}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitLab, "SearchRepos", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitLab, "SearchRepos", err)
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(projects))
 	for _, pr := range projects {
@@ -42,11 +42,11 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 			Private:       pr.Visibility != "public",
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchIssues implements provider.SearchManager.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := &gitlab.SearchOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
@@ -59,7 +59,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		issues, _, err = p.client.Search.Issues(opts.Query, searchOpts, gitlab.WithContext(ctx))
 	}
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitLab, "SearchIssues", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitLab, "SearchIssues", err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(issues))
 	for _, i := range issues {
@@ -78,17 +78,17 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 			CreatedAt: timeOrZero(i.CreatedAt),
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchUsers implements provider.SearchManager.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	users, _, err := p.client.Search.Users(opts.Query, &gitlab.SearchOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
 	}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitLab, "SearchUsers", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitLab, "SearchUsers", err)
 	}
 	out := make([]*provider.SearchUserResult, 0, len(users))
 	for _, u := range users {
@@ -99,7 +99,7 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 			WebURL:    u.WebURL,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 var _ provider.SearchManager = (*Provider)(nil)

@@ -38,8 +38,10 @@ import (
 
 // Provider is the GitLab implementation of provider.Provider.
 type Provider struct {
-	client *gitlab.Client
-	logger provider.Logger
+	client   *gitlab.Client
+	logger   provider.Logger
+	labelIDs *backendutil.IDCache
+	userIDs  *backendutil.IDCache
 }
 
 // New builds a GitLab Provider from the given config.
@@ -80,7 +82,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: failed to create client: %w", err)
 	}
-	return &Provider{client: client, logger: logger}, nil
+	return &Provider{
+		client:   client,
+		logger:   logger,
+		labelIDs: backendutil.NewIDCache(5 * time.Minute),
+		userIDs:  backendutil.NewIDCache(5 * time.Minute),
+	}, nil
 }
 
 // Platform implements provider.Provider.
@@ -91,7 +98,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitLab
 // ReviewManager (see reviews.go), and SearchManager (see search.go)
 // interfaces.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true, CommitStatuses: true}
 }
 
 // TestConnection implements provider.Provider.

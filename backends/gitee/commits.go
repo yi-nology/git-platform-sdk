@@ -83,12 +83,4 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 	return result, nil
 }
 
-// CreateCommitStatus implements provider.CommitManager.
-//
-// Registered stub: Gitee does not expose a commit-status endpoint in the
-// public REST API.
-func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
-	return provider.Wrap(provider.PlatformGitee, "CreateCommitStatus", provider.ErrNotImplemented)
-}
-
 var _ provider.CommitManager = (*Provider)(nil)

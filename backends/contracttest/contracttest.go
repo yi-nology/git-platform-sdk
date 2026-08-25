@@ -61,6 +61,10 @@ type Harness struct {
 	// the same bidirectional drift checks as Labels, Issues, Reviews, and
 	// Milestones.
 	Search *SearchHarnessConfig
+	// CommitStatus, when non-nil, auto-mounts the commit-status suite inside
+	// Run, with the same bidirectional drift checks as Labels, Issues,
+	// Reviews, Milestones, and Search.
+	CommitStatus *CommitStatusHarnessConfig
 	// Releases auto-mounts the release-management suite inside Run. Unlike
 	// the fields above, ReleaseManager is a core interface composed into
 	// provider.Provider (every backend implements it), so there is no
@@ -80,12 +84,14 @@ func Run(t *testing.T, h Harness) {
 	t.Run("Webhook_ValidateSignature", func(t *testing.T) { testWebhookSignature(t, h) })
 	t.Run("Context_Cancel", func(t *testing.T) { testContextCancel(t, h) })
 	t.Run("Capabilities_Consistency", func(t *testing.T) { testCapabilities(t, h) })
+	t.Run("DivergenceSuite", func(t *testing.T) { testDivergenceSuite(t, h) })
 	t.Run("LabelsSuite", func(t *testing.T) { testLabelsSuite(t, h) })
 	t.Run("IssuesSuite", func(t *testing.T) { testIssuesSuite(t, h) })
 	t.Run("ReviewsSuite", func(t *testing.T) { testReviewsSuite(t, h) })
 	t.Run("MilestonesSuite", func(t *testing.T) { testMilestonesSuite(t, h) })
 	t.Run("SearchSuite", func(t *testing.T) { testSearchSuite(t, h) })
 	t.Run("ReleaseSuite", func(t *testing.T) { testReleaseSuite(t, h) })
+	t.Run("CommitStatusSuite", func(t *testing.T) { testCommitStatusSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

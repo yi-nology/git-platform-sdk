@@ -6,8 +6,70 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitLab `RequestReviewers` now really requests reviewers instead of
+  silently doing nothing.** The reviewer usernames are resolved to GitLab
+  user IDs through the Users API (`GET /users?username=<name>`, exact-match
+  filter, memoized in the same per-provider TTL cache as issue assignees)
+  and are written as `reviewer_ids` via `UpdateMergeRequest`. Behavior
+  change: the call was previously a registered ignore that succeeded
+  without any effect; it now takes real effect, and an unknown reviewer
+  username fails the call with a `NotFound` error (`provider.IsNotFound`)
+  instead of succeeding without the assignment. The registered-ignore
+  ledger entry for `RequestReviewers` is removed, and the reviews contract
+  suite gained a `RequestReviewersByID` harness flag asserting the
+  lookup-then-write-by-ID wire shape.
+- **GitLab `CreateIssue`/`UpdateIssue` now honor `Assignees` instead of
+  silently ignoring them.** The usernames are resolved to GitLab user IDs
+  through the Users API (`GET /users?username=<name>`, exact-match filter)
+  memoized in a per-provider TTL cache, and are sent as `assignee_ids` on the
+  issue write. Behavior change: callers who previously passed `Assignees`
+  with no effect will now see real assignments, and an unknown username
+  fails the call with a `NotFound` error (`provider.IsNotFound`) instead of
+  succeeding without the assignment. The two registered-ignore ledger
+  entries for `opts.Assignees` are removed.
+
+### Added
+
+- **Divergence ledger**: every backend now registers the places where its
+  behavior departs from the unified semantics (stub / ignore / mapping /
+  detour) as machine-readable `provider.Divergence` entries, surfaced by the
+  new `Provider.Divergences()` interface method and package-level
+  `<backend>.Divergences()` functions, with helper predicates
+  `provider.Ignores`, `provider.Stubs`, and `provider.FindByMethod` for
+  querying the ledger. The rendered document is generated into
+  `docs/divergence-ledger.md` by `internal/tools/genledger` — run
+  `go generate ./...` after editing any backend's `divergence.go`; a golden
+  test keeps the committed document in sync, and the contract-test
+  divergence suite fails when a ledger entry drifts from actual behavior.
+
 ### Changed
 
+- **BREAKING: `SearchManager` total return changed from `int` to `*int`.**
+  The three methods (`SearchRepos`, `SearchIssues`, `SearchUsers`) now return
+  `*int` for the server-side total: non-nil with the platform-reported count
+  when available (GitHub), nil when the platform does not report a total
+  (GitLab, Gitea, Forgejo, GitCode, Gitee). Callers that previously relied on
+  the total being a concrete `int` must now nil-check before dereferencing.
+  The old behavior of returning `len(results)` as a fake total is removed.
+- **BREAKING: `CreateCommitStatus` moved out of the core `CommitManager`
+  into a new optional `CommitStatusManager` capability interface**
+  (`provider/iface_commitstatus.go`). Commit statuses are a CI reporting
+  concern that not every platform exposes — Gitee's public REST API has no
+  commit-status endpoint — so absence is now expressed by not declaring the
+  capability instead of stubbing the method. `CapabilitySet` gained a
+  `CommitStatuses` field (declared by GitHub, GitLab, Gitea, Forgejo,
+  GitCode, and Tencent Code); consumers should gate on
+  `p.Capabilities().CommitStatuses` or type-assert
+  `p.(provider.CommitStatusManager)`. The Gitee backend's
+  `ErrNotImplemented` stub and its divergence-ledger entry are removed.
+  Migration: calls through the `provider.Provider`/`CommitManager`
+  interface now fail to compile — assert `CommitStatusManager` first. The
+  contract suite gained a self-driving `CommitStatusSuite` (mounted via
+  `Harness.CommitStatus`) asserting that exactly one status-reporting
+  request reaches the wire, plus a bidirectional
+  `Capabilities().CommitStatuses` consistency check.
 - **Replaced `gitcode_api` with `go-gitcode` v0.7.2** (module rename of the
   same SDK). The GitCode backend now imports
   `github.com/yi-nology/go-gitcode` instead of the deprecated
