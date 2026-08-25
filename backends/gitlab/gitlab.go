@@ -38,8 +38,9 @@ import (
 
 // Provider is the GitLab implementation of provider.Provider.
 type Provider struct {
-	client *gitlab.Client
-	logger provider.Logger
+	client   *gitlab.Client
+	logger   provider.Logger
+	labelIDs *backendutil.IDCache
 }
 
 // New builds a GitLab Provider from the given config.
@@ -80,7 +81,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: failed to create client: %w", err)
 	}
-	return &Provider{client: client, logger: logger}, nil
+	return &Provider{client: client, logger: logger, labelIDs: backendutil.NewIDCache(5 * time.Minute)}, nil
 }
 
 // Platform implements provider.Provider.
