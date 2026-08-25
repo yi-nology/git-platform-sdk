@@ -19,11 +19,11 @@ import (
 //   - GitHub's issue-search endpoint matches issues and pull requests alike,
 //     so an "is:issue" qualifier is appended to SearchIssues to honor the
 //     method's contract (real issues only).
-//   - The total is GitHub's reported total_count when present, else the
-//     returned page size.
+//   - The total is GitHub's reported total_count when present and positive;
+//     nil when absent (GitHub sometimes omits it).
 
 // SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	result, _, err := p.client.Search.Repositories(ctx, opts.Query, &github.SearchOptions{
 		Sort:        opts.Sort,
@@ -31,7 +31,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	})
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitHub, "SearchRepos", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitHub, "SearchRepos", err)
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(result.Repositories))
 	for _, r := range result.Repositories {
@@ -46,14 +46,14 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 		})
 	}
 	if total := result.GetTotal(); total > 0 {
-		return out, total, nil
+		return out, &total, nil
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchIssues implements provider.SearchManager. Repo/State map onto query
 // qualifiers; "is:issue" keeps pull requests out of the results.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	var qualifiers []string
 	if opts.Repo != "" {
@@ -70,7 +70,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	})
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitHub, "SearchIssues", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitHub, "SearchIssues", err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(result.Issues))
 	for _, i := range result.Issues {
@@ -90,13 +90,13 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		})
 	}
 	if total := result.GetTotal(); total > 0 {
-		return out, total, nil
+		return out, &total, nil
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchUsers implements provider.SearchManager.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	result, _, err := p.client.Search.Users(ctx, opts.Query, &github.SearchOptions{
 		Sort:        opts.Sort,
@@ -104,7 +104,7 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	})
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitHub, "SearchUsers", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitHub, "SearchUsers", err)
 	}
 	out := make([]*provider.SearchUserResult, 0, len(result.Users))
 	for _, u := range result.Users {
@@ -116,9 +116,9 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 		})
 	}
 	if total := result.GetTotal(); total > 0 {
-		return out, total, nil
+		return out, &total, nil
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 var _ provider.SearchManager = (*Provider)(nil)

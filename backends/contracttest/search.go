@@ -125,8 +125,8 @@ func RunSearchSuite(t *testing.T, h SearchHarness) {
 // server under some query parameter (q/search/keyword encodings differ per
 // platform). The total is checked tightly when wantTotal is positive — the
 // platform's fixture reports a server-side total (GitHub's total_count) and
-// the returned total must equal it — and weakly (total >= len(results))
-// otherwise.
+// the returned total must equal it — and weakly (total == nil or
+// *total >= len(results)) otherwise.
 func assertSearchRepos(t *testing.T, sm provider.SearchManager, requests *[]recordedRequest, wantTotal int) {
 	t.Helper()
 	repos, total, err := sm.SearchRepos(context.Background(), provider.SearchReposOptions{Query: "gopher"})
@@ -140,11 +140,11 @@ func assertSearchRepos(t *testing.T, sm provider.SearchManager, requests *[]reco
 		t.Errorf("expected first repo full_name %q, got %q", "owner/repo", repos[0].FullName)
 	}
 	if wantTotal > 0 {
-		if total != wantTotal {
-			t.Errorf("expected total %d (the fixture's server-side total), got %d", wantTotal, total)
+		if total == nil || *total != wantTotal {
+			t.Errorf("SearchRepos total = %v, want %d", total, wantTotal)
 		}
-	} else if total < len(repos) {
-		t.Errorf("total %d below returned result count %d", total, len(repos))
+	} else if total != nil && *total < len(repos) {
+		t.Errorf("SearchRepos total = %d, want nil or >= len(results) (%d)", *total, len(repos))
 	}
 	assertQueryCarriesKeyword(t, requests, "gopher")
 }

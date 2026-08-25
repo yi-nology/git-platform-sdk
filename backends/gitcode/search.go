@@ -8,7 +8,7 @@ import (
 )
 
 // SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := gitcode.SearchRepositoriesOptions{
 		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
@@ -18,7 +18,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 	}
 	results, err := p.client.SearchRepositories(ctx, searchOpts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitCode, "SearchRepos", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchRepos", err)
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(results))
 	for _, r := range results {
@@ -32,11 +32,11 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 			Private:       r.Private,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchIssues implements provider.SearchManager.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := gitcode.SearchIssuesOptions{
 		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
@@ -48,7 +48,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 	}
 	results, err := p.client.SearchIssues(ctx, searchOpts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitCode, "SearchIssues", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchIssues", err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(results))
 	for _, r := range results {
@@ -67,11 +67,11 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 			CreatedAt: r.CreatedAt,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 // SearchUsers implements provider.SearchManager.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := gitcode.SearchUsersOptions{
 		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
@@ -81,7 +81,7 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 	}
 	results, err := p.client.SearchUsers(ctx, searchOpts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitCode, "SearchUsers", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchUsers", err)
 	}
 	out := make([]*provider.SearchUserResult, 0, len(results))
 	for _, r := range results {
@@ -92,7 +92,7 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 			WebURL:    r.HTMLURL,
 		})
 	}
-	return out, len(out), nil
+	return out, nil, nil
 }
 
 var _ provider.SearchManager = (*Provider)(nil)
