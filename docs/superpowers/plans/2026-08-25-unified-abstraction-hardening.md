@@ -79,7 +79,7 @@ var divergences = []provider.Divergence{
 		Reason: "GitHub payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request."},
 	{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "BaseSHA", Kind: provider.DivergenceMapping,
 		Reason: "See GetCR."},
-	{Capability: "FileManager", Method: "GetArchive", Kind: provider.DivergenceDetour,
+	{Capability: "ReleaseManager", Method: "GetArchive", Kind: provider.DivergenceDetour,
 		Reason: "Archive downloads stream through the raw transport client rather than go-github."},
 }
 
