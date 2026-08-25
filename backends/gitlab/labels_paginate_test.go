@@ -76,7 +76,8 @@ func buildLabelsPage(n int, prefix string) string {
 }
 
 // TestGitLab_ResolveLabelID_NotFoundStopsOnShortPage verifies the resolver
-// terminates on a short page and reports NotFound without further requests.
+// terminates on a short page and reports a scan-limit error (distinct from a
+// definitive 404) without further requests.
 func TestGitLab_ResolveLabelID_NotFoundStopsOnShortPage(t *testing.T) {
 	page1 := buildLabelsPage(99, "l") // short page: resolver must stop here
 	var gets int
@@ -93,8 +94,15 @@ func TestGitLab_ResolveLabelID_NotFoundStopsOnShortPage(t *testing.T) {
 		t.Fatalf("NewProvider: %v", err)
 	}
 	lm := p.(provider.LabelManager)
-	if err := lm.DeleteLabel(context.Background(), "owner", "repo", "missing"); !provider.IsNotFound(err) {
-		t.Fatalf("expected NotFound, got %v", err)
+	err = lm.DeleteLabel(context.Background(), "owner", "repo", "missing")
+	if err == nil {
+		t.Fatal("expected scan-limit error, got nil")
+	}
+	if provider.IsNotFound(err) {
+		t.Fatalf("scan-limit exhaustion must not surface as NotFound, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "scan limit") {
+		t.Fatalf("expected scan-limit error message, got %v", err)
 	}
 	if gets != 1 {
 		t.Fatalf("expected exactly 1 GET (short page terminates), got %d", gets)
