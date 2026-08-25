@@ -10,7 +10,7 @@ import (
 )
 
 // This file implements the provider.SearchManager surface over the Forgejo
-// SDK. Mappings and registrations (design spec §4.6 ledger) mirror Gitea:
+// SDK. Mappings and registrations (divergence ledger) mirror Gitea:
 //   - SearchRepos rides the global keyword repo search (/repos/search);
 //     Sort passes through in Forgejo's own vocabulary (alpha/created/
 //     updated/size/id) — values from other platforms' vocabularies are
