@@ -6,8 +6,6 @@ import "github.com/yi-nology/git-platform-sdk/provider"
 // this backend's behavior departs from the unified provider semantics.
 // See provider.Divergence and docs/divergence-ledger.md.
 var divergences = []provider.Divergence{
-	{Capability: "CommitManager", Method: "CreateCommitStatus", Kind: provider.DivergenceStub,
-		Reason: "Gitee does not expose a commit-status endpoint in the public REST API."}, // REMOVE in Task 13
 	{Capability: "ChangeRequestManager", Method: "UpdateCR", Field: "opts.TargetBranch", Kind: provider.DivergenceIgnore,
 		Reason: "Gitee's pull-update endpoint has no base field; retargeting a pull request is not possible."},
 	{Capability: "ChangeRequestManager", Method: "GetCR", Field: "Draft", Kind: provider.DivergenceMapping,

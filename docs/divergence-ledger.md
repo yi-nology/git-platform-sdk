@@ -50,7 +50,6 @@ This document is generated from the backends' registered divergence ledgers
 
 | Capability | Method | Field | Kind | Reason |
 |---|---|---|---|---|
-| CommitManager | CreateCommitStatus |  | stub | Gitee does not expose a commit-status endpoint in the public REST API. |
 | ChangeRequestManager | UpdateCR | opts.TargetBranch | ignore | Gitee's pull-update endpoint has no base field; retargeting a pull request is not possible. |
 | ChangeRequestManager | GetCR | Draft | mapping | The go-gitee pull model carries no draft field, so Draft is always false on every returned change request. |
 | ChangeRequestManager | ListCRs | Draft | mapping | See GetCR. |

@@ -92,8 +92,12 @@ func dispatchDivergenceCall(p provider.Provider, capability, method string) (boo
 		return true, rm.DismissReview(ctx, "owner", "repo", "1", 1, "stale review")
 	case "ChangeRequestManager.UpdateCRLabels":
 		return true, p.UpdateCRLabels(ctx, "owner", "repo", "1", []string{"bug"})
-	case "CommitManager.CreateCommitStatus":
-		return true, p.CreateCommitStatus(ctx, "owner", "repo", "deadbeef", provider.CommitStatusOptions{State: "pending"})
+	case "CommitStatusManager.CreateCommitStatus":
+		csm, ok := p.(provider.CommitStatusManager)
+		if !ok {
+			return true, nil
+		}
+		return true, csm.CreateCommitStatus(ctx, "owner", "repo", "deadbeef", provider.CommitStatusOptions{State: "pending"})
 	default:
 		return false, nil
 	}

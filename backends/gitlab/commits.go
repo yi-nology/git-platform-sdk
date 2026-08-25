@@ -72,7 +72,7 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 	return result, nil
 }
 
-// CreateCommitStatus implements provider.CommitManager.
+// CreateCommitStatus implements provider.CommitStatusManager.
 func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
 	statusOpts := &gitlab.SetCommitStatusOptions{
 		State:       mapCommitState(opts.State),
@@ -88,3 +88,4 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 }
 
 var _ provider.CommitManager = (*Provider)(nil)
+var _ provider.CommitStatusManager = (*Provider)(nil)

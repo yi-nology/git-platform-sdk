@@ -3,9 +3,13 @@ package provider
 import "context"
 
 // CommitManager handles commit operations.
+//
+// Commit statuses are NOT part of CommitManager: they are a CI reporting
+// concern that not every platform exposes (Gitee's public REST API has no
+// commit-status endpoint). See the optional CommitStatusManager capability
+// interface and CapabilitySet.CommitStatuses.
 type CommitManager interface {
 	GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error)
 	ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error)
 	CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error)
-	CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error
 }

@@ -77,5 +77,8 @@ func TestGitLab_Contract(t *testing.T) {
 			IssuesResponse: `[{"id":1,"iid":1,"title":"found","state":"opened","description":"b","web_url":"https://gitlab.example.com/owner/repo/-/issues/1","labels":["bug"],"user_notes_count":2,"created_at":"2026-01-01T00:00:00Z"}]`,
 			UsersResponse:  `[{"username":"dev","name":"Dev","avatar_url":"https://gitlab.example.com/uploads/-/system/user/avatar/1/avatar.png","web_url":"https://gitlab.example.com/dev"}]`,
 		},
+		// CommitStatus is zero-config: the suite self-drives against the
+		// recording server and asserts a single status-reporting request.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
 	})
 }

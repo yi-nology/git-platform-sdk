@@ -137,7 +137,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformTencen
 // optional capability interfaces it implements (currently Labels,
 // Milestones, Issues, and Reviews).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Milestones: true, Issues: true, Reviews: true}
+	return provider.CapabilitySet{Labels: true, Milestones: true, Issues: true, Reviews: true, CommitStatuses: true}
 }
 
 // TestConnection implements provider.Provider.

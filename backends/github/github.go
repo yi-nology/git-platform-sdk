@@ -102,7 +102,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitHub
 // (see issues.go), the ReviewManager interface (see reviews.go), and the
 // SearchManager interface (see search.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true, CommitStatuses: true}
 }
 
 // TestConnection implements provider.Provider.

@@ -62,7 +62,7 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 	return result, nil
 }
 
-// CreateCommitStatus implements provider.CommitManager.
+// CreateCommitStatus implements provider.CommitStatusManager.
 //
 // provider.CommitStatusOptions map 1:1 onto the SDK's
 // CreateCommitStatusOptions (POST /repos/{o}/{r}/statuses/{sha}). State
@@ -96,3 +96,4 @@ func convertCommit(c *gitcode.Commit) *provider.CommitInfo {
 }
 
 var _ provider.CommitManager = (*Provider)(nil)
+var _ provider.CommitStatusManager = (*Provider)(nil)
