@@ -102,6 +102,16 @@ cmd := mgr.BuildSSHCommand("/path/to/key")
 cmd := mgr.BuildSSHCommandInsecure("/path/to/key")
 ```
 
+## Divergence ledger
+
+Every backend registers the places where its behavior departs from the
+unified semantics (stub / ignore / mapping / detour) in a machine-readable
+ledger, surfaced by `Provider.Divergences()` and helper predicates such as
+`provider.Ignores`. The rendered document lives at
+[docs/divergence-ledger.md](docs/divergence-ledger.md); regenerate it with
+`go generate ./...` after editing any backend's `divergence.go`. The
+contract suite fails when a ledger entry drifts from actual behavior.
+
 ---
 
 ## 简介
