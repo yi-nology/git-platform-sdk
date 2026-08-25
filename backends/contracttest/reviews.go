@@ -2,6 +2,7 @@ package contracttest
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -36,6 +37,12 @@ type ReviewsHarnessConfig struct {
 	// IgnoresRequestReviewers opts the backend out of the RequestReviewers
 	// wire assertion (see ReviewsHarness.IgnoresRequestReviewers).
 	IgnoresRequestReviewers bool
+	// RequestReviewersByID declares that the backend resolves reviewer
+	// usernames to numeric user IDs through a /users lookup before writing
+	// them (GitLab resolves usernames to IDs first): the wire subtest then
+	// asserts the lookup GET and an ID-carrying update body instead of the
+	// username-carrying create (see assertRequestReviewersByIDWire).
+	RequestReviewersByID bool
 	// IgnoresDismissal opts the backend out of the DismissReview verb
 	// assertion (see ReviewsHarness.IgnoresDismissal). It is for platforms
 	// whose ONLY dismissal gap is a registered stub: the platform exposes no
@@ -142,6 +149,10 @@ func RunReviewsSuite(t *testing.T, h ReviewsHarness) {
 		rm, requests := newRM(t)
 		if h.IgnoresRequestReviewers {
 			assertRequestReviewersIgnored(t, rm, requests)
+			return
+		}
+		if h.RequestReviewersByID {
+			assertRequestReviewersByIDWire(t, rm, requests)
 			return
 		}
 		assertRequestReviewersWire(t, rm, requests)
@@ -273,6 +284,37 @@ func assertRequestReviewersIgnored(t *testing.T, rm provider.ReviewManager, requ
 	}
 }
 
+// assertRequestReviewersByIDWire checks a reviewer request that resolves
+// usernames through a /users lookup and writes numeric reviewer IDs (GitLab).
+func assertRequestReviewersByIDWire(t *testing.T, rm provider.ReviewManager, requests *[]recordedRequest) {
+	t.Helper()
+	if err := rm.RequestReviewers(context.Background(), "owner", "repo", "1", []string{"dev"}); err != nil {
+		t.Fatalf("RequestReviewers: %v", err)
+	}
+	var putBody string
+	sawUsersLookup := false
+	for _, req := range *requests {
+		// The recorded path carries the query string (RequestURI), so the
+		// lookup arrives as "/api/v4/users?username=dev"; strip the query
+		// before the suffix check.
+		path, _, _ := strings.Cut(req.Path, "?")
+		if strings.HasSuffix(path, "/users") {
+			sawUsersLookup = true
+			continue
+		}
+		if req.Method == "PUT" || req.Method == "PATCH" {
+			b, _ := json.Marshal(req.Body)
+			putBody = string(b)
+		}
+	}
+	if !sawUsersLookup {
+		t.Error("expected a /users username lookup before writing reviewers")
+	}
+	if !strings.Contains(putBody, "reviewer_ids") || !strings.Contains(putBody, "101") {
+		t.Errorf("merge-request update body = %q, want reviewer_ids containing resolved id 101", putBody)
+	}
+}
+
 // assertReviewDismissStubbed checks a registered-stub DismissReview: the
 // call must fail with an error wrapping provider.ErrNotImplemented (the
 // platform exposes no dismissal surface; see
@@ -333,6 +375,11 @@ func reviewStubServer(h ReviewsHarness) (*httptest.Server, *[]recordedRequest) {
 		switch {
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/users"):
+			// Username→ID resolution lookup (GitLab's ListUsers with the
+			// exact-match username filter): echo the query username back
+			// under a fixed numeric ID.
+			_, _ = w.Write([]byte(`[{"id":101,"username":"` + r.URL.Query().Get("username") + `"}]`))
 		case r.Method == http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(h.MutateResponse))
