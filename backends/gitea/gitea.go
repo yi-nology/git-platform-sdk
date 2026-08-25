@@ -38,8 +38,9 @@ import (
 
 // Provider is the Gitea implementation of provider.Provider.
 type Provider struct {
-	client *gitea.Client
-	logger provider.Logger
+	client   *gitea.Client
+	logger   provider.Logger
+	labelIDs *backendutil.IDCache
 }
 
 // New builds a Gitea Provider from the given config.
@@ -75,7 +76,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gitea: failed to create client: %w", err)
 	}
-	return &Provider{client: client, logger: logger}, nil
+	return &Provider{client: client, logger: logger, labelIDs: backendutil.NewIDCache(5 * time.Minute)}, nil
 }
 
 // Platform implements provider.Provider.
