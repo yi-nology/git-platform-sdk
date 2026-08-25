@@ -6,6 +6,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [v0.45.0] - 2026-08-26
+
 ### Fixed
 
 - **GitLab `RequestReviewers` now really requests reviewers instead of
