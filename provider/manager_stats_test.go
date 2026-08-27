@@ -93,6 +93,41 @@ func TestManager_WithMaxSize_Evicts(t *testing.T) {
 	}
 }
 
+func TestManager_EvictsLeastRecentlyUsed(t *testing.T) {
+	// With maxSize=2: insert t1 and t2, then hit t1 again. A third insert
+	// must evict t2 (least recently used), not t1 (oldest by creation) —
+	// this distinguishes true LRU from the former creation-order eviction.
+	m := provider.NewManager(time.Minute, provider.WithMaxSize(2))
+	cfg1 := provider.Config{Platform: provider.PlatformGitHub, Token: "t1"}
+	cfg2 := provider.Config{Platform: provider.PlatformGitHub, Token: "t2"}
+	cfg3 := provider.Config{Platform: provider.PlatformGitHub, Token: "t3"}
+	_, _ = m.Get(cfg1)
+	_, _ = m.Get(cfg2)
+	if _, err := m.Get(cfg1); err != nil { // hit; refreshes t1's recency
+		t.Fatalf("Get(cfg1): %v", err)
+	}
+	if _, err := m.Get(cfg3); err != nil { // miss at capacity; evicts one
+		t.Fatalf("Get(cfg3): %v", err)
+	}
+	hitsBefore := m.Stats().Hits
+	missesBefore := m.Stats().Misses
+
+	// t1 was used most recently of {t1, t2}, so it must still be cached.
+	if _, err := m.Get(cfg1); err != nil {
+		t.Fatalf("Get(cfg1) after eviction: %v", err)
+	}
+	if got := m.Stats().Hits; got != hitsBefore+1 {
+		t.Errorf("t1 lookup = miss; expected it to survive as recently used (hits %d, want %d)", got, hitsBefore+1)
+	}
+	// t2 had no access since insertion, so it must be the eviction victim.
+	if _, err := m.Get(cfg2); err != nil {
+		t.Fatalf("Get(cfg2) after eviction: %v", err)
+	}
+	if got := m.Stats().Misses; got != missesBefore+1 {
+		t.Errorf("t2 lookup = hit; expected it to have been the eviction victim (misses %d, want %d)", got, missesBefore+1)
+	}
+}
+
 func TestManager_StartJanitor(t *testing.T) {
 	m := provider.NewManager(20 * time.Millisecond)
 	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "janitor"})
