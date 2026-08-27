@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/hashicorp/golang-lru/v2"
 )
 
 type cachedProvider struct {
@@ -37,6 +39,12 @@ type Manager struct {
 	ttl       time.Duration
 	maxSize   int // 0 = unlimited
 
+	// order tracks access recency for capacity eviction and is non-nil only
+	// when maxSize > 0. Values mirror providers' key set; the LRU list is the
+	// single source of "least recently used" so eviction targets real usage
+	// (hits refresh recency), not creation time.
+	order *lru.Cache[string, struct{}]
+
 	// stats counters (atomic)
 	hits      atomic.Int64
 	misses    atomic.Int64
@@ -56,8 +64,8 @@ type Manager struct {
 // ManagerOption configures a Manager at construction time.
 type ManagerOption func(*Manager)
 
-// WithMaxSize caps the cache at n entries. When the cap is reached, the
-// oldest entry is evicted before a new one is inserted.
+// WithMaxSize caps the cache at n entries. When the cap is reached, the least
+// recently used entry is evicted before a new one is inserted.
 func WithMaxSize(n int) ManagerOption {
 	return func(m *Manager) { m.maxSize = n }
 }
@@ -78,6 +86,13 @@ func NewManager(ttl time.Duration, opts ...ManagerOption) *Manager {
 	}
 	for _, opt := range opts {
 		opt(m)
+	}
+	if m.maxSize > 0 {
+		order, err := lru.New[string, struct{}](m.maxSize)
+		if err != nil {
+			panic(fmt.Sprintf("provider: NewManager: %v", err))
+		}
+		m.order = order
 	}
 	return m
 }
@@ -123,12 +138,18 @@ func (m *Manager) Get(cfg Config) (Provider, error) {
 	key := m.buildKey(cfg)
 
 	m.mu.RLock()
-	if cp, ok := m.providers[key]; ok && (m.ttl == 0 || time.Since(cp.createdAt) < m.ttl) {
-		m.mu.RUnlock()
+	cp, ok := m.providers[key]
+	fresh := ok && (m.ttl == 0 || time.Since(cp.createdAt) < m.ttl)
+	m.mu.RUnlock()
+	if fresh {
+		// Refresh access recency on its own internal lock; lru.Cache is
+		// thread-safe, so hits stay independent of the providers map lock.
+		if m.order != nil {
+			m.order.Get(key)
+		}
 		m.hits.Add(1)
 		return cp.provider, nil
 	}
-	m.mu.RUnlock()
 
 	m.misses.Add(1)
 	p, err := NewProvider(cfg)
@@ -143,9 +164,19 @@ func (m *Manager) Get(cfg Config) (Provider, error) {
 		m.mu.Unlock()
 		return cp.provider, nil
 	}
-	// Enforce max size via simple LRU-ish eviction (oldest first).
-	if m.maxSize > 0 && len(m.providers) >= m.maxSize {
-		m.evictOldestLocked()
+	// Enforce max size by evicting the least recently used tracked entry.
+	if m.order != nil {
+		for m.order.Len() >= m.maxSize {
+			evKey, _, _ := m.order.RemoveOldest()
+			if _, stillCached := m.providers[evKey]; stillCached {
+				delete(m.providers, evKey)
+				m.evictions.Add(1)
+			}
+			if evKey == key {
+				break // re-inserting an existing key; nothing else to evict
+			}
+		}
+		m.order.Add(key, struct{}{})
 	}
 	m.providers[key] = cachedProvider{provider: p, createdAt: now}
 	m.mu.Unlock()
@@ -153,28 +184,14 @@ func (m *Manager) Get(cfg Config) (Provider, error) {
 	return p, nil
 }
 
-// evictOldestLocked removes the entry with the smallest createdAt. Caller
-// must hold m.mu in write mode.
-func (m *Manager) evictOldestLocked() {
-	var oldestKey string
-	var oldestTime time.Time
-	for k, cp := range m.providers {
-		if oldestKey == "" || cp.createdAt.Before(oldestTime) {
-			oldestKey = k
-			oldestTime = cp.createdAt
-		}
-	}
-	if oldestKey != "" {
-		delete(m.providers, oldestKey)
-		m.evictions.Add(1)
-	}
-}
-
 // Remove removes a cached Provider by config.
 func (m *Manager) Remove(cfg Config) {
 	key := m.buildKey(cfg)
 	m.mu.Lock()
 	delete(m.providers, key)
+	if m.order != nil {
+		m.order.Remove(key)
+	}
 	m.mu.Unlock()
 }
 
@@ -182,6 +199,9 @@ func (m *Manager) Remove(cfg Config) {
 func (m *Manager) Purge() {
 	m.mu.Lock()
 	m.providers = make(map[string]cachedProvider)
+	if m.order != nil {
+		m.order.Purge()
+	}
 	m.mu.Unlock()
 }
 
@@ -225,6 +245,9 @@ func (m *Manager) Cleanup() {
 	for k, cp := range m.providers {
 		if cp.createdAt.Before(cutoff) {
 			delete(m.providers, k)
+			if m.order != nil {
+				m.order.Remove(k)
+			}
 			m.evictions.Add(1)
 		}
 	}

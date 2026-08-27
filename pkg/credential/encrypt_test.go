@@ -1,10 +1,9 @@
 package credential
 
 import (
+	"encoding/base64"
 	"os"
 	"testing"
-
-	"github.com/yi-nology/git-platform-sdk/pkg/encoding"
 )
 
 func TestCryptoManager_EncryptDecrypt(t *testing.T) {
@@ -294,13 +293,13 @@ func TestCryptoManager_RejectsWrongVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encrypt failed: %v", err)
 	}
-	raw, err := encoding.Base64URLDecode(ct)
+	raw, err := base64.URLEncoding.DecodeString(ct)
 	if err != nil {
 		t.Fatalf("base64 decode failed: %v", err)
 	}
 	b := []byte(raw)
 	b[0] = 0xFF // corrupt the version byte
-	tampered := encoding.Base64URLEncode(string(b))
+	tampered := base64.URLEncoding.EncodeToString(b)
 
 	_, err = mgr.Decrypt(tampered)
 	if err == nil {

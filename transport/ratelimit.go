@@ -6,11 +6,14 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // RateLimiter provides proactive rate limiting by tracking X-RateLimit-*
 // headers returned by the server. It combines a configurable requests-per-second
-// cap with adaptive throttling when the server reports low remaining quota.
+// cap (enforced by golang.org/x/time/rate) with adaptive throttling when the
+// server reports low remaining quota.
 //
 // RateLimiter is safe for concurrent use.
 type RateLimiter struct {
@@ -22,9 +25,10 @@ type RateLimiter struct {
 	threshold int           // start throttling when remaining <= threshold
 
 	// State
-	remaining int       // last seen X-RateLimit-Remaining
-	resetAt   time.Time // last seen X-RateLimit-Reset
-	lastReq   time.Time // time of last request
+	limiter   *rate.Limiter // token bucket for the RPS cap; nil when unlimited
+	remaining int           // last seen X-RateLimit-Remaining
+	resetAt   time.Time     // last seen X-RateLimit-Reset
+	lastReq   time.Time     // time of last request
 }
 
 // RateLimiterOption configures a RateLimiter.
@@ -60,6 +64,11 @@ func NewRateLimiter(opts ...RateLimiterOption) *RateLimiter {
 	for _, opt := range opts {
 		opt(rl)
 	}
+	if rl.rps > 0 {
+		// Burst 1 spaces requests exactly one interval apart, matching the
+		// fixed-interval pacing this cap replaces.
+		rl.limiter = rate.NewLimiter(rate.Limit(rl.rps), 1)
+	}
 	return rl
 }
 
@@ -78,19 +87,14 @@ func (rl *RateLimiter) WaitContext(ctx context.Context) error {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	now := time.Now()
-
-	// 1. RPS-based delay
-	if rl.rps > 0 {
-		interval := time.Duration(float64(time.Second) / rl.rps)
-		if elapsed := now.Sub(rl.lastReq); elapsed < interval {
-			delay := interval - elapsed
-			if err := rl.sleep(ctx, delay); err != nil {
-				return err
-			}
-			now = time.Now()
+	// 1. RPS-based pacing via the token bucket.
+	if rl.limiter != nil {
+		if err := rl.limiter.Wait(ctx); err != nil {
+			return err
 		}
 	}
+
+	now := time.Now()
 
 	// 2. Minimum delay
 	if rl.minDelay > 0 {

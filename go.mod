@@ -9,6 +9,7 @@ require (
 	github.com/antihax/optional v1.0.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/google/go-github/v69 v69.2.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/yi-nology/go-gitcode v0.7.2
 	gitlab.com/gitlab-org/api/client-go/v2 v2.55.1
 	golang.org/x/crypto v0.54.0
@@ -65,6 +66,6 @@ require (
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/time v0.15.0
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )

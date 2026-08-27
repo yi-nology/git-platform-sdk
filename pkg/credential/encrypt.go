@@ -4,13 +4,13 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"sync"
 
-	"github.com/yi-nology/git-platform-sdk/pkg/encoding"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -118,7 +118,7 @@ func (cm *CryptoManager) Encrypt(plaintext string) (string, error) {
 	prefix = append(prefix, salt...)
 	prefix = append(prefix, nonce...)
 	sealed := aesGCM.Seal(prefix, nonce, []byte(plaintext), nil)
-	return encoding.Base64URLEncode(string(sealed)), nil
+	return base64.URLEncoding.EncodeToString(sealed), nil
 }
 
 // Decrypt decrypts ciphertext produced by Encrypt. Returns empty string for
@@ -137,11 +137,10 @@ func (cm *CryptoManager) Decrypt(cryptoText string) (string, error) {
 		return "", errors.New("crypto manager: key material is empty")
 	}
 
-	dataStr, err := encoding.Base64URLDecode(cryptoText)
+	data, err := base64.URLEncoding.DecodeString(cryptoText)
 	if err != nil {
 		return "", err
 	}
-	data := []byte(dataStr)
 
 	if len(data) < 1 {
 		return "", errors.New("ciphertext too short")
