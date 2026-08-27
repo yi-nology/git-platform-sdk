@@ -6,7 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **Provider `Manager` capacity eviction is now true LRU** (least recently
+  used instead of oldest-created), powered by `hashicorp/golang-lru/v2`
+  access-order tracking; the O(n) eviction scan is gone. Public Manager API
+  is unchanged.
+- **`transport.RateLimiter`'s RPS cap is now enforced by**
+  `golang.org/x/time/rate` (burst-1 token bucket); header-adaptive
+  throttling and min-delay behavior are unchanged.
+- Removed the pass-through `pkg/encoding` base64 wrappers; use
+  `encoding/base64` directly.
 
 ## [v0.45.0] - 2026-08-26
 
