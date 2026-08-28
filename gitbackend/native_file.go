@@ -22,10 +22,13 @@ func (b *NativeGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path
 }
 
 func (b *NativeGitBackend) GetFileHistory(ctx context.Context, repoPath, path string, limit int) ([]CommitInfo, error) {
-	args := []string{"log", "--pretty=format:%H|%s|%an|%ai", "--follow", "--", path}
+	// The -<limit> flag must precede the "--" separator: anything after it
+	// is a pathspec, and --follow rejects a second one outright.
+	args := []string{"log", "--pretty=format:%H|%s|%an|%ai", "--follow"}
 	if limit > 0 {
 		args = append(args, fmt.Sprintf("-%d", limit))
 	}
+	args = append(args, "--", path)
 	stdout, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("GetFileHistory", repoPath, stderr, err)

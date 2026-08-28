@@ -68,9 +68,9 @@ func (b *NativeGitBackend) Merge(ctx context.Context, repoPath, branch string, o
 	}
 	args = append(args, branch)
 
-	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	stdout, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
 	if err != nil {
-		if strings.Contains(stderr, "CONFLICT") || strings.Contains(stderr, "conflict") {
+		if isConflictOutput(stdout, stderr) {
 			return newGitError("Merge", repoPath, stderr, ErrMergeConflict)
 		}
 		return newGitError("Merge", repoPath, stderr, err)
@@ -78,10 +78,18 @@ func (b *NativeGitBackend) Merge(ctx context.Context, repoPath, branch string, o
 	return nil
 }
 
+// isConflictOutput reports whether git's output announces merge conflicts.
+// git prints CONFLICT lines on stdout (stderr stays empty on a content
+// conflict), so both streams must be inspected.
+func isConflictOutput(stdout, stderr string) bool {
+	out := stdout + stderr
+	return strings.Contains(out, "CONFLICT") || strings.Contains(out, "conflict")
+}
+
 func (b *NativeGitBackend) CherryPick(ctx context.Context, repoPath, commitHash string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"cherry-pick", commitHash}, AuthConfig{})
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"cherry-pick", commitHash}, AuthConfig{})
 	if err != nil {
-		if strings.Contains(stderr, "CONFLICT") || strings.Contains(stderr, "conflict") {
+		if isConflictOutput(stdout, stderr) {
 			return newGitError("CherryPick", repoPath, stderr, ErrMergeConflict)
 		}
 		return newGitError("CherryPick", repoPath, stderr, err)
@@ -90,9 +98,9 @@ func (b *NativeGitBackend) CherryPick(ctx context.Context, repoPath, commitHash 
 }
 
 func (b *NativeGitBackend) Rebase(ctx context.Context, repoPath, onto string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", onto}, AuthConfig{})
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", onto}, AuthConfig{})
 	if err != nil {
-		if strings.Contains(stderr, "CONFLICT") || strings.Contains(stderr, "conflict") {
+		if isConflictOutput(stdout, stderr) {
 			return newGitError("Rebase", repoPath, stderr, ErrMergeConflict)
 		}
 		return newGitError("Rebase", repoPath, stderr, err)
@@ -109,9 +117,9 @@ func (b *NativeGitBackend) RebaseAbort(ctx context.Context, repoPath string) err
 }
 
 func (b *NativeGitBackend) RebaseContinue(ctx context.Context, repoPath string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", "--continue"}, AuthConfig{})
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", "--continue"}, AuthConfig{})
 	if err != nil {
-		if strings.Contains(stderr, "CONFLICT") || strings.Contains(stderr, "conflict") {
+		if isConflictOutput(stdout, stderr) {
 			return newGitError("RebaseContinue", repoPath, stderr, ErrMergeConflict)
 		}
 		return newGitError("RebaseContinue", repoPath, stderr, err)
