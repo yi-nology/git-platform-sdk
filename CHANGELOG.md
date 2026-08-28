@@ -4,6 +4,93 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Tencent Code 工蜂 `CreateIssue`/`UpdateIssue` now honor `Assignees`**
+  instead of silently ignoring them. The usernames are resolved to 工蜂 user
+  IDs through the Users API (`GET /users/{username}`, which accepts either an
+  ID or a username), memoized in a per-provider TTL cache, and sent as the
+  `assignee_ids` csv on the issue write — the same playbook as GitLab's
+  v0.45.0 assignee fix. Behavior change: callers who previously passed
+  `Assignees` with no effect will now see real assignments, and an unknown
+  username fails the call with a `NotFound` error (`provider.IsNotFound`)
+  instead of succeeding without the assignment. The two registered-ignore
+  ledger entries for `opts.Assignees` are removed, and the issues contract
+  suite gained a `CreateIssueAssigneesByID` harness flag (enabled for GitLab
+  and 工蜂) asserting the lookup-then-write wire shape.
+- **The `ListIssues` `Assignee` filter limitation on Tencent Code is now
+  registered in the divergence ledger** (kind: ignore) — the Gongfeng issue
+  list endpoint takes no assignee filter, so the option is accepted but
+  ignored. Previously this divergence lived only in a code comment.
+- **gitbackend (gogit) three-way `Merge` no longer drops head-side files.**
+  The merge applied the head→branch diff to the worktree, which deleted every
+  file that existed on HEAD but not on the merged branch; the merge commit
+  silently lost the head side. It now applies the base→branch diff, so both
+  sides survive (file-level conflict detection is unchanged).
+- **gitbackend (gogit) `Fetch` with no `Remote` set no longer fails.** The
+  defaulted `origin` name reached neither the fetch options nor the refspecs,
+  producing `refs/remotes//<branch>` (an invalid reference) and an outright
+  error; the defaulted name now flows through, and `FetchOptions.Remote`
+  documents the default honestly.
+- **gitbackend (gogit) `Fetch` result classification now actually
+  populates.** `NewBranches`/`UpdatedBranch` were keyed off a
+  `refs/remotes/<remote>/heads/` prefix that the fetch refspecs never write
+  (they map onto `refs/remotes/<remote>/<name>`), so they were always empty;
+  `NewTags` similarly looked under `refs/remotes/<remote>/tags/` while
+  `AllTags` writes `refs/tags/*`. Classification now keys off the namespaces
+  the refspecs really write.
+- **gitbackend (gogit) `Rebase` no longer deletes onto-side files and no
+  longer leaks the pre-rebase index into replayed commits.** Replay applied
+  the new-HEAD→commit diff (deleting every onto-side file the replayed
+  commit does not carry) and committed the stale pre-rebase index; it now
+  hard-resets the worktree and index to the onto commit before replaying,
+  and applies each commit's own diff (parent→commit).
+- **gitbackend (native) `ListBranches` now classifies remote-tracking
+  branches again.** Remote-ness was detected via a `remotes/` prefix on
+  `%(refname:short)`, but under `--format` that prefix is stripped (the
+  short name is `origin/<branch>`), so every remote branch was reported as a
+  local one. The format now leads with the full `%(refname)` column and
+  classifies off `refs/remotes/`.
+- **gitbackend (native) conflict classification works again in
+  `Merge`/`CherryPick`/`Rebase`/`RebaseContinue`.** git prints its CONFLICT
+  lines on stdout while stderr stays empty on a content conflict, so the
+  stderr-only check never matched and conflicts surfaced as generic errors
+  instead of `ErrMergeConflict`. Both streams are now inspected.
+- **gitbackend (native) `GetFileHistory` with a limit no longer fails.**
+  The `-<limit>` flag was appended after the `--` separator, turning it
+  into a second pathspec that `--follow` rejects outright ("--follow
+  requires exactly one pathspec"); the flag now precedes the separator.
+- **gitbackend (native) `Fetch` reports the fetched refs again.**
+  `parseFetchRefs` checked for the ref-line indent after `TrimSpace`, which
+  no line can ever match, so `FetchResult.FetchedRefs` was always empty;
+  the indent check now runs on the raw line.
+- **gitbackend (gogit) `RebaseContinue` replays the original branch's
+  commits.** It collected the commits between the saved orig-head and the
+  onto target — the onto side's commits — while the persisted `end` counter
+  refers to the branch side's commits Rebase planned, so a continued rebase
+  replayed (and labeled commits with) the wrong side. It now derives the
+  replay set from the merge base, matching `Rebase`.
+
+### Added
+
+- **gitbackend test coverage 15.8% → 76.9%** across auth constructors, error
+  sentinels, branch operations (list/rename/sync-info/remote listing on
+  both backends), merge variants (ff, three-way, squash, no-commit,
+  ff-only, conflict), cherry-pick, rebase/abort/continue (both backends),
+  the stash lifecycle, file/tree/blob queries and checkouts, the
+  Repository wrapper delegation surface, the output parsers, and the
+  fetch/push/pull/clone/tag/remote/config core paths on both backends —
+  the new tests caught the nine gitbackend bugs above (five gogit, four
+  native).
+- **Dependabot** now watches the module's seven platform-SDK dependencies
+  (`gomod`, weekly) and the CI workflow actions (`github-actions`, weekly,
+  grouped).
+- **CI enforces a total-coverage floor of 45%** (current: ~50%) on the
+  ubuntu leg, so a coverage regression fails the build instead of only
+  uploading an artifact.
+
 ## [v0.46.0] - 2026-08-27
 
 ### Changed

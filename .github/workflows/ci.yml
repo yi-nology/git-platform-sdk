@@ -67,6 +67,17 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: go tool cover -func=coverage.out | tail -1
 
+      - name: Enforce coverage floor
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print substr($3, 1, length($3)-1)}')
+          floor=45
+          echo "Total coverage: ${total}% (floor ${floor}%)"
+          awk -v c="$total" -v f="$floor" 'BEGIN { exit c+0 < f+0 ? 1 : 0 }' || {
+            echo "::error::total coverage ${total}% dropped below the ${floor}% floor"
+            exit 1
+          }
+
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v6
