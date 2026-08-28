@@ -23,15 +23,19 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 	if remote == "" {
 		remote = "origin"
 	}
+	// The defaulted name must reach the refspecs too: building them from
+	// opts.Remote while it is empty maps refs onto refs/remotes//*, which
+	// escapes the reference storage and fails the fetch outright.
+	opts.Remote = remote
 
-	// Snapshot remote refs before the fetch.
+	// Snapshot the refs a fetch can move before running it.
 	before := make(map[string]plumbing.Hash)
-	if err := collectRemoteRefs(repo, remote, before); err != nil {
+	if err := collectFetchRefs(repo, remote, before); err != nil {
 		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
 
 	fetchOpts := &git.FetchOptions{
-		RemoteName:      opts.Remote,
+		RemoteName:      remote,
 		RefSpecs:        buildFetchRefSpecs(opts),
 		Auth:            b.buildTransportAuth(opts.Auth),
 		Progress:        opts.Progress,
@@ -49,16 +53,18 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
 
-	// Snapshot remote refs after the fetch.
+	// Snapshot the refs after the fetch.
 	after := make(map[string]plumbing.Hash)
-	if err := collectRemoteRefs(repo, remote, after); err != nil {
+	if err := collectFetchRefs(repo, remote, after); err != nil {
 		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
 
-	// Diff before/after to populate the result.
+	// Diff before/after to populate the result. The fetch refspecs map
+	// refs/heads/* onto refs/remotes/<remote>/* (see buildFetchRefSpecs) and
+	// AllTags writes refs/tags/*, so branch and tag classification key off
+	// those two namespaces.
 	remotePrefix := "refs/remotes/" + remote + "/"
-	headsPrefix := remotePrefix + "heads/"
-	tagsPrefix := remotePrefix + "tags/"
+	tagsPrefix := "refs/tags/"
 
 	result := &FetchResult{}
 
@@ -66,23 +72,25 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 		if oldHash, existed := before[ref]; !existed {
 			// New ref after fetch.
 			result.FetchedRefs = append(result.FetchedRefs, ref)
-			if strings.HasPrefix(ref, headsPrefix) {
-				result.NewBranches = append(result.NewBranches, strings.TrimPrefix(ref, headsPrefix))
-			} else if strings.HasPrefix(ref, tagsPrefix) {
+			switch {
+			case strings.HasPrefix(ref, remotePrefix):
+				result.NewBranches = append(result.NewBranches, strings.TrimPrefix(ref, remotePrefix))
+			case strings.HasPrefix(ref, tagsPrefix):
 				result.NewTags = append(result.NewTags, strings.TrimPrefix(ref, tagsPrefix))
 			}
 		} else if oldHash != hash {
 			// Existing ref moved to a different commit.
 			result.FetchedRefs = append(result.FetchedRefs, ref)
-			if strings.HasPrefix(ref, headsPrefix) {
-				result.UpdatedBranch = append(result.UpdatedBranch, strings.TrimPrefix(ref, headsPrefix))
+			if strings.HasPrefix(ref, remotePrefix) {
+				result.UpdatedBranch = append(result.UpdatedBranch, strings.TrimPrefix(ref, remotePrefix))
 			}
 		}
 	}
 
 	for ref := range before {
-		if _, exists := after[ref]; !exists {
-			// Ref was pruned or deleted.
+		// Only remote-tracking refs can be pruned away by a fetch; tag refs
+		// are never pruned.
+		if _, exists := after[ref]; !exists && strings.HasPrefix(ref, remotePrefix) {
 			result.DeletedBranch = append(result.DeletedBranch, ref)
 		}
 	}
@@ -103,6 +111,22 @@ func collectRemoteRefs(repo *git.Repository, remote string, target map[string]pl
 		if strings.HasPrefix(name, prefix) {
 			target[name] = ref.Hash()
 		}
+		return nil
+	})
+}
+
+// collectFetchRefs snapshots the refs a fetch can move: the remote's
+// remote-tracking refs and refs/tags/* (AllTags writes there).
+func collectFetchRefs(repo *git.Repository, remote string, target map[string]plumbing.Hash) error {
+	if err := collectRemoteRefs(repo, remote, target); err != nil {
+		return err
+	}
+	iter, err := repo.Tags()
+	if err != nil {
+		return err
+	}
+	return iter.ForEach(func(ref *plumbing.Reference) error {
+		target[ref.Name().String()] = ref.Hash()
 		return nil
 	})
 }

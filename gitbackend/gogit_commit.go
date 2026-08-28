@@ -225,12 +225,15 @@ func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts 
 		}
 	}
 
-	// Apply changes from the branch side
+	// Apply the branch side's changes relative to the merge base. Applying
+	// them relative to headTree instead would delete every head-only file
+	// (the head→branch diff sees them as deletions) and silently drop the
+	// head side from the merge result.
 	wt, err := repo.Worktree()
 	if err != nil {
 		return newGitError("Merge", repoPath, "", err)
 	}
-	if err := b.applyChangesToWorktree(repoPath, headTree, branchTree, wt); err != nil {
+	if err := b.applyChangesToWorktree(repoPath, baseTree, branchTree, wt); err != nil {
 		return newGitError("Merge", repoPath, "", err)
 	}
 
@@ -340,15 +343,14 @@ func (b *GoGitBackend) applyRebaseCommit(repoPath string, repo *git.Repository, 
 		return err
 	}
 
-	head, err := repo.Head()
+	// Apply the commit's own change (parent→commit). Basing the diff on the
+	// current HEAD instead would delete every onto-side file the replayed
+	// commit does not carry.
+	parentCommit, err := commit.Parent(0)
 	if err != nil {
 		return err
 	}
-	headCommit, err := repo.CommitObject(head.Hash())
-	if err != nil {
-		return err
-	}
-	headTree, err := headCommit.Tree()
+	parentTree, err := parentCommit.Tree()
 	if err != nil {
 		return err
 	}
@@ -358,7 +360,7 @@ func (b *GoGitBackend) applyRebaseCommit(repoPath string, repo *git.Repository, 
 		return err
 	}
 
-	if err := b.applyChangesToWorktree(repoPath, headTree, commitTree, wt); err != nil {
+	if err := b.applyChangesToWorktree(repoPath, parentTree, commitTree, wt); err != nil {
 		return ErrMergeConflict
 	}
 
@@ -415,8 +417,18 @@ func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error 
 	_ = writeRebaseStateFile(repoPath, "head-name", head.Name().String())
 	_ = writeRebaseStateFile(repoPath, "end", strconv.Itoa(len(commits)))
 
-	// Move HEAD to onto
+	// Move HEAD to onto and align the worktree and index with it — the
+	// replayed commits must apply on top of onto's state, not the old
+	// branch checkout (whose index would leak pre-rebase files into every
+	// replayed commit).
 	if err := repo.Storer.SetReference(plumbing.NewHashReference(head.Name(), ontoHash)); err != nil {
+		return newGitError("Rebase", repoPath, "", err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("Rebase", repoPath, "", err)
+	}
+	if err := wt.Reset(&git.ResetOptions{Commit: ontoHash, Mode: git.HardReset}); err != nil {
 		return newGitError("Rebase", repoPath, "", err)
 	}
 
@@ -493,8 +505,14 @@ func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) erro
 	msgnum, _ := strconv.Atoi(msgnumStr)
 	end, _ := strconv.Atoi(endStr)
 
-	// Get the full list of commits to replay
-	commits, err := b.GetCommitsBetween(ctx, repoPath, origHead, onto)
+	// Get the full list of commits to replay: the ORIGINAL branch's commits
+	// since it diverged from onto — the same set Rebase planned (its `end`
+	// counter refers to them), not the onto side's.
+	baseHash, err := b.MergeBase(ctx, repoPath, origHead, onto)
+	if err != nil || baseHash == "" {
+		return newGitError("RebaseContinue", repoPath, "", fmt.Errorf("no common ancestor"))
+	}
+	commits, err := b.GetCommitsBetween(ctx, repoPath, baseHash, origHead)
 	if err != nil {
 		return newGitError("RebaseContinue", repoPath, "", err)
 	}
