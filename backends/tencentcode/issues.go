@@ -12,21 +12,21 @@ import (
 
 // This file implements provider.IssueManager over the gongfeng SDK's
 // IssuesService and NotesService (工蜂 models issue comments as notes).
-// Four registered limitations apply:
+// Three registered limitations apply:
 //
-//   - assignees: 工蜂's issue write surface takes assignee_ids — a csv of
-//     numeric user IDs — so the SDK's username-based Assignees fields on
-//     CreateIssueOptions/UpdateIssueOptions cannot be mapped without a
-//     Users-API resolution round and are ignored (GitLab-backend
-//     precedent); ListIssuesOptions.Assignee is likewise not carried.
+//   - assignees on reads and writes: 工蜂's issue write surface takes
+//     assignee_ids — a csv of numeric user IDs — so the SDK's username-based
+//     Assignees fields on CreateIssueOptions/UpdateIssueOptions are resolved
+//     to IDs through the Users API first (see users.go); the Assignee filter
+//     on ListIssuesOptions is still not carried (the list endpoint takes no
+//     assignee filter).
 //   - last-label removal: gongfeng's UpdateIssueOptions.Labels is a csv
 //     string behind omitempty, so removing an issue's only label yields an
 //     empty csv that cannot travel on the PUT body — the update becomes a
 //     no-op (the label stays).
-//   - web URL: gongfeng's Issue model carries no web_url field, so
-//     Issue.WebURL is always empty on this platform.
-//   - closed-at: the model carries no closed_at field either, so
-//     Issue.ClosedAt is always nil (the wire state still round-trips via
+//   - web URL / closed-at: gongfeng's Issue model carries no web_url or
+//     closed_at field, so Issue.WebURL is always empty and Issue.ClosedAt is
+//     always nil on this platform (the wire state still round-trips via
 //     Issue.State).
 
 // issueNumber parses the SDK's string issue number into gongfeng's int IID
@@ -43,7 +43,7 @@ func issueNumber(op, number string) (int, error) {
 // ListIssues implements provider.IssueManager. State and the Labels csv
 // pass through as filters (open→opened per 工蜂's vocabulary; inbound
 // convertIssue maps back); the Assignee filter is not carried (registered
-// above).
+// above — the endpoint takes no assignee filter).
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gongfeng.ListIssuesOptions{
@@ -83,9 +83,9 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 	return convertIssue(issue), nil
 }
 
-// CreateIssue implements provider.IssueManager. opts.Assignees is ignored:
-// 工蜂's create surface takes assignee IDs, and resolving usernames to IDs
-// requires the Users API (a future UserManager round).
+// CreateIssue implements provider.IssueManager. opts.Assignees resolves to
+// 工蜂's assignee_ids csv through the Users API (see users.go); an unknown
+// username fails the call with a NotFound error.
 func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
 	createOpts := &gongfeng.CreateIssueOptions{Title: gongfeng.Ptr(opts.Title)}
 	if opts.Body != "" {
@@ -101,6 +101,13 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		}
 		createOpts.MilestoneID = gongfeng.Ptr(m)
 	}
+	if len(opts.Assignees) > 0 {
+		ids, err := p.resolveUserIDs(ctx, "CreateIssue", opts.Assignees)
+		if err != nil {
+			return nil, err
+		}
+		createOpts.AssigneeIDs = gongfeng.Ptr(assigneeIDsCSV(ids))
+	}
 	issue, _, err := p.client.Issues.CreateIssue(ctx, pid(opts.Owner, opts.Repo), createOpts)
 	if err != nil {
 		return nil, sdkError("CreateIssue", err)
@@ -110,8 +117,8 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 
 // UpdateIssue implements provider.IssueManager. Empty option fields stay
 // absent from the PUT body, leaving the issue unchanged; state changes
-// travel as 工蜂's state_event verbs. opts.Assignees is ignored (see
-// CreateIssue).
+// travel as 工蜂's state_event verbs. opts.Assignees resolves to the
+// assignee_ids csv through the Users API (see CreateIssue).
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
 	n, err := issueNumber("UpdateIssue", number)
 	if err != nil {
@@ -140,6 +147,13 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 			return nil, err
 		}
 		updateOpts.MilestoneID = gongfeng.Ptr(m)
+	}
+	if len(opts.Assignees) > 0 {
+		ids, err := p.resolveUserIDs(ctx, "UpdateIssue", opts.Assignees)
+		if err != nil {
+			return nil, err
+		}
+		updateOpts.AssigneeIDs = gongfeng.Ptr(assigneeIDsCSV(ids))
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, updateOpts)
 	if err != nil {

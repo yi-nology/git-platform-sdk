@@ -115,8 +115,7 @@ This document is generated from the backends' registered divergence ledgers
 | ReviewManager | CreateReview | opts.Event | mapping | A review is created as a note; verdicts have no equivalent, so the state is always commented. |
 | ReviewManager | RequestReviewers |  | ignore | The platform exposes no reviewer-request surface the SDK can drive; the call succeeds without effect. |
 | ReviewManager | DismissReview |  | stub | The platform exposes no review-dismissal surface. |
-| IssueManager | CreateIssue | opts.Assignees | ignore | Gongfeng issue writes take user IDs; username-to-ID resolution is not wired. |
-| IssueManager | UpdateIssue | opts.Assignees | ignore | See CreateIssue. |
+| IssueManager | ListIssues | opts.Assignee | ignore | The Gongfeng issue list endpoint takes no assignee filter; the option is accepted but ignored. |
 | IssueManager | RemoveIssueLabel |  | mapping | Label deletion routes through replace semantics; removing the last label is a no-op. |
 | IssueManager | ListIssues | WebURL, ClosedAt | mapping | The API exposes no issue web URL and no closed-at timestamp. |
 | IssueManager | GetIssue | WebURL, ClosedAt | mapping | See ListIssues. |

@@ -421,32 +421,146 @@ func TestUpdateIssue_WireMappings(t *testing.T) {
 	}
 }
 
-// TestCreateIssue_IgnoresAssignees checks the registered Assignees
-// limitation: usernames cannot reach 工蜂's assignee_ids surface, so the
-// create body carries no assignee_ids key while title/description/labels
-// csv do travel.
-func TestCreateIssue_IgnoresAssignees(t *testing.T) {
-	var body map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			body = map[string]any{}
-			_ = json.NewDecoder(r.Body).Decode(&body)
+// tcUsersRecordingStub records the username→ID resolution path: GET
+// /api/v3/users/{name} answers a single user object with the fixed numeric
+// ID 101 (404 when unknownUser is set), and the issue write verbs answer
+// with a minimal issue fixture. Every request is counted.
+type tcUsersRecordingStub struct {
+	mu        sync.Mutex
+	paths     []string
+	userGets  int
+	issuePut  int
+	issuePost int
+	posts     []map[string]any
+	puts      []map[string]any
+}
+
+func (s *tcUsersRecordingStub) handler(unknownUser bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		isUsersGet := r.Method == http.MethodGet && strings.HasPrefix(stripAPIPrefix(r.URL.Path), "/users/")
+		s.mu.Lock()
+		s.paths = append(s.paths, r.Method+" "+r.URL.RequestURI())
+		if isUsersGet {
+			s.userGets++
 		}
-		writeJSON(w, tcIssueResponse(9, "opened", []string{"bug"}))
-	}))
+		s.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case isUsersGet:
+			if unknownUser {
+				w.WriteHeader(http.StatusNotFound)
+				writeJSON(w, map[string]string{"message": "404 User Not Found"})
+				return
+			}
+			writeJSON(w, map[string]any{"id": 101, "username": "dev", "name": "Developer"})
+		case r.Method == http.MethodPost:
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			s.mu.Lock()
+			s.issuePost++
+			s.posts = append(s.posts, body)
+			s.mu.Unlock()
+			writeJSON(w, tcIssueResponse(9, "opened", []string{"bug"}))
+		case r.Method == http.MethodPut:
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			s.mu.Lock()
+			s.issuePut++
+			s.puts = append(s.puts, body)
+			s.mu.Unlock()
+			writeJSON(w, tcIssueResponse(9, "opened", []string{"bug"}))
+		default:
+			writeJSON(w, tcIssueResponse(9, "opened", []string{"bug"}))
+		}
+	}
+}
+
+// TestCreateIssue_ResolvesAssignees verifies CreateIssue's Assignees resolve
+// through the Users API (GET /users/{username}) and land on the wire as the
+// assignee_ids csv (they were silently ignored before).
+func TestCreateIssue_ResolvesAssignees(t *testing.T) {
+	stub := &tcUsersRecordingStub{}
+	srv := httptest.NewServer(stub.handler(false))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
 	if _, err := p.CreateIssue(context.Background(), provider.CreateIssueOptions{
 		Owner: "owner", Repo: "repo", Title: "bug", Body: "broke",
 		Assignees: []string{"dev"}, Labels: []string{"a", "b"}, Milestone: "5",
 	}); err != nil {
-		t.Fatal(err)
+		t.Fatalf("CreateIssue: %v", err)
 	}
-	if _, ok := body["assignee_ids"]; ok {
-		t.Errorf("expected no assignee_ids on the wire (registered ignore), got body %v", body)
+
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if stub.userGets != 1 {
+		t.Fatalf("expected exactly 1 GET /users/{name}, got %d (paths %v)", stub.userGets, stub.paths)
+	}
+	if stub.issuePost != 1 || len(stub.posts) != 1 {
+		t.Fatalf("expected exactly 1 issue POST, got %d (paths %v)", stub.issuePost, stub.paths)
+	}
+	body := stub.posts[0]
+	if body["assignee_ids"] != "101" {
+		t.Errorf("expected POST body assignee_ids csv %q, got %v", "101", body["assignee_ids"])
 	}
 	if body["labels"] != "a,b" || body["milestone_id"] != float64(5) {
-		t.Errorf("expected labels csv and milestone_id, got body %v", body)
+		t.Errorf("expected labels csv and milestone_id to keep traveling, got body %v", body)
+	}
+}
+
+// TestUpdateIssue_ResolvesAssignees verifies UpdateIssue carries
+// assignee_ids, and that a second assignee write reuses the cached
+// username→ID resolution instead of re-hitting the Users API.
+func TestUpdateIssue_ResolvesAssignees(t *testing.T) {
+	stub := &tcUsersRecordingStub{}
+	srv := httptest.NewServer(stub.handler(false))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	for i := 0; i < 2; i++ {
+		if _, err := p.UpdateIssue(context.Background(), "owner", "repo", "9", provider.UpdateIssueOptions{
+			Assignees: []string{"dev"},
+		}); err != nil {
+			t.Fatalf("UpdateIssue #%d: %v", i+1, err)
+		}
+	}
+
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if stub.userGets != 1 {
+		t.Errorf("expected the cached resolution to keep GET /users/{name} at 1, got %d (paths %v)", stub.userGets, stub.paths)
+	}
+	if stub.issuePut != 2 || len(stub.puts) != 2 {
+		t.Fatalf("expected 2 issue PUTs, got %d (paths %v)", stub.issuePut, stub.paths)
+	}
+	for i, body := range stub.puts {
+		if body["assignee_ids"] != "101" {
+			t.Errorf("PUT #%d body assignee_ids = %v, want csv %q", i+1, body["assignee_ids"], "101")
+		}
+	}
+}
+
+// TestCreateIssue_UnknownAssigneeNotFound verifies an unknown assignee
+// surfaces as a NotFound under the calling op and stops the write before it
+// reaches the wire.
+func TestCreateIssue_UnknownAssigneeNotFound(t *testing.T) {
+	stub := &tcUsersRecordingStub{}
+	srv := httptest.NewServer(stub.handler(true)) // /users/{name} answers 404
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	_, err := p.CreateIssue(context.Background(), provider.CreateIssueOptions{
+		Owner: "owner", Repo: "repo", Title: "bug", Assignees: []string{"ghost"},
+	})
+	if err == nil {
+		t.Fatal("expected a NotFound error for the unknown user, got nil")
+	}
+	if !provider.IsNotFound(err) {
+		t.Errorf("expected IsNotFound, got %v", err)
+	}
+
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if stub.issuePost != 0 {
+		t.Errorf("expected no issue POST after a failed resolution, got %d", stub.issuePost)
 	}
 }
 
