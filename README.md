@@ -344,11 +344,13 @@ if caps.Labels {
 - **Tencent Code 工蜂 `Label.ID` 恒为 0**: 工蜂标签按名寻址（更新/删除经
   options 携带当前名，无需 name→ID 解析扫描），gongfeng Label 模型无 id
   字段，`Label.ID` 在该平台恒为 0（标签端到端按名操作）。
-- **Tencent Code 工蜂 issue 四处登记忽略/缺省**: `Assignees` 字段被忽略且
-  `ListIssuesOptions.Assignee` 过滤不携带——工蜂 issue 写面收 `assignee_ids`
-  （数值用户 ID csv），username→ID 需 Users API 而 SDK 无按名查询面；移除
-  issue 的最后一个标签是 no-op——空 label csv 因 `omitempty` 上不了 PUT 体，
-  标签保留；`Issue.WebURL` 恒为空、`Issue.ClosedAt` 恒为 nil——gongfeng
+- **Tencent Code 工蜂 issue 三处登记限制**: `CreateIssue`/`UpdateIssue` 的
+  `Assignees` 经 Users API（`GET /users/{username}`）解析为 `assignee_ids`
+  （数值用户 ID csv）后生效,每 provider 带 TTL 缓存,未知用户名报
+  `provider.IsNotFound`;`ListIssuesOptions.Assignee` 过滤不携带——工蜂 issue
+  列表端点无 assignee 过滤参数（登记忽略）；移除 issue 的最后一个标签是
+  no-op——空 label csv 因 `omitempty` 上不了 PUT 体，标签保留；
+  `Issue.WebURL` 恒为空、`Issue.ClosedAt` 恒为 nil——gongfeng
   issue 模型无这两个字段。
 - **Tencent Code 工蜂 Reviews 是 MR notes 映射（已登记）**: 工蜂原生评审以
   携带 `reviewer_state` verdict 的 MR note 表达，与普通 MR 评论共用同一集合

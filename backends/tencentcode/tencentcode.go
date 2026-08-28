@@ -51,6 +51,7 @@ type Provider struct {
 	client    *gongfeng.Client
 	transport *transport.Client
 	logger    provider.Logger
+	userIDs   *backendutil.IDCache
 }
 
 // New builds a Tencent Code Provider from the given config.
@@ -119,7 +120,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "New", err)
 	}
 
-	return &Provider{client: gfClient, transport: transportClient, logger: logger}, nil
+	return &Provider{
+		client:    gfClient,
+		transport: transportClient,
+		logger:    logger,
+		userIDs:   backendutil.NewIDCache(5 * time.Minute),
+	}, nil
 }
 
 // sdkError wraps an error as a provider.ProviderError for the TencentCode platform.

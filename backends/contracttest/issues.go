@@ -2,8 +2,10 @@ package contracttest
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"regexp"
 	"strings"
 	"sync"
@@ -30,6 +32,13 @@ type IssuesHarnessConfig struct {
 	// LabelsResponse is the JSON array for repository-label GETs. First
 	// item: id 1, name "bug", color "#4cc917".
 	LabelsResponse string
+	// CreateIssueAssigneesByID declares that the backend resolves issue
+	// assignee usernames through a users lookup (GitLab's /users?username=
+	// exact-match filter, Tencent 工蜂's /users/{username} endpoint) and
+	// writes numeric assignee IDs. When set, the suite asserts the
+	// lookup-then-write wire shape on CreateIssue; when unset, the create
+	// subtest exercises the plain title-only wire (the default).
+	CreateIssueAssigneesByID bool
 }
 
 // IssuesHarness is the full harness RunIssuesSuite consumes; auto-mounting
@@ -97,6 +106,13 @@ func RunIssuesSuite(t *testing.T, h IssuesHarness) {
 		im, requests := newIM(t)
 		assertIssueCreateWire(t, im, requests)
 	})
+	t.Run("Create_ResolvesAssigneesByID", func(t *testing.T) {
+		if !h.CreateIssueAssigneesByID {
+			t.Skipf("%s does not declare CreateIssueAssigneesByID", h.Name)
+		}
+		im, requests := newIM(t)
+		assertIssueCreateAssigneesByIDWire(t, im, requests)
+	})
 	t.Run("Update_PatchesTitle", func(t *testing.T) {
 		im, requests := newIM(t)
 		assertIssueUpdateWire(t, im, requests)
@@ -154,6 +170,38 @@ func assertIssueCreateWire(t *testing.T, im provider.IssueManager, requests *[]r
 		t.Fatalf("CreateIssue: issue=%v err=%v", issue, err)
 	}
 	assertBodyHas(t, requests, http.MethodPost, "title", "bug")
+}
+
+// assertIssueCreateAssigneesByIDWire checks that CreateIssue's Assignees
+// resolve through a users lookup before the write and land on the create
+// body as numeric assignee IDs (GitLab's assignee_ids array, Tencent 工蜂's
+// assignee_ids csv).
+func assertIssueCreateAssigneesByIDWire(t *testing.T, im provider.IssueManager, requests *[]recordedRequest) {
+	t.Helper()
+	if _, err := im.CreateIssue(context.Background(), provider.CreateIssueOptions{
+		Owner: "owner", Repo: "repo", Title: "bug", Assignees: []string{"dev"},
+	}); err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	var postBody string
+	sawUsersLookup := false
+	for _, req := range *requests {
+		reqPath, _, _ := strings.Cut(req.Path, "?")
+		if req.Method == http.MethodGet && usersLookupPath.MatchString(reqPath) {
+			sawUsersLookup = true
+			continue
+		}
+		if req.Method == http.MethodPost {
+			b, _ := json.Marshal(req.Body)
+			postBody = string(b)
+		}
+	}
+	if !sawUsersLookup {
+		t.Error("expected a users lookup before writing assignees")
+	}
+	if !strings.Contains(postBody, "assignee_ids") || !strings.Contains(postBody, "101") {
+		t.Errorf("issue create body = %q, want assignee_ids containing resolved id 101", postBody)
+	}
 }
 
 // assertIssueUpdateWire checks that UpdateIssue mutates via PATCH or PUT and
@@ -290,6 +338,11 @@ func nonEmptyBodyValue(v any) bool {
 // Alphanumeric (not just digits) because Gitee issue numbers are alphanumeric (e.g. I3XU7A).
 var issuePathNum = regexp.MustCompile(`/issues/[A-Za-z0-9]+$`)
 
+// usersLookupPath matches a username→ID resolution lookup: GitLab's
+// ListUsers exact-match filter (/users?username=) and 工蜂's GetUser
+// (/users/{username}).
+var usersLookupPath = regexp.MustCompile(`/users(/[^/]+)?$`)
+
 // issueStubServer returns the method/shape-routed recording mock.
 func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 	var mu sync.Mutex
@@ -303,6 +356,17 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 		switch {
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && usersLookupPath.MatchString(r.URL.Path):
+			// Username→ID resolution lookup: echo the requested username
+			// back under a fixed numeric ID. GitLab's ListUsers filter
+			// arrives as ?username= on a bare /users path and expects an
+			// array; 工蜂's GetUser arrives as /users/{username} and
+			// expects a single object.
+			if name := r.URL.Query().Get("username"); name != "" {
+				_, _ = w.Write([]byte(`[{"id":101,"username":"` + name + `"}]`))
+			} else {
+				_, _ = w.Write([]byte(`{"id":101,"username":"` + path.Base(r.URL.Path) + `","name":"Developer"}`))
+			}
 		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "labels"):
 			// Adding labels to an issue: GitHub-shaped APIs answer with the
 			// label array (e.g. []*Label), not a single issue object.
