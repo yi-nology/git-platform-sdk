@@ -363,9 +363,11 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 			// array; 工蜂's GetUser arrives as /users/{username} and
 			// expects a single object.
 			if name := r.URL.Query().Get("username"); name != "" {
-				_, _ = w.Write([]byte(`[{"id":101,"username":"` + name + `"}]`))
+				resp, _ := json.Marshal([]map[string]any{{"id": 101, "username": name}})
+				_, _ = w.Write(resp)
 			} else {
-				_, _ = w.Write([]byte(`{"id":101,"username":"` + path.Base(r.URL.Path) + `","name":"Developer"}`))
+				resp, _ := json.Marshal(map[string]any{"id": 101, "username": path.Base(r.URL.Path), "name": "Developer"})
+				_, _ = w.Write(resp)
 			}
 		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "labels"):
 			// Adding labels to an issue: GitHub-shaped APIs answer with the

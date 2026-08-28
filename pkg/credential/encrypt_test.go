@@ -297,7 +297,7 @@ func TestCryptoManager_RejectsWrongVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("base64 decode failed: %v", err)
 	}
-	b := []byte(raw)
+	b := raw
 	b[0] = 0xFF // corrupt the version byte
 	tampered := base64.URLEncoding.EncodeToString(b)
 

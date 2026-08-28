@@ -379,7 +379,8 @@ func reviewStubServer(h ReviewsHarness) (*httptest.Server, *[]recordedRequest) {
 			// Username→ID resolution lookup (GitLab's ListUsers with the
 			// exact-match username filter): echo the query username back
 			// under a fixed numeric ID.
-			_, _ = w.Write([]byte(`[{"id":101,"username":"` + r.URL.Query().Get("username") + `"}]`))
+			resp, _ := json.Marshal([]map[string]any{{"id": 101, "username": r.URL.Query().Get("username")}})
+			_, _ = w.Write(resp)
 		case r.Method == http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(h.MutateResponse))

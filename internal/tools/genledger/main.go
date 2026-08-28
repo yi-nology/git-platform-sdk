@@ -22,7 +22,7 @@ import (
 
 func main() {
 	out := filepath.Join(repoRoot(), "docs", "divergence-ledger.md")
-	if err := os.WriteFile(out, []byte(render()), 0o644); err != nil {
+	if err := os.WriteFile(out, []byte(render()), 0o600); err != nil {
 		fmt.Fprintln(os.Stderr, "genledger: write:", err)
 		os.Exit(1)
 	}
