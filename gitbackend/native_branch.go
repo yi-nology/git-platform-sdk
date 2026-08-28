@@ -93,9 +93,12 @@ func (b *NativeGitBackend) ListLocalBranches(ctx context.Context, repoPath strin
 }
 
 func (b *NativeGitBackend) ListBranches(ctx context.Context, repoPath string) ([]BranchDetail, error) {
+	// The leading %(refname) column carries the full ref because
+	// %(refname:short) drops the refs/remotes/ prefix under --format, which
+	// would make remote-ness undetectable.
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
 		"branch", "-a",
-		"--format=%(refname:short)|%(objectname:short)|%(HEAD)|%(upstream:short)|%(authorname)|%(authoremail)|%(authordate:iso-strict)|%(subject)",
+		"--format=%(refname)|%(refname:short)|%(objectname:short)|%(HEAD)|%(upstream:short)|%(authorname)|%(authoremail)|%(authordate:iso-strict)|%(subject)",
 	}, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("ListBranches", repoPath, stderr, err)
@@ -107,34 +110,30 @@ func (b *NativeGitBackend) ListBranches(ctx context.Context, repoPath string) ([
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 8)
-		if len(parts) < 8 {
+		parts := strings.SplitN(line, "|", 9)
+		if len(parts) < 9 {
 			continue
 		}
-		name := parts[0]
-		isRemote := strings.HasPrefix(name, "remotes/")
-		if isRemote {
-			name = strings.TrimPrefix(name, "remotes/")
-		}
-		isCurrent := parts[2] == "*"
+		isRemote := strings.HasPrefix(parts[0], "refs/remotes/")
+		name := parts[1]
+		isCurrent := parts[3] == "*"
 		remote := ""
 		if isRemote {
-			p := strings.SplitN(name, "/", 2)
-			if len(p) == 2 {
+			if p := strings.SplitN(name, "/", 2); len(p) == 2 {
 				remote = p[0]
 			}
 		}
 		branches = append(branches, BranchDetail{
 			Name:      name,
-			Hash:      parts[1],
+			Hash:      parts[2],
 			IsCurrent: isCurrent,
 			IsRemote:  isRemote,
 			Remote:    remote,
-			Upstream:  parts[3],
-			Author:    parts[4],
-			Email:     parts[5],
-			Date:      parts[6],
-			Message:   parts[7],
+			Upstream:  parts[4],
+			Author:    parts[5],
+			Email:     parts[6],
+			Date:      parts[7],
+			Message:   parts[8],
 		})
 	}
 	return branches, nil

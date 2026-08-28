@@ -130,13 +130,20 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) {
 
 func parseFetchRefs(output string) []string {
 	var refs []string
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, " ") && strings.Contains(line, "->") {
-			parts := strings.SplitN(line, "->", 2)
-			if len(parts) == 2 {
-				refs = append(refs, strings.TrimSpace(parts[1]))
-			}
+	for _, raw := range strings.Split(output, "\n") {
+		// git's fetch ref lines are indented (" * [new branch] main ->
+		// origin/main"); the leading-space check must run on the raw line,
+		// before trimming — a trimmed line can never match it.
+		if !strings.HasPrefix(raw, " ") {
+			continue
+		}
+		line := strings.TrimSpace(raw)
+		if !strings.Contains(line, "->") {
+			continue
+		}
+		parts := strings.SplitN(line, "->", 2)
+		if len(parts) == 2 {
+			refs = append(refs, strings.TrimSpace(parts[1]))
 		}
 	}
 	return refs
