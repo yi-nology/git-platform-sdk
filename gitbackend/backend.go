@@ -78,8 +78,8 @@ type AuthConfig struct {
 type FetchOptions struct {
 	// RepoPath is the local working tree to operate on.
 	RepoPath string
-	// Remote is the remote name to fetch from (e.g. "origin"). Defaults to
-	// the remote configured for the current branch when empty.
+	// Remote is the remote name to fetch from. Defaults to "origin" when
+	// empty.
 	Remote string
 	// Branches limits the fetch to the given branch/ref names. When empty all
 	// branches are fetched. Full 40-char SHAs are ignored as they are not
