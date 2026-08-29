@@ -211,6 +211,22 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	return convertIssueComment(note), nil
 }
 
+// UpdateIssueComment implements provider.IssueManager. GitLab addresses
+// issue notes through the issue, so number must carry the issue's IID; the
+// platform only lets the note's author perform the edit.
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+	n, err := issueNumber("UpdateIssueComment", number)
+	if err != nil {
+		return nil, err
+	}
+	note, _, err := p.client.Notes.UpdateIssueNote(pidOf(owner, repo), n, commentID,
+		&gitlab.UpdateIssueNoteOptions{Body: gitlab.Ptr(body)}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateIssueComment", err)
+	}
+	return convertIssueComment(note), nil
+}
+
 // ListIssueLabels implements provider.IssueManager: repository-level labels.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),

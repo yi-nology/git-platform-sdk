@@ -222,6 +222,22 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	return convertIssueComment(note), nil
 }
 
+// UpdateIssueComment implements provider.IssueManager via the notes API.
+// 工蜂 addresses issue notes through the issue, so number must carry the
+// issue's number; the platform only lets the note's author perform the edit.
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+	n, err := issueNumber("UpdateIssueComment", number)
+	if err != nil {
+		return nil, err
+	}
+	note, _, err := p.client.Notes.UpdateIssueNote(ctx, pid(owner, repo), n, int(commentID),
+		&gongfeng.UpdateIssueNoteOptions{Body: gongfeng.Ptr(body)})
+	if err != nil {
+		return nil, sdkError("UpdateIssueComment", err)
+	}
+	return convertIssueComment(note), nil
+}
+
 // ListIssueLabels implements provider.IssueManager: repository-level
 // labels (labels.go owns the model conversion; IDs stay zero because the
 // gongfeng Label model has none).
