@@ -13,7 +13,7 @@ require (
 	github.com/google/go-github/v69 v69.2.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/yi-nology/go-gitcode v0.7.2
-	gitlab.com/gitlab-org/api/client-go/v2 v2.59.1
+	gitlab.com/gitlab-org/api/client-go/v2 v2.60.0
 	golang.org/x/crypto v0.55.0
 )
 
