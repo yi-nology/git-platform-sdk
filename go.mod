@@ -2,6 +2,8 @@ module github.com/yi-nology/git-platform-sdk
 
 go 1.26
 
+toolchain go1.26.6
+
 require (
 	code.gitea.io/sdk/gitea v0.25.1
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
