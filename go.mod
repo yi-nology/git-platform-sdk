@@ -10,7 +10,7 @@ require (
 	gitee.com/openeuler/go-gitee v0.0.0-20251225091545-a0f78272dafc
 	github.com/antihax/optional v1.0.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/google/go-github/v69 v69.2.0
+	github.com/google/go-github/v72 v72.0.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/yi-nology/go-gitcode v0.7.2
 	gitlab.com/gitlab-org/api/client-go/v2 v2.60.0

@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/google/go-github/v69/github"
+	"github.com/google/go-github/v72/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	sdkgithub "github.com/google/go-github/v69/github"
+	sdkgithub "github.com/google/go-github/v72/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/contracttest"
 	"github.com/yi-nology/git-platform-sdk/provider"
