@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Dependency refresh across the board** (2026-08-29): google/go-github
+  v69.2.0 → v72.0.0 (import-path swap only; no used API changed), GitLab
+  client-go v2.55.1 → v2.60.0, golang.org/x/crypto v0.54.0 → v0.55.0, and
+  CI actions (checkout v5→v7, upload-artifact v6→v7). All direct
+  dependencies are now at their latest releases.
+
+### Security
+
+- **Pinned `toolchain go1.26.6`** in go.mod: govulncheck reported seven
+  stdlib vulnerabilities reachable from this code under go1.26.4
+  (crypto/tls, net/http, net/url, encoding/xml, encoding/asn1), all fixed
+  in go1.26.6. CI bootstraps the patched toolchain via go-version-file;
+  govulncheck now reports zero affecting vulnerabilities.
+
 ## [v0.47.0] - 2026-08-28
 
 ### Fixed
