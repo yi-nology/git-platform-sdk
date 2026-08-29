@@ -234,6 +234,18 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	return convertIssueComment(comment), nil
 }
 
+// UpdateIssueComment implements provider.IssueManager. The edit endpoint
+// addresses the comment directly, so number is unused; the SDK accepts no
+// context (see the forgejo standing limitation). The platform only lets the
+// comment's author perform the edit.
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+	comment, _, err := p.client.EditIssueComment(owner, repo, commentID, forgejo.EditIssueCommentOption{Body: body})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "UpdateIssueComment", err)
+	}
+	return convertIssueComment(comment), nil
+}
+
 // ListIssueLabels implements provider.IssueManager: repository-level labels.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, _, err := p.client.ListRepoLabels(owner, repo, forgejo.ListLabelsOptions{ListOptions: forgejo.ListOptions{PageSize: 100}})

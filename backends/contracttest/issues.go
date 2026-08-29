@@ -243,6 +243,13 @@ func assertIssueComments(t *testing.T, im provider.IssueManager, requests *[]rec
 		t.Fatalf("CreateIssueComment: %v", err)
 	}
 	assertBodyHas(t, requests, http.MethodPost, "body", "a comment")
+	if _, err := im.UpdateIssueComment(context.Background(), "owner", "repo", "1", 1, "an edited comment"); err != nil {
+		t.Fatalf("UpdateIssueComment: %v", err)
+	}
+	// The edit is a body-replacing PATCH/PUT carrying the new body text;
+	// platforms differ only in whether the path routes through the issue
+	// (GitLab, 工蜂) or addresses the comment directly.
+	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, "body", "an edited comment")
 }
 
 // assertIssueLabelOps checks repository-label listing (color normalization),

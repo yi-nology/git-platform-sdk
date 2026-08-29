@@ -3,6 +3,7 @@ package gitee
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -192,6 +193,25 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	})
 	if err != nil {
 		return nil, p.sdkErr("CreateIssueComment", resp, err)
+	}
+	return convertIssueComment(note), nil
+}
+
+// UpdateIssueComment implements provider.IssueManager. The edit endpoint
+// addresses the comment directly, so number is unused. Gitee's wire IDs are
+// int32, so an out-of-range comment ID is rejected up front instead of
+// silently truncating to a different comment; the platform only lets the
+// comment's author perform the edit.
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+	if commentID < 0 || commentID > math.MaxInt32 {
+		return nil, provider.Wrapf(provider.PlatformGitee, "UpdateIssueComment", "comment id %d out of gitee's int32 range", commentID)
+	}
+	note, resp, err := p.client.IssuesApi.PatchV5ReposOwnerRepoIssuesCommentsId(ctx, esc(owner), esc(repo), int32(commentID), gitee.IssueCommentPatchParam{
+		AccessToken: p.token,
+		Body:        body,
+	})
+	if err != nil {
+		return nil, p.sdkErr("UpdateIssueComment", resp, err)
 	}
 	return convertIssueComment(note), nil
 }
