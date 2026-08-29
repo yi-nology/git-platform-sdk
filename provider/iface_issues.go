@@ -16,6 +16,17 @@ type IssueManager interface {
 	ReopenIssue(ctx context.Context, owner, repo, number string) (*Issue, error)
 	ListIssueComments(ctx context.Context, owner, repo, number string) ([]*IssueComment, error)
 	CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*IssueComment, error)
+	// UpdateIssueComment replaces a comment's body wholesale: every
+	// platform's edit surface is a body-only PATCH/PUT with no
+	// partial-update semantics, mirroring CreateIssueComment. The platform
+	// enforces authorship — only the comment's author (typically the token
+	// identity, e.g. a review bot updating its own comment) may edit — so
+	// the call fails for anyone else's comment. commentID is the
+	// IssueComment.ID from CreateIssueComment or ListIssueComments. number
+	// is ignored on platforms whose edit endpoint addresses the comment
+	// directly (GitHub, Gitea, Forgejo, GitCode, Gitee); GitLab and Tencent
+	// 工蜂 route through the issue, so it must carry that issue's number.
+	UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*IssueComment, error)
 	ListIssueLabels(ctx context.Context, owner, repo string) ([]*IssueLabel, error)
 	AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error
 	RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error

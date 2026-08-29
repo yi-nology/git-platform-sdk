@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`IssueManager.UpdateIssueComment`** — edit an issue comment's body on
+  all seven platforms. The body is replaced wholesale (every platform's
+  edit surface is a body-only PATCH/PUT), and the platform enforces
+  authorship: only the comment's author — typically the token identity,
+  e.g. a review bot updating its own comment — may edit. `commentID` is
+  the `IssueComment.ID` from `CreateIssueComment`/`ListIssueComments`.
+  `number` is ignored where the edit endpoint addresses the comment
+  directly (GitHub, Gitea, Forgejo, GitCode, Gitee); GitLab and Tencent
+  工蜂 route through the issue, so it must carry the issue's number there.
+  Gitee's wire IDs are int32, so an out-of-range ID fails up front instead
+  of truncating to a different comment. The issues contract suite now
+  asserts the edit wire shape (PATCH/PUT + body) across all seven
+  backends.
+
 ## [v0.48.0] - 2026-08-29
 
 ### Changed

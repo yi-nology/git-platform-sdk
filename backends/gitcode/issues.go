@@ -175,6 +175,17 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	return convertIssueComment(comment), nil
 }
 
+// UpdateIssueComment implements provider.IssueManager. The edit endpoint
+// addresses the comment directly, so number is unused. The platform only
+// lets the comment's author perform the edit.
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+	comment, err := p.client.UpdateIssueComment(ctx, owner, repo, commentID, body)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateIssueComment", err)
+	}
+	return convertIssueComment(comment), nil
+}
+
 // ListIssueLabels implements provider.IssueManager.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, err := p.client.ListIssueLabels(ctx, owner, repo)

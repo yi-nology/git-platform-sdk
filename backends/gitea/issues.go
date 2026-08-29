@@ -234,6 +234,18 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	return convertIssueComment(comment), nil
 }
 
+// UpdateIssueComment implements provider.IssueManager. The edit endpoint
+// addresses the comment directly, so number is unused; the SDK accepts no
+// context (see the gitea standing limitation). The platform only lets the
+// comment's author perform the edit.
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+	comment, _, err := p.client.EditIssueComment(owner, repo, commentID, gitea.EditIssueCommentOption{Body: body})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitea, "UpdateIssueComment", err)
+	}
+	return convertIssueComment(comment), nil
+}
+
 // ListIssueLabels implements provider.IssueManager: repository-level labels.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, _, err := p.client.ListRepoLabels(owner, repo, gitea.ListLabelsOptions{ListOptions: gitea.ListOptions{PageSize: 100}})
