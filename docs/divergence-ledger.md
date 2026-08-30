@@ -104,6 +104,7 @@ This document is generated from the backends' registered divergence ledgers
 | LabelManager | UpdateLabel | opts.Description | ignore | GitCode's label API has no description field. |
 | MilestoneManager | CreateMilestone |  | detour | go-gitcode marshals due_on without omitempty, which would clear due dates on the GitHub-shaped API; create goes through the raw client with exactly the fields the caller set. |
 | MilestoneManager | UpdateMilestone |  | detour | See CreateMilestone. |
+| IssueManager | ListIssueComments |  | detour | go-gitcode's ListIssueComment surface takes no pagination parameters (a bare GET returns the server-default first page only); the raw client drives page/per_page until an empty page. |
 
 ## tencent_code
 

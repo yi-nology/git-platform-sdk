@@ -3,10 +3,12 @@ package contracttest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -235,18 +237,54 @@ func assertIssueCloseReopen(t *testing.T, im provider.IssueManager) {
 	}
 }
 
+// assertIssueCommentsPaginated checks that ListIssueComments exhausts the
+// platform's pagination. The stub serves a full synthetic first page, the
+// fixture comment on the second page, and nothing after — a backend that
+// stops after page one never sees "a comment", so these assertions fail
+// for it.
+func assertIssueCommentsPaginated(t *testing.T, im provider.IssueManager, requests *[]recordedRequest) {
+	t.Helper()
+	comments, err := im.ListIssueComments(context.Background(), "owner", "repo", "1")
+	if err != nil {
+		t.Fatalf("ListIssueComments: %v", err)
+	}
+	if len(comments) < 2 {
+		t.Fatalf("expected the paginated merge (page-one items + the fixture comment), got %d comments", len(comments))
+	}
+	seen := make(map[int64]bool, len(comments))
+	found := false
+	for _, c := range comments {
+		if c == nil {
+			continue
+		}
+		if seen[c.ID] {
+			t.Errorf("duplicate comment ID %d in the merged list", c.ID)
+		}
+		seen[c.ID] = true
+		if c.Body == "a comment" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error(`expected the second-page fixture comment ("a comment") in the merged list`)
+	}
+	pageGets := 0
+	for _, r := range *requests {
+		if r.Method == http.MethodGet && (strings.Contains(r.Path, "comments") || strings.Contains(r.Path, "notes")) {
+			pageGets++
+		}
+	}
+	if pageGets < 2 {
+		t.Errorf("expected at least two comment-page GETs, recorded %s", methodsOf(*requests))
+	}
+}
+
 // assertIssueComments checks comment listing (body), creation (wire body),
 // and editing (verb + body, plus the issue-routed note path on platforms
 // that address notes through the issue).
 func assertIssueComments(t *testing.T, h IssuesHarness, im provider.IssueManager, requests *[]recordedRequest) {
 	t.Helper()
-	comments, err := im.ListIssueComments(context.Background(), "owner", "repo", "1")
-	if err != nil || len(comments) == 0 {
-		t.Fatalf("ListIssueComments: comments=%d err=%v", len(comments), err)
-	}
-	if comments[0].Body != "a comment" {
-		t.Errorf("expected comment body %q, got %q", "a comment", comments[0].Body)
-	}
+	assertIssueCommentsPaginated(t, im, requests)
 	if _, err := im.CreateIssueComment(context.Background(), "owner", "repo", "1", "a comment"); err != nil {
 		t.Fatalf("CreateIssueComment: %v", err)
 	}
@@ -380,6 +418,40 @@ var issuePathNum = regexp.MustCompile(`/issues/[A-Za-z0-9]+$`)
 // (/users/{username}).
 var usersLookupPath = regexp.MustCompile(`/users(/[^/]+)?$`)
 
+// commentsPage serves the comment-list fixture per the request's paging
+// parameters: page one answers with a full synthetic page (so a backend
+// that stops after the first page never sees the fixture comment and fails
+// the merged-list assertion), page two carries the fixture comment, and
+// later pages are empty. The per-page query parameter is `per_page` on
+// GitHub-shaped APIs and `limit` on Gitea/Forgejo; an unparseable size
+// defaults to 30 (the GitHub-shaped server default).
+func (h IssuesHarness) commentsPage(r *http.Request) []byte {
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	size, _ := strconv.Atoi(q.Get("per_page"))
+	if size == 0 {
+		size, _ = strconv.Atoi(q.Get("limit"))
+	}
+	if size <= 0 {
+		size = 30
+	}
+	switch page {
+	case 1:
+		items := make([]string, 0, size)
+		for i := 0; i < size; i++ {
+			items = append(items, fmt.Sprintf(`{"id":%d,"body":"page one"}`, 1000+i))
+		}
+		return []byte("[" + strings.Join(items, ",") + "]")
+	case 2:
+		return []byte(h.CommentsResponse)
+	default:
+		return []byte(`[]`)
+	}
+}
+
 // issueStubServer returns the method/shape-routed recording mock.
 func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 	var mu sync.Mutex
@@ -419,7 +491,7 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 		case issuePathNum.MatchString(r.URL.Path):
 			_, _ = w.Write([]byte(h.GetResponse))
 		case strings.Contains(r.URL.Path, "comments"), strings.Contains(r.URL.Path, "notes"):
-			_, _ = w.Write([]byte(h.CommentsResponse))
+			_, _ = w.Write(h.commentsPage(r))
 		case strings.Contains(r.URL.Path, "labels") && !strings.Contains(r.URL.Path, "issues"):
 			_, _ = w.Write([]byte(h.LabelsResponse))
 		default:
