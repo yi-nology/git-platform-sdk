@@ -41,11 +41,13 @@ func TestTencentCode_Contract(t *testing.T) {
 			// Assignees resolve through 工蜂's /users/{username} lookup and
 			// land on the wire as the assignee_ids csv.
 			CreateIssueAssigneesByID: true,
-			ListResponse:             `[{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
-			GetResponse:              `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
-			MutateResponse:           `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
-			CommentsResponse:         `[{"id":1,"body":"a comment","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
-			LabelsResponse:           `[{"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			// Note edits route through the issue (issues/{iid}/notes/{id}).
+			UpdateCommentViaIssue: true,
+			ListResponse:          `[{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:           `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse:        `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			CommentsResponse:      `[{"id":1,"body":"a comment","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			LabelsResponse:        `[{"name":"bug","color":"#4cc917","description":"something broke"}]`,
 		},
 		// Gongfeng review-note shape (GitLab-shaped notes carrying the
 		// review): id/body/author/created_at with system bookkeeping notes

@@ -20,7 +20,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Gitee's wire IDs are int32, so an out-of-range ID fails up front instead
   of truncating to a different comment. The issues contract suite now
   asserts the edit wire shape (PATCH/PUT + body) across all seven
-  backends.
+  backends, and additionally pins the issue-routed note path
+  (issues/{number}/notes/{id}) on GitLab and Tencent 工蜂 so the number
+  and commentID plumbing cannot be swapped silently.
 
 ## [v0.48.0] - 2026-08-29
 

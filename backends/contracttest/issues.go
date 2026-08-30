@@ -39,6 +39,12 @@ type IssuesHarnessConfig struct {
 	// lookup-then-write wire shape on CreateIssue; when unset, the create
 	// subtest exercises the plain title-only wire (the default).
 	CreateIssueAssigneesByID bool
+	// UpdateCommentViaIssue declares that the backend addresses an issue
+	// comment edit through the issue (GitLab, Tencent 工蜂 note APIs): the
+	// suite additionally asserts the recorded edit request hits
+	// issues/1/notes/1, so a swap of the number and commentID plumbing
+	// fails instead of passing on the body assertion alone.
+	UpdateCommentViaIssue bool
 }
 
 // IssuesHarness is the full harness RunIssuesSuite consumes; auto-mounting
@@ -121,9 +127,9 @@ func RunIssuesSuite(t *testing.T, h IssuesHarness) {
 		im, _ := newIM(t)
 		assertIssueCloseReopen(t, im)
 	})
-	t.Run("Comments_ListAndCreate", func(t *testing.T) {
+	t.Run("Comments_ListCreateUpdate", func(t *testing.T) {
 		im, requests := newIM(t)
-		assertIssueComments(t, im, requests)
+		assertIssueComments(t, h, im, requests)
 	})
 	t.Run("IssueLabels_ListAddRemove", func(t *testing.T) {
 		im, requests := newIM(t)
@@ -229,8 +235,10 @@ func assertIssueCloseReopen(t *testing.T, im provider.IssueManager) {
 	}
 }
 
-// assertIssueComments checks comment listing (body) and creation (wire body).
-func assertIssueComments(t *testing.T, im provider.IssueManager, requests *[]recordedRequest) {
+// assertIssueComments checks comment listing (body), creation (wire body),
+// and editing (verb + body, plus the issue-routed note path on platforms
+// that address notes through the issue).
+func assertIssueComments(t *testing.T, h IssuesHarness, im provider.IssueManager, requests *[]recordedRequest) {
 	t.Helper()
 	comments, err := im.ListIssueComments(context.Background(), "owner", "repo", "1")
 	if err != nil || len(comments) == 0 {
@@ -250,6 +258,28 @@ func assertIssueComments(t *testing.T, im provider.IssueManager, requests *[]rec
 	// platforms differ only in whether the path routes through the issue
 	// (GitLab, 工蜂) or addresses the comment directly.
 	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, "body", "an edited comment")
+	if h.UpdateCommentViaIssue {
+		assertIssueNoteEditPath(t, *requests)
+	}
+}
+
+// issueNoteEditPath matches an issue-routed note edit,
+// ".../issues/1/notes/1": a backend that swapped the number and commentID
+// plumbing would write to a different path and fail here even though the
+// body assertion alone still passes.
+var issueNoteEditPath = regexp.MustCompile(`issues/1/notes/1$`)
+
+// assertIssueNoteEditPath checks that the recorded PATCH/PUT comment edit
+// addressed the issue-routed note endpoint with the fixture's issue number
+// 1 and comment ID 1.
+func assertIssueNoteEditPath(t *testing.T, requests []recordedRequest) {
+	t.Helper()
+	for _, r := range requests {
+		if (r.Method == http.MethodPatch || r.Method == http.MethodPut) && issueNoteEditPath.MatchString(r.Path) {
+			return
+		}
+	}
+	t.Errorf("expected the comment edit to route through issues/1/notes/1, recorded %s", methodsOf(requests))
 }
 
 // assertIssueLabelOps checks repository-label listing (color normalization),
