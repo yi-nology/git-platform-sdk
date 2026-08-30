@@ -10,6 +10,8 @@ import (
 	gitee "gitee.com/openeuler/go-gitee/gitee"
 	"github.com/antihax/optional"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -165,17 +167,29 @@ func (p *Provider) patchIssueState(ctx context.Context, owner, repo, number, sta
 	return convertIssue(issue), nil
 }
 
-// ListIssueComments implements provider.IssueManager via the SDK.
+// issueCommentPageSize is the per-page value for paginated issue-comment
+// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
+// servers that cap lower are handled by the stop-on-empty loop.
+const issueCommentPageSize = 100
+
+// ListIssueComments implements provider.IssueManager via the SDK,
+// exhausting Gitee's pagination (the loop advances until an empty page, so
+// the result is the complete comment list).
 //
 // Registration: the SDK's Note model carries no updated_at field (the live
 // wire does), so IssueComment.UpdatedAt stays zero on Gitee until the SDK
 // model catches up; created_at parses from the wire's timestamp string.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	notes, resp, err := p.client.IssuesApi.GetV5ReposOwnerRepoIssuesNumberComments(ctx, esc(owner), esc(repo), esc(number), &gitee.GetV5ReposOwnerRepoIssuesNumberCommentsOpts{
-		AccessToken: p.accessToken(),
+	notes, err := backendutil.AllPages(func(page int) ([]gitee.Note, error) {
+		batch, _, err := p.client.IssuesApi.GetV5ReposOwnerRepoIssuesNumberComments(ctx, esc(owner), esc(repo), esc(number), &gitee.GetV5ReposOwnerRepoIssuesNumberCommentsOpts{
+			AccessToken: p.accessToken(),
+			Page:        optional.NewInt32(toInt32(page)),
+			PerPage:     optional.NewInt32(issueCommentPageSize),
+		})
+		return batch, err
 	})
 	if err != nil {
-		return nil, p.sdkErr("ListIssueComments", resp, err)
+		return nil, p.sdkErr("ListIssueComments", nil, err)
 	}
 	result := make([]*provider.IssueComment, 0, len(notes))
 	for _, n := range notes {

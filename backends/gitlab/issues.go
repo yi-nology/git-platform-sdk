@@ -7,6 +7,8 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -179,14 +181,25 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	return convertIssue(issue), nil
 }
 
+// issueCommentPageSize is the per-page value for paginated issue-comment
+// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
+// servers that cap lower are handled by the stop-on-empty loop.
+const issueCommentPageSize = 100
+
 // ListIssueComments implements provider.IssueManager. GitLab models issue
-// comments as notes.
+// comments as notes; the loop exhausts GitLab's pagination (advances until
+// an empty page), so the result is the complete comment list.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := issueNumber("ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
-	notes, _, err := p.client.Notes.ListIssueNotes(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
+	notes, err := backendutil.AllPages(func(page int) ([]*gitlab.Note, error) {
+		batch, _, err := p.client.Notes.ListIssueNotes(pidOf(owner, repo), n, &gitlab.ListIssueNotesOptions{
+			ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: issueCommentPageSize},
+		}, gitlab.WithContext(ctx))
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListIssueComments", err)
 	}

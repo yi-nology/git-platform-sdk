@@ -14,6 +14,9 @@ type IssueManager interface {
 	UpdateIssue(ctx context.Context, owner, repo, number string, opts UpdateIssueOptions) (*Issue, error)
 	CloseIssue(ctx context.Context, owner, repo, number string) (*Issue, error)
 	ReopenIssue(ctx context.Context, owner, repo, number string) (*Issue, error)
+	// ListIssueComments returns the issue's comments in full, exhausting
+	// the platform's pagination — the result is the complete comment list,
+	// not a single page, in the platform's default order.
 	ListIssueComments(ctx context.Context, owner, repo, number string) ([]*IssueComment, error)
 	CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*IssueComment, error)
 	// UpdateIssueComment replaces a comment's body wholesale: every

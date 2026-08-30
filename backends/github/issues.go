@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/go-github/v72/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -152,13 +154,23 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	return convertIssue(issue), nil
 }
 
+// issueCommentPageSize is the per-page value for paginated issue-comment
+// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
+// servers that cap lower are handled by the stop-on-empty loop.
+const issueCommentPageSize = 100
+
 // ListIssueComments implements provider.IssueManager.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := issueNumber("ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
-	comments, _, err := p.client.Issues.ListComments(ctx, owner, repo, n, nil)
+	comments, err := backendutil.AllPages(func(page int) ([]*github.IssueComment, error) {
+		batch, _, err := p.client.Issues.ListComments(ctx, owner, repo, n, &github.IssueListCommentsOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: issueCommentPageSize},
+		})
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListIssueComments", err)
 	}

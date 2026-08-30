@@ -2,10 +2,14 @@ package gitcode
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/git-platform-sdk/transport"
 	gitcode "github.com/yi-nology/go-gitcode"
 )
 
@@ -145,13 +149,31 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	return convertIssue(issue), nil
 }
 
+// issueCommentPageSize is the per-page value for paginated issue-comment
+// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
+// servers that cap lower are handled by the stop-on-empty loop.
+const issueCommentPageSize = 100
+
 // ListIssueComments implements provider.IssueManager.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := issueNumber("ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
-	comments, err := p.client.ListIssueComments(ctx, owner, repo, n)
+	// The fork's ListIssueComment surface takes no pagination parameters
+	// (a bare GET returns the server-default first page only), so the list
+	// is driven through the raw transport client with explicit page/
+	// per_page query parameters until an empty page (registered detour).
+	comments, err := backendutil.AllPages(func(page int) ([]*gitcode.IssueComment, error) {
+		var batch []*gitcode.IssueComment
+		_, err := p.rawClient.DoJSON(ctx, &transport.Request{
+			Method: "GET",
+			Path:   fmt.Sprintf("/repos/%s/%s/issues/%d/comments", esc(owner), esc(repo), n),
+			Query:  url.Values{"page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(issueCommentPageSize)}},
+			Result: &batch,
+		})
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListIssueComments", err)
 	}

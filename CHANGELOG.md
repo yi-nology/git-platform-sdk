@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`ListIssueComments` now returns the complete comment list on every
+  platform.** All seven backends fetched only the server-default first
+  page (30 comments on the GitHub-shaped APIs), silently truncating
+  comment scans on any issue with more comments than one page. Each
+  backend now exhausts pagination through a shared stop-on-empty loop
+  (`backendutil.AllPages`), which stays correct even when a server caps
+  the page size below the requested per-page value. GitCode's client
+  exposes no pagination parameters, so its backend drives the paginated
+  list through the raw transport client (registered detour). The issues
+  contract suite now serves a multi-page comment fixture and fails any
+  backend that stops after the first page.
+
 ## [v0.49.0] - 2026-08-30
 
 ### Added
