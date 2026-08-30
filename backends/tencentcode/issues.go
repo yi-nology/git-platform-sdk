@@ -7,6 +7,8 @@ import (
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -190,14 +192,25 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	return convertIssue(issue), nil
 }
 
-// ListIssueComments implements provider.IssueManager. 工蜂 models issue
-// comments as notes.
+// issueCommentPageSize is the per-page value for paginated issue-comment
+// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
+// servers that cap lower are handled by the stop-on-empty loop.
+const issueCommentPageSize = 100
+
+// ListIssueComments implements provider.IssueManager via the notes API,
+// exhausting 工蜂's pagination (the loop advances until an empty page, so
+// the result is the complete comment list).
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := issueNumber("ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
-	notes, _, err := p.client.Notes.ListIssueNotes(ctx, pid(owner, repo), n, nil)
+	notes, err := backendutil.AllPages(func(page int) ([]*gongfeng.Note, error) {
+		batch, _, err := p.client.Notes.ListIssueNotes(ctx, pid(owner, repo), n, &gongfeng.ListIssueNotesOptions{
+			ListOptions: gongfeng.ListOptions{Page: page, PerPage: issueCommentPageSize},
+		})
+		return batch, err
+	})
 	if err != nil {
 		return nil, sdkError("ListIssueComments", err)
 	}

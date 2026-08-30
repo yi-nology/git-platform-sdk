@@ -16,6 +16,8 @@ var divergences = []provider.Divergence{
 		Reason: "go-gitcode marshals due_on without omitempty, which would clear due dates on the GitHub-shaped API; create goes through the raw client with exactly the fields the caller set."},
 	{Capability: "MilestoneManager", Method: "UpdateMilestone", Kind: provider.DivergenceDetour,
 		Reason: "See CreateMilestone."},
+	{Capability: "IssueManager", Method: "ListIssueComments", Kind: provider.DivergenceDetour,
+		Reason: "go-gitcode's ListIssueComment surface takes no pagination parameters (a bare GET returns the server-default first page only); the raw client drives page/per_page until an empty page."},
 }
 
 // Divergences returns the registered divergence ledger for the GitCode backend.

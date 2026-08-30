@@ -7,6 +7,8 @@ import (
 
 	gitea "code.gitea.io/sdk/gitea"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -204,13 +206,23 @@ func (p *Provider) setIssueState(owner, repo string, n int64, state gitea.StateT
 	return convertIssue(issue), nil
 }
 
+// issueCommentPageSize is the per-page value for paginated issue-comment
+// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
+// servers that cap lower are handled by the stop-on-empty loop.
+const issueCommentPageSize = 100
+
 // ListIssueComments implements provider.IssueManager.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := issueNumber("ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
-	comments, _, err := p.client.ListIssueComments(owner, repo, n, gitea.ListIssueCommentOptions{})
+	comments, err := backendutil.AllPages(func(page int) ([]*gitea.Comment, error) {
+		batch, _, err := p.client.ListIssueComments(owner, repo, n, gitea.ListIssueCommentOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: issueCommentPageSize},
+		})
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListIssueComments", err)
 	}
