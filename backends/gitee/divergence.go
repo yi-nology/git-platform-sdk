@@ -57,6 +57,8 @@ var divergences = []provider.Divergence{
 		Reason: "go-gitee: the SDK exposes no archive-download endpoint."},
 	{Capability: "LabelManager", Method: "ListLabels", Kind: provider.DivergenceDetour,
 		Reason: "go-gitee: the list options carry no pagination parameters."},
+	{Capability: "IssueManager", Method: "ListIssueLabels", Kind: provider.DivergenceDetour,
+		Reason: "go-gitee: GetV5ReposOwnerRepoLabelsOpts has no pagination fields; the list is driven through the raw client with explicit page/per_page."},
 	{Capability: "LabelManager", Method: "UpdateLabel", Kind: provider.DivergenceDetour,
 		Reason: "go-gitee: the patch method posts multipart labeled application/json."},
 	{Capability: "IssueManager", Method: "CreateIssue", Kind: provider.DivergenceDetour,

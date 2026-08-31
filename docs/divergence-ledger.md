@@ -74,6 +74,7 @@ This document is generated from the backends' registered divergence ledgers
 | ReleaseManager | DeleteRelease |  | detour | go-gitee: the delete method's model is defective. |
 | ReleaseManager | GetArchive |  | detour | go-gitee: the SDK exposes no archive-download endpoint. |
 | LabelManager | ListLabels |  | detour | go-gitee: the list options carry no pagination parameters. |
+| IssueManager | ListIssueLabels |  | detour | go-gitee: GetV5ReposOwnerRepoLabelsOpts has no pagination fields; the list is driven through the raw client with explicit page/per_page. |
 | LabelManager | UpdateLabel |  | detour | go-gitee: the patch method posts multipart labeled application/json. |
 | IssueManager | CreateIssue |  | detour | go-gitee: the create method posts multipart labeled application/json. |
 | MilestoneManager | CreateMilestone |  | detour | go-gitee: the create method posts form values labeled application/json. |
@@ -105,6 +106,7 @@ This document is generated from the backends' registered divergence ledgers
 | MilestoneManager | CreateMilestone |  | detour | go-gitcode marshals due_on without omitempty, which would clear due dates on the GitHub-shaped API; create goes through the raw client with exactly the fields the caller set. |
 | MilestoneManager | UpdateMilestone |  | detour | See CreateMilestone. |
 | IssueManager | ListIssueComments |  | detour | go-gitcode's ListIssueComment surface takes no pagination parameters (a bare GET returns the server-default first page only); the raw client drives page/per_page until an empty page. |
+| IssueManager | ListIssueLabels |  | detour | go-gitcode's ListIssueLabels surface takes no pagination parameters; the raw client drives page/per_page until an empty page. |
 
 ## tencent_code
 
