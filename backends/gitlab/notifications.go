@@ -1,0 +1,102 @@
+package gitlab
+
+import (
+	"context"
+	"strconv"
+
+	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+	"github.com/yi-nology/git-platform-sdk/provider"
+)
+
+// ListNotifications implements provider.NotificationManager.
+// GitLab has no GitHub-style notification inbox; the SDK maps this to the
+// Todos API, which provides the same "unread items that need attention"
+// semantics.
+func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+	todos, _, err := p.client.Todos.ListTodos(&gitlab.ListTodosOptions{}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListNotifications", err)
+	}
+	result := make([]*provider.Notification, 0, len(todos))
+	for _, t := range todos {
+		result = append(result, convertTodo(t))
+	}
+	return result, nil
+}
+
+// ListRepoNotifications implements provider.NotificationManager.
+// Filters todos by project ID (resolved from owner/repo via the project API).
+func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+	pid, _, err := p.client.Projects.GetProject(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
+	}
+	projectID := int64(pid.ID)
+	todos, _, err := p.client.Todos.ListTodos(&gitlab.ListTodosOptions{ProjectID: &projectID}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
+	}
+	result := make([]*provider.Notification, 0, len(todos))
+	for _, t := range todos {
+		result = append(result, convertTodo(t))
+	}
+	return result, nil
+}
+
+// MarkNotificationRead implements provider.NotificationManager.
+// Maps to marking a single GitLab todo as done.
+func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) error {
+	id, err := strconv.ParseInt(threadID, 10, 64)
+	if err != nil {
+		return provider.Wrapf(provider.PlatformGitLab, "MarkNotificationRead", "invalid thread ID %q", threadID)
+	}
+	_, err = p.client.Todos.MarkTodoAsDone(id, gitlab.WithContext(ctx))
+	return provider.Wrap(provider.PlatformGitLab, "MarkNotificationRead", err)
+}
+
+// MarkNotificationsRead implements provider.NotificationManager.
+// Maps to marking all GitLab todos as done.
+func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
+	_, err := p.client.Todos.MarkAllTodosAsDone(gitlab.WithContext(ctx))
+	return provider.Wrap(provider.PlatformGitLab, "MarkNotificationsRead", err)
+}
+
+// MarkRepoNotificationsRead implements provider.NotificationManager.
+// GitLab's Todos API has no per-project mark-all-as-done; this returns
+// ErrNotImplemented. Callers should use MarkNotificationsRead instead.
+func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
+	return provider.Wrapf(provider.PlatformGitLab, "MarkRepoNotificationsRead", "gitlab todos API has no per-project mark-all-as-done; use MarkNotificationsRead")
+}
+
+func convertTodo(t *gitlab.Todo) *provider.Notification {
+	if t == nil {
+		return nil
+	}
+	n := &provider.Notification{
+		ID:     strconv.FormatInt(t.ID, 10),
+		Unread: t.State == "pending",
+		Reason: string(t.ActionName),
+	}
+	if t.Target != nil {
+		n.Subject = provider.NotificationSubject{
+			Title: t.Target.Title,
+			Type:  string(t.TargetType),
+			URL:   t.TargetURL,
+		}
+	}
+	if t.Project != nil {
+		n.Repo = &provider.EventRepo{
+			ID:       int64(t.Project.ID),
+			FullName: t.Project.PathWithNamespace,
+		}
+		owner, name := provider.SplitFullName(t.Project.PathWithNamespace)
+		n.Repo.Owner = owner
+		n.Repo.Name = name
+	}
+	if t.CreatedAt != nil {
+		n.UpdatedAt = *t.CreatedAt
+	}
+	return n
+}
+
+var _ provider.NotificationManager = (*Provider)(nil)

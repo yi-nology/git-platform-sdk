@@ -39,6 +39,8 @@ type CapabilitySet struct {
 	Milestones     bool // provider.MilestoneManager
 	Reviews        bool // provider.ReviewManager
 	CommitStatuses bool // provider.CommitStatusManager
+	Notifications  bool // provider.NotificationManager
+	Reactions      bool // provider.ReactionManager
 }
 
 // Provider is the unified interface for all Git hosting platforms.
@@ -224,6 +226,9 @@ type CRComment struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// Mentions returns the deduplicated @usernames found in the comment body.
+func (c *CRComment) Mentions() []string { return ExtractMentions(c.Body) }
 
 // CRCommit represents a commit in a change request.
 type CRCommit struct {

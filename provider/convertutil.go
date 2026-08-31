@@ -1,8 +1,31 @@
 package provider
 
 import (
+	"regexp"
 	"strings"
 )
+
+// mentionRe matches @username patterns that are NOT preceded by a word
+// character (to avoid matching email addresses like user@domain.com).
+// Valid usernames contain letters, digits, underscores, hyphens, and dots
+// (the last to cover platforms like GitLab that use @first.last).
+var mentionRe = regexp.MustCompile(`(?:^|[\s\p{P}])@([\w.-]+)`)
+
+// ExtractMentions returns the deduplicated list of @usernames found in body.
+// Email addresses (foo@bar.com) are excluded by the leading non-word-char
+// guard. The returned order follows first occurrence.
+func ExtractMentions(body string) []string {
+	seen := make(map[string]struct{})
+	var result []string
+	for _, m := range mentionRe.FindAllStringSubmatch(body, -1) {
+		name := m[1]
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			result = append(result, name)
+		}
+	}
+	return result
+}
 
 // SplitFullName splits "owner/repo" into (owner, repo).
 // If the input doesn't contain "/", owner is empty.

@@ -94,6 +94,9 @@ type ReviewComment struct {
 	Side      string `json:"side,omitempty"`
 }
 
+// Mentions returns the deduplicated @usernames found in the comment body.
+func (c *ReviewComment) Mentions() []string { return ExtractMentions(c.Body) }
+
 // ReviewResult is the result of a CreateReview call.
 type ReviewResult struct {
 	ID       string                `json:"id"`
@@ -277,6 +280,9 @@ type IssueComment struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// Mentions returns the deduplicated @usernames found in the comment body.
+func (c *IssueComment) Mentions() []string { return ExtractMentions(c.Body) }
 
 // IssueLabel represents a label on a repository.
 type IssueLabel struct {
@@ -474,4 +480,58 @@ type SearchUserResult struct {
 	Name      string `json:"name,omitempty"`
 	AvatarURL string `json:"avatar_url,omitempty"`
 	WebURL    string `json:"web_url,omitempty"`
+}
+
+// --- Notifications ---
+
+// Notification represents a single notification from a user's inbox.
+type Notification struct {
+	ID        string              `json:"id"`
+	Unread    bool                `json:"unread"`
+	Reason    string              `json:"reason"`
+	Subject   NotificationSubject `json:"subject"`
+	Repo      *EventRepo          `json:"repo,omitempty"`
+	UpdatedAt time.Time           `json:"updated_at"`
+}
+
+// NotificationSubject describes the resource that triggered the notification.
+type NotificationSubject struct {
+	Title string `json:"title"`
+	Type  string `json:"type"` // "Issue", "PullRequest", "Commit", etc.
+	URL   string `json:"url"`
+}
+
+// ListNotificationsOptions contains options for listing notifications.
+type ListNotificationsOptions struct {
+	All     bool   `json:"all,omitempty"`     // include already-read notifications
+	Since   string `json:"since,omitempty"`   // RFC3339 timestamp
+	Page    int    `json:"page,omitempty"`
+	PerPage int    `json:"per_page,omitempty"`
+}
+
+// MarkNotificationsOptions contains options for marking notifications as read.
+type MarkNotificationsOptions struct {
+	LastReadAt string `json:"last_read_at,omitempty"` // RFC3339; empty = mark all
+}
+
+// --- Reactions ---
+
+// Standard emoji identifiers used across all platforms. GitLab maps these
+// to its award-emoji names internally (e.g. +1 ↔ thumbsup).
+const (
+	ReactionPlusOne  = "+1"
+	ReactionMinusOne = "-1"
+	ReactionLaugh    = "laugh"
+	ReactionConfused = "confused"
+	ReactionHeart    = "heart"
+	ReactionHooray   = "hooray"
+	ReactionRocket   = "rocket"
+	ReactionEyes     = "eyes"
+)
+
+// Reaction represents an emoji reaction on an issue or comment.
+type Reaction struct {
+	ID    int64   `json:"id"`
+	Emoji string  `json:"emoji"`
+	User  *CRUser `json:"user,omitempty"`
 }

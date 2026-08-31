@@ -67,6 +67,67 @@ func TestBuildEventRepo_NoSlash(t *testing.T) {
 	}
 }
 
+func TestExtractMentions(t *testing.T) {
+	tests := []struct {
+		name  string
+		body  string
+		want  []string
+	}{
+		{"single", "cc @alice", []string{"alice"}},
+		{"multiple", "@alice please review @bob", []string{"alice", "bob"}},
+		{"dedup", "@alice and @alice again", []string{"alice"}},
+		{"email excluded", "send to user@example.com not a mention", nil},
+		{"mixed", "email user@host.com and @charlie", []string{"charlie"}},
+		{"hyphen", "@user-name works", []string{"user-name"}},
+		{"underscore", "@user_name works", []string{"user_name"}},
+		{"dot", "@first.last works", []string{"first.last"}},
+		{"at start of body", "@alice at the beginning", []string{"alice"}},
+		{"parenthesized", "(@alice)", []string{"alice"}},
+		{"empty", "", nil},
+		{"no mentions", "nothing here", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractMentions(tt.body)
+			if len(got) == 0 && len(tt.want) == 0 {
+				return
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("got[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestIssueCommentMentions(t *testing.T) {
+	c := &IssueComment{Body: "cc @alice @bob"}
+	m := c.Mentions()
+	if len(m) != 2 || m[0] != "alice" || m[1] != "bob" {
+		t.Fatalf("unexpected mentions: %v", m)
+	}
+}
+
+func TestCRCommentMentions(t *testing.T) {
+	c := &CRComment{Body: "@dev please look"}
+	m := c.Mentions()
+	if len(m) != 1 || m[0] != "dev" {
+		t.Fatalf("unexpected mentions: %v", m)
+	}
+}
+
+func TestReviewCommentMentions(t *testing.T) {
+	c := &ReviewComment{Body: "@reviewer nit: style"}
+	m := c.Mentions()
+	if len(m) != 1 || m[0] != "reviewer" {
+		t.Fatalf("unexpected mentions: %v", m)
+	}
+}
+
 func TestResolveMRSHAs(t *testing.T) {
 	tests := []struct {
 		name                          string

@@ -59,5 +59,8 @@ func TestGitee_Contract(t *testing.T) {
 			IssuesResponse: `[{"number":"1","title":"found","state":"open","body":"b","html_url":"https://gitee.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z"}]`,
 			UsersResponse:  `[{"login":"dev","name":"Dev","avatar_url":"https://gitee.com/avatars/1","html_url":"https://gitee.com/dev"}]`,
 		},
+		Notifications: &contracttest.NotificationsHarnessConfig{
+			ListResponse: `[{"total_count":1,"list":[{"id":1,"unread":"true","type":"Issue","subject":{"title":"Bug report","type":"Issue","url":"https://gitee.com/api/v5/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00+08:00"}]}]`,
+		},
 	})
 }
