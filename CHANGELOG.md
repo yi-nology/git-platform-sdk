@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **GitLab `TokenStyle` config option** — `provider.Config.TokenStyle`
+  overrides the default PRIVATE-TOKEN authentication header for the GitLab
+  backend. Setting `TokenStyle: "bearer"` uses `Authorization: Bearer`
+  (e.g. for GitLab `CI_JOB_TOKEN`); the default stays PRIVATE-TOKEN.
+  The deprecated `NewOAuthClient` is replaced by `NewAuthSourceClient`
+  per the client-go v2.60 guidance.
+
 ## [v0.50.0] - 2026-08-30
 
 ### Fixed
