@@ -9,6 +9,11 @@ type Config struct {
 	Token    string
 	SkipTLS  bool
 
+	// TokenStyle overrides the default authentication header style.
+	// Supported values: "private" (PRIVATE-TOKEN, default for GitLab),
+	// "bearer" (Authorization: Bearer). Empty string uses platform default.
+	TokenStyle string
+
 	// Logger for provider operations. Defaults to a no-op logger.
 	Logger Logger
 	// RetryConfig for automatic retry on transient failures. nil means no retry.

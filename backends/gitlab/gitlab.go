@@ -26,8 +26,11 @@ package gitlab
 import (
 	"context"
 	"fmt"
+
 	"net/http"
 	"time"
+
+	"golang.org/x/oauth2"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
@@ -51,9 +54,14 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		logger = provider.NewNoopLogger()
 	}
 
+	// Select auth strategy: "bearer" → OAuth Bearer, otherwise → PRIVATE-TOKEN (GitLab default).
+	var authStrategy transport.AuthStrategy = transport.PrivateToken{Token: cfg.Token}
+	if cfg.TokenStyle == "bearer" {
+		authStrategy = transport.BearerToken{Token: cfg.Token}
+	}
 	transportClient := transport.NewClient(
 		backendutil.DefaultBaseURL(cfg.BaseURL, "https://gitlab.com/api/v4"),
-		transport.PrivateToken{Token: cfg.Token},
+		authStrategy,
 	)
 	transportClient.Logger = logger
 	// Set TLS-skipping transport on the transport client so that all
@@ -78,7 +86,17 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if cfg.BaseURL != "" {
 		opts = append(opts, gitlab.WithBaseURL(cfg.BaseURL))
 	}
-	client, err := gitlab.NewClient(cfg.Token, opts...)
+	var client *gitlab.Client
+	var err error
+	if cfg.TokenStyle == "bearer" {
+		// Bearer auth (e.g. GitLab CI_JOB_TOKEN). The deprecated
+		// NewOAuthClient is replaced by NewAuthSourceClient per the
+		// client-go v2.60 guidance.
+		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cfg.Token})
+		client, err = gitlab.NewAuthSourceClient(gitlab.OAuthTokenSource{TokenSource: ts}, opts...)
+	} else {
+		client, err = gitlab.NewClient(cfg.Token, opts...)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: failed to create client: %w", err)
 	}
