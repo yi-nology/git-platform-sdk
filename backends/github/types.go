@@ -79,6 +79,14 @@ func convertPR(pr *ghPR) *provider.ChangeRequest {
 			AvatarURL: r.GetAvatarURL(),
 		})
 	}
+	var assignees []*provider.CRUser
+	for _, a := range pr.Assignees {
+		assignees = append(assignees, &provider.CRUser{
+			ID:        a.GetID(),
+			Username:  a.GetLogin(),
+			AvatarURL: a.GetAvatarURL(),
+		})
+	}
 	var labels []string
 	for _, l := range pr.Labels {
 		if l != nil {
@@ -101,6 +109,7 @@ func convertPR(pr *ghPR) *provider.ChangeRequest {
 		BaseSHA:      baseSHA,
 		StartSHA:     baseSHA,
 		Author:       author,
+		Assignees:    assignees,
 		Reviewers:    reviewers,
 		Labels:       labels,
 		MergeStatus:  mergeStatus,

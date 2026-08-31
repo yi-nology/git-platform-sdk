@@ -535,3 +535,73 @@ type Reaction struct {
 	Emoji string  `json:"emoji"`
 	User  *CRUser `json:"user,omitempty"`
 }
+
+// --- Branch protection ---
+
+// BranchProtection represents a branch protection rule.
+type BranchProtection struct {
+	BranchName               string `json:"branch_name"`
+	RequiredApprovingReviews int    `json:"required_approving_reviews"`
+	RequiredStatusChecks     bool   `json:"required_status_checks"`
+	AllowForcePushes         bool   `json:"allow_force_pushes"`
+	AllowDeletions           bool   `json:"allow_deletions"`
+}
+
+// CreateBranchProtectionOptions contains options for creating a branch
+// protection rule.
+type CreateBranchProtectionOptions struct {
+	BranchName               string `json:"branch_name"`
+	RequiredApprovingReviews int    `json:"required_approving_reviews,omitempty"`
+	RequiredStatusChecks     bool   `json:"required_status_checks,omitempty"`
+	AllowForcePushes         bool   `json:"allow_force_pushes,omitempty"`
+	AllowDeletions           bool   `json:"allow_deletions,omitempty"`
+}
+
+// UpdateBranchProtectionOptions contains options for updating a branch
+// protection rule. Nil fields are left unchanged.
+type UpdateBranchProtectionOptions struct {
+	RequiredApprovingReviews *int  `json:"required_approving_reviews,omitempty"`
+	RequiredStatusChecks     *bool `json:"required_status_checks,omitempty"`
+	AllowForcePushes         *bool `json:"allow_force_pushes,omitempty"`
+	AllowDeletions           *bool `json:"allow_deletions,omitempty"`
+}
+
+// --- Collaborators ---
+
+// Collaborator represents a repository collaborator.
+type Collaborator struct {
+	ID         int64   `json:"id"`
+	Username   string  `json:"username"`
+	Permission string  `json:"permission,omitempty"`
+	User       *CRUser `json:"user,omitempty"`
+}
+
+// AddCollaboratorOptions contains options for adding a collaborator.
+type AddCollaboratorOptions struct {
+	Permission string `json:"permission,omitempty"` // "read", "write", "admin"
+}
+
+// --- Deploy keys ---
+
+// DeployKey represents a deploy key on a repository.
+type DeployKey struct {
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Key      string `json:"key"`
+	ReadOnly bool   `json:"read_only"`
+}
+
+// AddDeployKeyOptions contains options for adding a deploy key.
+type AddDeployKeyOptions struct {
+	Title    string `json:"title"`
+	Key      string `json:"key"`
+	ReadOnly bool   `json:"read_only,omitempty"`
+}
+
+// --- Repo stats ---
+
+// Contributor represents a repository contributor.
+type Contributor struct {
+	Username      string `json:"username"`
+	Contributions int    `json:"contributions"`
+}

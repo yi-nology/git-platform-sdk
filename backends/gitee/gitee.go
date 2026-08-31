@@ -166,7 +166,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee 
 // alphanumeric strings (e.g. "IAINVA"), addressed natively by the
 // string-typed IssueManager.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Milestones: true, Search: true, Notifications: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Milestones: true, Search: true, Notifications: true, BranchProtections: true, Collaborators: true, RepoStats: true}
 }
 
 // TestConnection implements provider.Provider.

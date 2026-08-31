@@ -71,6 +71,15 @@ type Harness struct {
 	// Reactions, when non-nil, auto-mounts the reaction suite inside
 	// Run, with the same bidirectional drift checks.
 	Reactions *ReactionsHarnessConfig
+	// BranchProtections, when non-nil, auto-mounts the branch-protection
+	// suite inside Run, with the same bidirectional drift checks.
+	BranchProtections *BranchProtectionsHarnessConfig
+	// Collaborators, when non-nil, auto-mounts the collaborator suite.
+	Collaborators *CollaboratorsHarnessConfig
+	// DeployKeys, when non-nil, auto-mounts the deploy-key suite.
+	DeployKeys *DeployKeysHarnessConfig
+	// RepoStats, when non-nil, auto-mounts the repo-stats suite.
+	RepoStats *RepoStatsHarnessConfig
 	// Releases auto-mounts the release-management suite inside Run. Unlike
 	// the fields above, ReleaseManager is a core interface composed into
 	// provider.Provider (every backend implements it), so there is no
@@ -100,6 +109,10 @@ func Run(t *testing.T, h Harness) {
 	t.Run("CommitStatusSuite", func(t *testing.T) { testCommitStatusSuite(t, h) })
 	t.Run("NotificationsSuite", func(t *testing.T) { testNotificationsSuite(t, h) })
 	t.Run("ReactionsSuite", func(t *testing.T) { testReactionsSuite(t, h) })
+	t.Run("BranchProtectionsSuite", func(t *testing.T) { testBranchProtectionsSuite(t, h) })
+	t.Run("CollaboratorsSuite", func(t *testing.T) { testCollaboratorsSuite(t, h) })
+	t.Run("DeployKeysSuite", func(t *testing.T) { testDeployKeysSuite(t, h) })
+	t.Run("RepoStatsSuite", func(t *testing.T) { testRepoStatsSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

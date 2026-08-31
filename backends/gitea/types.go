@@ -51,6 +51,12 @@ func convertPR(pr *gitea.PullRequest) *provider.ChangeRequest {
 			reviewers = append(reviewers, &provider.CRUser{ID: r.ID, Username: r.UserName, AvatarURL: r.AvatarURL})
 		}
 	}
+	var assignees []*provider.CRUser
+	for _, a := range pr.Assignees {
+		if a != nil {
+			assignees = append(assignees, &provider.CRUser{ID: a.ID, Username: a.UserName, AvatarURL: a.AvatarURL})
+		}
+	}
 	return &provider.ChangeRequest{
 		ID:           pr.ID,
 		Number:       strconv.FormatInt(pr.Index, 10),
@@ -62,6 +68,7 @@ func convertPR(pr *gitea.PullRequest) *provider.ChangeRequest {
 		HeadSHA:      pr.Head.Sha,
 		BaseSHA:      pr.Base.Sha,
 		Author:       author,
+		Assignees:    assignees,
 		Reviewers:    reviewers,
 		Labels:       labels,
 		WebURL:       pr.HTMLURL,
