@@ -80,10 +80,10 @@ func convertPullRequest(pr gitee.PullRequest) *provider.ChangeRequest {
 	for _, l := range pr.Labels {
 		labels = append(labels, l.Name)
 	}
-	var reviewers []*provider.CRUser
+	var assignees []*provider.CRUser
 	for i := range pr.Assignees {
 		a := pr.Assignees[i]
-		reviewers = append(reviewers, &provider.CRUser{ID: int64(a.Id), Username: a.Login})
+		assignees = append(assignees, &provider.CRUser{ID: int64(a.Id), Username: a.Login})
 	}
 	mergeStatus := "conflicting"
 	if pr.Mergeable {
@@ -95,7 +95,8 @@ func convertPullRequest(pr gitee.PullRequest) *provider.ChangeRequest {
 		Title:       pr.Title,
 		Description: pr.Body,
 		State:       state,
-		Reviewers:   reviewers,
+		Assignees:   assignees,
+		Reviewers:   assignees, // Gitee has no separate RequestedReviewers
 		Labels:      labels,
 		MergeStatus: mergeStatus,
 		WebURL:      pr.HtmlUrl,

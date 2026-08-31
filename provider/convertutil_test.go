@@ -83,6 +83,9 @@ func TestExtractMentions(t *testing.T) {
 		{"dot", "@first.last works", []string{"first.last"}},
 		{"at start of body", "@alice at the beginning", []string{"alice"}},
 		{"parenthesized", "(@alice)", []string{"alice"}},
+		{"markdown link URL excluded", "[click](https://example.com/@user) and @real", []string{"real"}},
+		{"bare URL excluded", "see https://example.com/@user and @real", []string{"real"}},
+		{"mailto excluded", "mailto:user@host.com and @real", []string{"real"}},
 		{"empty", "", nil},
 		{"no mentions", "nothing here", nil},
 	}

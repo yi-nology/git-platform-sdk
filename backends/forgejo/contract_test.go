@@ -74,5 +74,20 @@ func TestForgejo_Contract(t *testing.T) {
 			ListResponse:   `[{"content":"+1","user":{"id":1,"login":"dev"}}]`,
 			CreateResponse: `{"content":"heart","user":{"id":1,"login":"dev"}}`,
 		},
+		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
+			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
+			MutateResponse: `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
+		},
+		Collaborators: &contracttest.CollaboratorsHarnessConfig{
+			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,
+		},
+		DeployKeys: &contracttest.DeployKeysHarnessConfig{
+			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}]`,
+			CreateResponse: `{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}`,
+		},
+		RepoStats: &contracttest.RepoStatsHarnessConfig{
+			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
+			StargazersResponse:   `[{"id":1,"login":"star"}]`,
+		},
 	})
 }

@@ -31,6 +31,10 @@ func testCapabilities(t *testing.T, h Harness) {
 	_, commitStatusesImpl := p.(provider.CommitStatusManager)
 	_, notificationsImpl := p.(provider.NotificationManager)
 	_, reactionsImpl := p.(provider.ReactionManager)
+	_, branchProtectionsImpl := p.(provider.BranchProtectionManager)
+	_, collaboratorsImpl := p.(provider.CollaboratorManager)
+	_, deployKeysImpl := p.(provider.DeploymentKeyManager)
+	_, repoStatsImpl := p.(provider.RepoStatsManager)
 
 	// Declared capabilities must always type-assert, and implemented ones
 	// must be declared — both directions, uniformly across capabilities.
@@ -57,5 +61,17 @@ func testCapabilities(t *testing.T, h Harness) {
 	}
 	if caps.Reactions != reactionsImpl {
 		t.Errorf("Capabilities().Reactions = %v, but ReactionManager type assertion = %v; declaration and implementation have drifted", caps.Reactions, reactionsImpl)
+	}
+	if caps.BranchProtections != branchProtectionsImpl {
+		t.Errorf("Capabilities().BranchProtections = %v, but BranchProtectionManager type assertion = %v; declaration and implementation have drifted", caps.BranchProtections, branchProtectionsImpl)
+	}
+	if caps.Collaborators != collaboratorsImpl {
+		t.Errorf("Capabilities().Collaborators = %v, but CollaboratorManager type assertion = %v; declaration and implementation have drifted", caps.Collaborators, collaboratorsImpl)
+	}
+	if caps.DeployKeys != deployKeysImpl {
+		t.Errorf("Capabilities().DeployKeys = %v, but DeploymentKeyManager type assertion = %v; declaration and implementation have drifted", caps.DeployKeys, deployKeysImpl)
+	}
+	if caps.RepoStats != repoStatsImpl {
+		t.Errorf("Capabilities().RepoStats = %v, but RepoStatsManager type assertion = %v; declaration and implementation have drifted", caps.RepoStats, repoStatsImpl)
 	}
 }

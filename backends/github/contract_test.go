@@ -75,6 +75,22 @@ func TestGitHub_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"content":"+1","user":{"id":1,"login":"dev"}}]`,
 			CreateResponse: `{"id":1,"content":"heart","user":{"id":1,"login":"dev"}}`,
 		},
+		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
+			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
+			MutateResponse: `{"required_status_checks":{"strict":true,"contexts":[]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}`,
+		},
+		Collaborators: &contracttest.CollaboratorsHarnessConfig{
+			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,
+		},
+		DeployKeys: &contracttest.DeployKeysHarnessConfig{
+			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}]`,
+			CreateResponse: `{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}`,
+		},
+		RepoStats: &contracttest.RepoStatsHarnessConfig{
+			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
+			StargazersResponse:   `[{"id":1,"login":"star"}]`,
+			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
+		},
 	})
 }
 

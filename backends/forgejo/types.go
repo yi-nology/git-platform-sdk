@@ -45,10 +45,10 @@ func convertPR(pr *forgejo.PullRequest) *provider.ChangeRequest {
 			labels = append(labels, l.Name)
 		}
 	}
-	var reviewers []*provider.CRUser
+	var assignees []*provider.CRUser
 	for _, r := range pr.Assignees {
 		if r != nil {
-			reviewers = append(reviewers, &provider.CRUser{ID: r.ID, Username: r.UserName, AvatarURL: r.AvatarURL})
+			assignees = append(assignees, &provider.CRUser{ID: r.ID, Username: r.UserName, AvatarURL: r.AvatarURL})
 		}
 	}
 	return &provider.ChangeRequest{
@@ -62,7 +62,8 @@ func convertPR(pr *forgejo.PullRequest) *provider.ChangeRequest {
 		HeadSHA:      pr.Head.Sha,
 		BaseSHA:      pr.Base.Sha,
 		Author:       author,
-		Reviewers:    reviewers,
+		Assignees:    assignees,
+		Reviewers:    assignees, // Forgejo has no separate RequestedReviewers
 		Labels:       labels,
 		WebURL:       pr.HTMLURL,
 		CreatedAt:    timeOrZero(pr.Created),

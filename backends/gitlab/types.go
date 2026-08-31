@@ -42,6 +42,10 @@ func convertMR(mr *gitlab.MergeRequest) *provider.ChangeRequest {
 	for _, r := range mr.Reviewers {
 		reviewers = append(reviewers, &provider.CRUser{ID: r.ID, Username: r.Username, Name: r.Name, AvatarURL: r.AvatarURL})
 	}
+	var assignees []*provider.CRUser
+	for _, a := range mr.Assignees {
+		assignees = append(assignees, &provider.CRUser{ID: a.ID, Username: a.Username, Name: a.Name, AvatarURL: a.AvatarURL})
+	}
 	return &provider.ChangeRequest{
 		ID:           mr.IID,
 		Number:       strconv.FormatInt(mr.IID, 10),
@@ -51,6 +55,7 @@ func convertMR(mr *gitlab.MergeRequest) *provider.ChangeRequest {
 		SourceBranch: mr.SourceBranch,
 		TargetBranch: mr.TargetBranch,
 		Author:       author,
+		Assignees:    assignees,
 		Reviewers:    reviewers,
 		Labels:       mr.Labels,
 		MergeStatus:  mr.DetailedMergeStatus,
@@ -84,6 +89,10 @@ func convertBasicMR(mr *gitlab.BasicMergeRequest) *provider.ChangeRequest {
 	for _, r := range mr.Reviewers {
 		reviewers = append(reviewers, &provider.CRUser{ID: r.ID, Username: r.Username, Name: r.Name, AvatarURL: r.AvatarURL})
 	}
+	var assignees []*provider.CRUser
+	for _, a := range mr.Assignees {
+		assignees = append(assignees, &provider.CRUser{ID: a.ID, Username: a.Username, Name: a.Name, AvatarURL: a.AvatarURL})
+	}
 	return &provider.ChangeRequest{
 		ID:           mr.IID,
 		Number:       strconv.FormatInt(mr.IID, 10),
@@ -93,6 +102,7 @@ func convertBasicMR(mr *gitlab.BasicMergeRequest) *provider.ChangeRequest {
 		SourceBranch: mr.SourceBranch,
 		TargetBranch: mr.TargetBranch,
 		Author:       author,
+		Assignees:    assignees,
 		Reviewers:    reviewers,
 		Labels:       mr.Labels,
 		MergeStatus:  mr.DetailedMergeStatus,

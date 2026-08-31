@@ -62,5 +62,16 @@ func TestGitee_Contract(t *testing.T) {
 		Notifications: &contracttest.NotificationsHarnessConfig{
 			ListResponse: `[{"total_count":1,"list":[{"id":1,"unread":"true","type":"Issue","subject":{"title":"Bug report","type":"Issue","url":"https://gitee.com/api/v5/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00+08:00"}]}]`,
 		},
+		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
+			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
+			MutateResponse: `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
+		},
+		Collaborators: &contracttest.CollaboratorsHarnessConfig{
+			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,
+		},
+		RepoStats: &contracttest.RepoStatsHarnessConfig{
+			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
+			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
+		},
 	})
 }

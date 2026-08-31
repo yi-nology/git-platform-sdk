@@ -11,20 +11,49 @@ import (
 // (the last to cover platforms like GitLab that use @first.last).
 var mentionRe = regexp.MustCompile(`(?:^|[\s\p{P}])@([\w.-]+)`)
 
+// urlContextRe matches URL-like prefixes that indicate a @mention is inside
+// a URL rather than a real mention: "](", "://...", or "mailto:...".
+// Each pattern is anchored to the end of the prefix so it only matches when
+// the @ is immediately inside the URL context.
+var urlContextRe = regexp.MustCompile(`\]\([^)]*$|\w+://\S*$|mailto:\S*$`)
+
 // ExtractMentions returns the deduplicated list of @usernames found in body.
 // Email addresses (foo@bar.com) are excluded by the leading non-word-char
-// guard. The returned order follows first occurrence.
+// guard. Mentions inside URLs (e.g. `[@user](https://example.com/@user)`)
+// are also excluded. The returned order follows first occurrence.
 func ExtractMentions(body string) []string {
 	seen := make(map[string]struct{})
 	var result []string
-	for _, m := range mentionRe.FindAllStringSubmatch(body, -1) {
-		name := m[1]
+	for _, m := range mentionRe.FindAllStringSubmatchIndex(body, -1) {
+		// m[0] = full match start, m[2] = group 1 start, m[3] = group 1 end
+		if m[2] < 0 || m[3] < 0 {
+			continue
+		}
+		name := body[m[2]:m[3]]
+		// Check if the @ is inside a URL context.
+		// The @ character is at position m[0]+1 (after the leading non-word char)
+		// or at m[0] if the match starts at the beginning of the string.
+		atPos := m[0]
+		if atPos < len(body) && body[atPos] != '@' {
+			atPos++
+		}
+		if isInsideURL(body, atPos) {
+			continue
+		}
 		if _, ok := seen[name]; !ok {
 			seen[name] = struct{}{}
 			result = append(result, name)
 		}
 	}
 	return result
+}
+
+// isInsideURL reports whether the @ at position pos in body is inside a URL
+// context (a markdown link target or a bare URL).
+func isInsideURL(body string, pos int) bool {
+	// Look at the text before the @ to see if we're inside a URL.
+	prefix := body[:pos]
+	return urlContextRe.MatchString(prefix)
 }
 
 // SplitFullName splits "owner/repo" into (owner, repo).
