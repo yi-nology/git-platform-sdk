@@ -186,6 +186,9 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 // servers that cap lower are handled by the stop-on-empty loop.
 const issueCommentPageSize = 100
 
+// labelPageSize is the per-page value for paginated label-list fetches.
+const labelPageSize = 100
+
 // ListIssueComments implements provider.IssueManager. GitLab models issue
 // comments as notes; the loop exhausts GitLab's pagination (advances until
 // an empty page), so the result is the complete comment list.
@@ -240,10 +243,14 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(note), nil
 }
 
-// ListIssueLabels implements provider.IssueManager: repository-level labels.
+// ListIssueLabels implements provider.IssueManager: repository-level labels,
+// exhausting pagination (the loop advances until an empty page).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	labels, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
-		&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, gitlab.WithContext(ctx))
+	labels, err := backendutil.AllPages(func(page int) ([]*gitlab.Label, error) {
+		batch, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
+			&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: labelPageSize}}, gitlab.WithContext(ctx))
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListIssueLabels", err)
 	}

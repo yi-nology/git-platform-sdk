@@ -172,6 +172,9 @@ func (p *Provider) patchIssueState(ctx context.Context, owner, repo, number, sta
 // servers that cap lower are handled by the stop-on-empty loop.
 const issueCommentPageSize = 100
 
+// labelPageSize is the per-page value for paginated label-list fetches.
+const labelPageSize = 100
+
 // ListIssueComments implements provider.IssueManager via the SDK,
 // exhausting Gitee's pagination (the loop advances until an empty page, so
 // the result is the complete comment list).
@@ -231,15 +234,19 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 }
 
 // ListIssueLabels implements provider.IssueManager: repository-level labels
-// via the SDK. The interface takes no pagination, so the SDK's
-// AccessToken-only opts lose nothing (unlike LabelManager.ListLabels, whose
-// pagination contract forces its raw detour in labels.go).
+// The SDK's GetV5ReposOwnerRepoLabelsOpts takes no Page/PerPage fields,
+// but the Gitee API supports them (LabelManager.ListLabels already does
+// this), so the list is driven through the raw detour with explicit
+// page/per_page query parameters until an empty page.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	labels, resp, err := p.client.LabelsApi.GetV5ReposOwnerRepoLabels(ctx, esc(owner), esc(repo), &gitee.GetV5ReposOwnerRepoLabelsOpts{
-		AccessToken: p.accessToken(),
+	var labels []gitee.Label
+	labels, err := backendutil.AllPages(func(page int) ([]gitee.Label, error) {
+		var batch []gitee.Label
+		err := p.doRequest(ctx, "GET", fmt.Sprintf("/repos/%s/%s/labels?per_page=%d&page=%d", esc(owner), esc(repo), labelPageSize, page), nil, &batch)
+		return batch, err
 	})
 	if err != nil {
-		return nil, p.sdkErr("ListIssueLabels", resp, err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListIssueLabels", err)
 	}
 	result := make([]*provider.IssueLabel, 0, len(labels))
 	for _, l := range labels {

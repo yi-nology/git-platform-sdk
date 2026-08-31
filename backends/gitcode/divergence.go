@@ -18,6 +18,8 @@ var divergences = []provider.Divergence{
 		Reason: "See CreateMilestone."},
 	{Capability: "IssueManager", Method: "ListIssueComments", Kind: provider.DivergenceDetour,
 		Reason: "go-gitcode's ListIssueComment surface takes no pagination parameters (a bare GET returns the server-default first page only); the raw client drives page/per_page until an empty page."},
+	{Capability: "IssueManager", Method: "ListIssueLabels", Kind: provider.DivergenceDetour,
+		Reason: "go-gitcode's ListIssueLabels surface takes no pagination parameters; the raw client drives page/per_page until an empty page."},
 }
 
 // Divergences returns the registered divergence ledger for the GitCode backend.

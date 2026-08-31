@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -300,7 +301,14 @@ func labelStubServer(h LabelsHarness) (*httptest.Server, *[]recordedRequest) {
 		switch r.Method {
 		case http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(h.ListResponse))
+			// The label listing now uses AllPages pagination; return
+			// the fixture only on the first page so the loop
+			// terminates cleanly on the second.
+			if page, _ := strconv.Atoi(r.URL.Query().Get("page")); page > 1 {
+				_, _ = w.Write([]byte(`[]`))
+			} else {
+				_, _ = w.Write([]byte(h.ListResponse))
+			}
 		case http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)

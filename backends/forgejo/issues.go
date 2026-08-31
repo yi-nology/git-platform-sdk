@@ -211,6 +211,9 @@ func (p *Provider) setIssueState(owner, repo string, n int64, state forgejo.Stat
 // servers that cap lower are handled by the stop-on-empty loop.
 const issueCommentPageSize = 100
 
+// labelPageSize is the per-page value for paginated label-list fetches.
+const labelPageSize = 100
+
 // ListIssueComments implements provider.IssueManager.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := issueNumber("ListIssueComments", number)
@@ -258,9 +261,15 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(comment), nil
 }
 
-// ListIssueLabels implements provider.IssueManager: repository-level labels.
+// ListIssueLabels implements provider.IssueManager: repository-level labels,
+// exhausting pagination (the loop advances until an empty page).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	labels, _, err := p.client.ListRepoLabels(owner, repo, forgejo.ListLabelsOptions{ListOptions: forgejo.ListOptions{PageSize: 100}})
+	labels, err := backendutil.AllPages(func(page int) ([]*forgejo.Label, error) {
+		batch, _, err := p.client.ListRepoLabels(owner, repo, forgejo.ListLabelsOptions{
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: labelPageSize},
+		})
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListIssueLabels", err)
 	}

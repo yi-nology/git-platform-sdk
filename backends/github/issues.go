@@ -159,6 +159,9 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 // servers that cap lower are handled by the stop-on-empty loop.
 const issueCommentPageSize = 100
 
+// labelPageSize is the per-page value for paginated label-list fetches.
+const labelPageSize = 100
+
 // ListIssueComments implements provider.IssueManager.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := issueNumber("ListIssueComments", number)
@@ -205,9 +208,13 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(comment), nil
 }
 
-// ListIssueLabels implements provider.IssueManager: repository-level labels.
+// ListIssueLabels implements provider.IssueManager: repository-level labels,
+// exhausting pagination (the loop advances until an empty page).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	labels, _, err := p.client.Issues.ListLabels(ctx, owner, repo, &github.ListOptions{PerPage: 100})
+	labels, err := backendutil.AllPages(func(page int) ([]*github.Label, error) {
+		batch, _, err := p.client.Issues.ListLabels(ctx, owner, repo, &github.ListOptions{Page: page, PerPage: labelPageSize})
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListIssueLabels", err)
 	}

@@ -493,7 +493,11 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 		case strings.Contains(r.URL.Path, "comments"), strings.Contains(r.URL.Path, "notes"):
 			_, _ = w.Write(h.commentsPage(r))
 		case strings.Contains(r.URL.Path, "labels") && !strings.Contains(r.URL.Path, "issues"):
-			_, _ = w.Write([]byte(h.LabelsResponse))
+			if page, _ := strconv.Atoi(r.URL.Query().Get("page")); page > 1 {
+				_, _ = w.Write([]byte(`[]`))
+			} else {
+				_, _ = w.Write([]byte(h.LabelsResponse))
+			}
 		default:
 			_, _ = w.Write([]byte(h.ListResponse))
 		}
