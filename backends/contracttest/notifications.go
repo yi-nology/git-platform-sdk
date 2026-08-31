@@ -1,0 +1,115 @@
+package contracttest
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/yi-nology/git-platform-sdk/provider"
+)
+
+// NotificationsHarnessConfig carries the fixtures a backend's main Harness
+// needs to auto-mount the notification suite via Harness.Notifications.
+type NotificationsHarnessConfig struct {
+	// ListResponse is the JSON array the mock returns for notification list
+	// requests. It must contain at least one notification with unread=true.
+	ListResponse string
+}
+
+// testNotificationsSuite auto-mounts RunNotificationsSuite from a main
+// Harness, enforcing bidirectional drift checks.
+func testNotificationsSuite(t *testing.T, h Harness) {
+	srv := httptest.NewServer(stubHandler(h))
+	defer srv.Close()
+	p := h.NewProvider(t, baseCfg(h, srv.URL))
+	declared := p.Capabilities().Notifications
+	switch {
+	case h.Notifications == nil && !declared:
+		t.Skipf("%s declares no Notifications capability", h.Name)
+	case h.Notifications == nil:
+		t.Errorf("%s declares Capabilities().Notifications but its Harness provides no Notifications config", h.Name)
+	case !declared:
+		t.Errorf("%s Harness provides a Notifications config but the platform does not declare Capabilities().Notifications", h.Name)
+	default:
+		RunNotificationsSuite(t, NotificationsHarness{
+			Name:         h.Name,
+			Platform:     h.Platform,
+			NewProvider:  h.NewProvider,
+			ListResponse: h.Notifications.ListResponse,
+		})
+	}
+}
+
+// NotificationsHarness bundles the inputs needed to run the notification
+// contract suite against a backend that implements provider.NotificationManager.
+type NotificationsHarness struct {
+	Name         string
+	Platform     provider.Platform
+	NewProvider  func(t *testing.T, cfg provider.Config) provider.Provider
+	ListResponse string
+}
+
+// RunNotificationsSuite executes the notification contract suite.
+func RunNotificationsSuite(t *testing.T, h NotificationsHarness) {
+	newNM := func(t *testing.T) provider.NotificationManager {
+		srv := notificationStubServer(h.ListResponse)
+		t.Cleanup(srv.Close)
+		p := h.NewProvider(t, provider.Config{Platform: h.Platform, BaseURL: srv.URL, Token: "test"})
+		nm, ok := p.(provider.NotificationManager)
+		if !ok {
+			t.Fatalf("%s does not implement provider.NotificationManager", h.Name)
+		}
+		return nm
+	}
+
+	t.Run("ListNotifications_ReturnsResults", func(t *testing.T) {
+		nm := newNM(t)
+		notifications, err := nm.ListNotifications(context.Background(), provider.ListNotificationsOptions{})
+		if err != nil {
+			t.Fatalf("ListNotifications: %v", err)
+		}
+		if len(notifications) == 0 {
+			t.Fatal("expected at least one notification")
+		}
+		if notifications[0].ID == "" {
+			t.Error("expected notification ID to be non-empty")
+		}
+		if notifications[0].Subject.Title == "" {
+			t.Error("expected notification subject title to be non-empty")
+		}
+	})
+
+	t.Run("MarkNotificationRead_Succeeds", func(t *testing.T) {
+		nm := newNM(t)
+		if err := nm.MarkNotificationRead(context.Background(), "1"); err != nil {
+			t.Fatalf("MarkNotificationRead: %v", err)
+		}
+	})
+
+	t.Run("MarkNotificationsRead_Succeeds", func(t *testing.T) {
+		nm := newNM(t)
+		if err := nm.MarkNotificationsRead(context.Background(), provider.MarkNotificationsOptions{}); err != nil {
+			t.Fatalf("MarkNotificationsRead: %v", err)
+		}
+	})
+}
+
+// notificationStubServer returns a mock server for the notification suite.
+func notificationStubServer(listResponse string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(listResponse))
+		case http.MethodPost, http.MethodPatch:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+		case http.MethodPut:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+}

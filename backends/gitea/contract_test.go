@@ -74,5 +74,12 @@ func TestGitea_Contract(t *testing.T) {
 		// CommitStatus is zero-config: the suite self-drives against the
 		// recording server and asserts a single status-reporting request.
 		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
+		Notifications: &contracttest.NotificationsHarnessConfig{
+			ListResponse: `[{"id":1,"unread":true,"subject":{"title":"Bug report","type":"Issue","url":"https://gitea.com/api/v1/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00Z"}]`,
+		},
+		Reactions: &contracttest.ReactionsHarnessConfig{
+			ListResponse:   `[{"content":"+1","user":{"id":1,"login":"dev"}}]`,
+			CreateResponse: `{"content":"heart","user":{"id":1,"login":"dev"}}`,
+		},
 	})
 }

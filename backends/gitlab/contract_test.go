@@ -85,5 +85,15 @@ func TestGitLab_Contract(t *testing.T) {
 		// CommitStatus is zero-config: the suite self-drives against the
 		// recording server and asserts a single status-reporting request.
 		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
+		// GitLab's notification surface is the Todos API. The wire shape
+		// differs from GitHub/Gitea-style notification threads: todos carry
+		// action_name, target_type, state, and a nested target object.
+		Notifications: &contracttest.NotificationsHarnessConfig{
+			ListResponse: `[{"id":1,"project":{"id":1,"path_with_namespace":"owner/repo"},"author":{"id":1,"username":"dev"},"action_name":"mentioned","target_type":"Issue","target":{"iid":1,"title":"Bug report","state":"opened"},"target_url":"https://gitlab.com/owner/repo/-/issues/1","body":"you were mentioned","state":"pending","created_at":"2026-01-01T00:00:00Z"}]`,
+		},
+		Reactions: &contracttest.ReactionsHarnessConfig{
+			ListResponse:   `[{"id":1,"name":"+1","user":{"id":1,"username":"dev"}}]`,
+			CreateResponse: `{"id":1,"name":"heart","user":{"id":1,"username":"dev"}}`,
+		},
 	})
 }

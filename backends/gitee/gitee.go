@@ -147,6 +147,9 @@ func (p *Provider) accessToken() optional.String {
 // carries only a status string, so without this provider.IsNotFound and
 // friends would not classify SDK failures.
 func (p *Provider) sdkErr(op string, resp *http.Response, err error) error {
+	if err == nil {
+		return nil
+	}
 	if resp != nil {
 		return provider.Wrap(p.Platform(), op,
 			provider.New(p.Platform(), op, resp.StatusCode, err.Error()))
@@ -163,7 +166,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee 
 // alphanumeric strings (e.g. "IAINVA"), addressed natively by the
 // string-typed IssueManager.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Milestones: true, Search: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Milestones: true, Search: true, Notifications: true}
 }
 
 // TestConnection implements provider.Provider.

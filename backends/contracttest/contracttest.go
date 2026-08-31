@@ -65,6 +65,12 @@ type Harness struct {
 	// Run, with the same bidirectional drift checks as Labels, Issues,
 	// Reviews, Milestones, and Search.
 	CommitStatus *CommitStatusHarnessConfig
+	// Notifications, when non-nil, auto-mounts the notification suite inside
+	// Run, with the same bidirectional drift checks.
+	Notifications *NotificationsHarnessConfig
+	// Reactions, when non-nil, auto-mounts the reaction suite inside
+	// Run, with the same bidirectional drift checks.
+	Reactions *ReactionsHarnessConfig
 	// Releases auto-mounts the release-management suite inside Run. Unlike
 	// the fields above, ReleaseManager is a core interface composed into
 	// provider.Provider (every backend implements it), so there is no
@@ -92,6 +98,8 @@ func Run(t *testing.T, h Harness) {
 	t.Run("SearchSuite", func(t *testing.T) { testSearchSuite(t, h) })
 	t.Run("ReleaseSuite", func(t *testing.T) { testReleaseSuite(t, h) })
 	t.Run("CommitStatusSuite", func(t *testing.T) { testCommitStatusSuite(t, h) })
+	t.Run("NotificationsSuite", func(t *testing.T) { testNotificationsSuite(t, h) })
+	t.Run("ReactionsSuite", func(t *testing.T) { testReactionsSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

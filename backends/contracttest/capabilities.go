@@ -29,6 +29,8 @@ func testCapabilities(t *testing.T, h Harness) {
 	_, reviewsImpl := p.(provider.ReviewManager)
 	_, milestonesImpl := p.(provider.MilestoneManager)
 	_, commitStatusesImpl := p.(provider.CommitStatusManager)
+	_, notificationsImpl := p.(provider.NotificationManager)
+	_, reactionsImpl := p.(provider.ReactionManager)
 
 	// Declared capabilities must always type-assert, and implemented ones
 	// must be declared — both directions, uniformly across capabilities.
@@ -49,5 +51,11 @@ func testCapabilities(t *testing.T, h Harness) {
 	}
 	if caps.CommitStatuses != commitStatusesImpl {
 		t.Errorf("Capabilities().CommitStatuses = %v, but CommitStatusManager type assertion = %v; declaration and implementation have drifted", caps.CommitStatuses, commitStatusesImpl)
+	}
+	if caps.Notifications != notificationsImpl {
+		t.Errorf("Capabilities().Notifications = %v, but NotificationManager type assertion = %v; declaration and implementation have drifted", caps.Notifications, notificationsImpl)
+	}
+	if caps.Reactions != reactionsImpl {
+		t.Errorf("Capabilities().Reactions = %v, but ReactionManager type assertion = %v; declaration and implementation have drifted", caps.Reactions, reactionsImpl)
 	}
 }
