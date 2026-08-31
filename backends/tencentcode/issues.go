@@ -197,6 +197,9 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 // servers that cap lower are handled by the stop-on-empty loop.
 const issueCommentPageSize = 100
 
+// labelPageSize is the per-page value for paginated label-list fetches.
+const labelPageSize = 100
+
 // ListIssueComments implements provider.IssueManager via the notes API,
 // exhausting 工蜂's pagination (the loop advances until an empty page, so
 // the result is the complete comment list).
@@ -253,10 +256,13 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 
 // ListIssueLabels implements provider.IssueManager: repository-level
 // labels (labels.go owns the model conversion; IDs stay zero because the
-// gongfeng Label model has none).
+// gongfeng Label model has none), exhausting pagination.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	labels, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo),
-		&gongfeng.ListLabelsOptions{ListOptions: gongfeng.ListOptions{PerPage: 100}})
+	labels, err := backendutil.AllPages(func(page int) ([]*gongfeng.Label, error) {
+		batch, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo),
+			&gongfeng.ListLabelsOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: labelPageSize}})
+		return batch, err
+	})
 	if err != nil {
 		return nil, sdkError("ListIssueLabels", err)
 	}

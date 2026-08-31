@@ -154,6 +154,9 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 // servers that cap lower are handled by the stop-on-empty loop.
 const issueCommentPageSize = 100
 
+// labelPageSize is the per-page value for paginated label-list fetches.
+const labelPageSize = 100
+
 // ListIssueComments implements provider.IssueManager.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := issueNumber("ListIssueComments", number)
@@ -208,9 +211,23 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(comment), nil
 }
 
-// ListIssueLabels implements provider.IssueManager.
+// ListIssueLabels implements provider.IssueManager. The fork's
+// ListIssueLabels surface takes no pagination parameters (a bare GET
+// returns the server-default first page only), so the list is driven
+// through the raw transport client with explicit page/per_page query
+// parameters until an empty page (registered detour).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	labels, err := p.client.ListIssueLabels(ctx, owner, repo)
+	var labels []gitcode.Label
+	labels, err := backendutil.AllPages(func(page int) ([]gitcode.Label, error) {
+		var batch []gitcode.Label
+		_, err := p.rawClient.DoJSON(ctx, &transport.Request{
+			Method: "GET",
+			Path:   fmt.Sprintf("/repos/%s/%s/labels", url.PathEscape(owner), url.PathEscape(repo)),
+			Query:  url.Values{"page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(labelPageSize)}},
+			Result: &batch,
+		})
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListIssueLabels", err)
 	}

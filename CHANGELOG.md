@@ -8,6 +8,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`ListIssueLabels` now returns the complete label list on every
+  platform.** Five backends fetched only the server-default first page
+  (100 labels); two (Gitee and GitCode) fetched even less (no pagination
+  parameters at all). All seven now exhaust pagination via
+  `backendutil.AllPages`, with Gitee and GitCode routed through their
+  respective raw transport clients (registered detours). The label
+  contract suite's stub now terminates cleanly on the second page.
+
 - **`ListIssueComments` now returns the complete comment list on every
   platform.** All seven backends fetched only the server-default first
   page (30 comments on the GitHub-shaped APIs), silently truncating
