@@ -503,8 +503,8 @@ type NotificationSubject struct {
 
 // ListNotificationsOptions contains options for listing notifications.
 type ListNotificationsOptions struct {
-	All     bool   `json:"all,omitempty"`     // include already-read notifications
-	Since   string `json:"since,omitempty"`   // RFC3339 timestamp
+	All     bool   `json:"all,omitempty"`   // include already-read notifications
+	Since   string `json:"since,omitempty"` // RFC3339 timestamp
 	Page    int    `json:"page,omitempty"`
 	PerPage int    `json:"per_page,omitempty"`
 }

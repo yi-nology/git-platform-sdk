@@ -33,18 +33,18 @@ const (
 // here and update every backend's Capabilities method; the contract suite
 // enforces that declarations match implementations.
 type CapabilitySet struct {
-	Issues           bool // provider.IssueManager
-	Search           bool // provider.SearchManager
-	Labels           bool // provider.LabelManager
-	Milestones       bool // provider.MilestoneManager
-	Reviews          bool // provider.ReviewManager
-	CommitStatuses   bool // provider.CommitStatusManager
-	Notifications    bool // provider.NotificationManager
-	Reactions        bool // provider.ReactionManager
+	Issues            bool // provider.IssueManager
+	Search            bool // provider.SearchManager
+	Labels            bool // provider.LabelManager
+	Milestones        bool // provider.MilestoneManager
+	Reviews           bool // provider.ReviewManager
+	CommitStatuses    bool // provider.CommitStatusManager
+	Notifications     bool // provider.NotificationManager
+	Reactions         bool // provider.ReactionManager
 	BranchProtections bool // provider.BranchProtectionManager
-	Collaborators    bool // provider.CollaboratorManager
-	DeployKeys       bool // provider.DeploymentKeyManager
-	RepoStats        bool // provider.RepoStatsManager
+	Collaborators     bool // provider.CollaboratorManager
+	DeployKeys        bool // provider.DeploymentKeyManager
+	RepoStats         bool // provider.RepoStatsManager
 }
 
 // Provider is the unified interface for all Git hosting platforms.

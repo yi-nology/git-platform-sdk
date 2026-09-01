@@ -4,8 +4,8 @@ import (
 	"context"
 	"strconv"
 
-	gitcode "github.com/yi-nology/go-gitcode"
 	"github.com/yi-nology/git-platform-sdk/provider"
+	gitcode "github.com/yi-nology/go-gitcode"
 )
 
 // ListNotifications implements provider.NotificationManager.

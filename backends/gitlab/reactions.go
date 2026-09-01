@@ -3,8 +3,8 @@ package gitlab
 import (
 	"context"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 	"github.com/yi-nology/git-platform-sdk/provider"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 )
 
 // emojiFromSDK maps GitLab award-emoji names to the SDK's canonical names.
@@ -134,7 +134,7 @@ func convertAwardEmoji(e *gitlab.AwardEmoji) *provider.Reaction {
 		Emoji: name,
 	}
 	out.User = &provider.CRUser{
-		ID:       int64(e.User.ID),
+		ID:       e.User.ID,
 		Username: e.User.Username,
 	}
 	return out

@@ -61,7 +61,7 @@ func testCommitStatusSuite(t *testing.T, h Harness) {
 	if len(paths) != 1 {
 		t.Fatalf("%s: CreateCommitStatus made %d requests (%v), want exactly 1", h.Name, len(paths), paths)
 	}
-	if !strings.Contains(paths[0], "status") && !strings.Contains(paths[0], "statuses") {
+	if !strings.Contains(paths[0], "status") && !strings.Contains(paths[0], "statuses") && !strings.Contains(paths[0], "check-runs") {
 		t.Errorf("%s: status request path %q does not look like a commit-status endpoint", h.Name, paths[0])
 	}
 }

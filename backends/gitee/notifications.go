@@ -13,14 +13,14 @@ import (
 // notification wire format (unread is a string "true"/"false" instead
 // of a boolean).
 type rawNotification struct {
-	ID         int    `json:"id"`
-	Unread     string `json:"unread"`
-	Type       string `json:"type"`
-	UpdatedAt  string `json:"updated_at"`
-	URL        string `json:"url"`
-	HtmlURL    string `json:"html_url"`
-	Subject    *rawNotifSubject   `json:"subject,omitempty"`
-	Repository *rawNotifRepo      `json:"repository,omitempty"`
+	ID         int              `json:"id"`
+	Unread     string           `json:"unread"`
+	Type       string           `json:"type"`
+	UpdatedAt  string           `json:"updated_at"`
+	URL        string           `json:"url"`
+	HTMLURL    string           `json:"html_url"`
+	Subject    *rawNotifSubject `json:"subject,omitempty"`
+	Repository *rawNotifRepo    `json:"repository,omitempty"`
 }
 
 type rawNotifSubject struct {
@@ -36,8 +36,8 @@ type rawNotifRepo struct {
 }
 
 type rawNotificationList struct {
-	TotalCount int                 `json:"total_count"`
-	List       []rawNotification   `json:"list"`
+	TotalCount int               `json:"total_count"`
+	List       []rawNotification `json:"list"`
 }
 
 // ListNotifications implements provider.NotificationManager.
