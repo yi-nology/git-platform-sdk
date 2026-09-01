@@ -51,36 +51,9 @@ This document is generated from the backends' registered divergence ledgers
 | Capability | Method | Field | Kind | Reason |
 |---|---|---|---|---|
 | ChangeRequestManager | UpdateCR | opts.TargetBranch | ignore | Gitee's pull-update endpoint has no base field; retargeting a pull request is not possible. |
-| ChangeRequestManager | GetCR | Draft | mapping | The go-gitee pull model carries no draft field, so Draft is always false on every returned change request. |
-| ChangeRequestManager | ListCRs | Draft | mapping | See GetCR. |
 | LabelManager | CreateLabel | opts.Description | ignore | Gitee's label wire has no description field. |
 | LabelManager | UpdateLabel | opts.Description | ignore | Gitee's label wire has no description field. |
 | ReleaseManager | CreateRelease | opts.Draft | ignore | Gitee's release create wire takes no draft flag. |
-| RepoManager | ListRepos |  | detour | go-gitee: the user-repos list method decodes into a single Project instead of an array. |
-| RepoManager | CreateRepo |  | detour | go-gitee: RepositoryPostParam has no default_branch field. |
-| BranchManager | DeleteBranch |  | detour | go-gitee: no DeleteV5ReposOwnerRepoBranches method exists. |
-| CommitManager | GetCommit |  | detour | go-gitee: the RepoCommit model types author/committer/stats objects as strings. |
-| CommitManager | ListCommits |  | detour | go-gitee: the RepoCommit model types author/committer/stats objects as strings. |
-| CommitManager | CompareCommits |  | detour | go-gitee: the Compare model types the commits/files arrays as strings. |
-| FileManager | GetFileContent |  | detour | go-gitee: the Content model types size/_links as strings. |
-| FileManager | CreateFile |  | detour | go-gitee: NewFileParam serializes bracketed JSON keys and the response model is defective. |
-| FileManager | UpdateFile |  | detour | go-gitee: the update method posts multipart labeled application/json and the response model is defective. |
-| FileManager | DeleteFile |  | detour | go-gitee: the delete method puts body parameters into the query string. |
-| ReleaseManager | ListTags |  | detour | go-gitee: the tags method returns a single Tag for an array endpoint. |
-| ReleaseManager | ListReleases |  | detour | go-gitee: the Release model stringifies several fields. |
-| ReleaseManager | CreateRelease |  | detour | go-gitee: the create method posts multipart labeled application/json and the model is defective. |
-| ReleaseManager | GetReleaseByTag |  | detour | go-gitee: the response decodes into a defective Release model. |
-| ReleaseManager | UpdateRelease |  | detour | go-gitee: the update method posts multipart labeled application/json and the model is defective. |
-| ReleaseManager | DeleteRelease |  | detour | go-gitee: the delete method's model is defective. |
-| ReleaseManager | GetArchive |  | detour | go-gitee: the SDK exposes no archive-download endpoint. |
-| LabelManager | ListLabels |  | detour | go-gitee: the list options carry no pagination parameters. |
-| IssueManager | ListIssueLabels |  | detour | go-gitee: GetV5ReposOwnerRepoLabelsOpts has no pagination fields; the list is driven through the raw client with explicit page/per_page. |
-| LabelManager | UpdateLabel |  | detour | go-gitee: the patch method posts multipart labeled application/json. |
-| IssueManager | CreateIssue |  | detour | go-gitee: the create method posts multipart labeled application/json. |
-| MilestoneManager | CreateMilestone |  | detour | go-gitee: the create method posts form values labeled application/json. |
-| MilestoneManager | UpdateMilestone |  | detour | go-gitee: the update method posts form values labeled application/json. |
-| WebhookManager | CreateWebhook |  | detour | go-gitee: the create method posts multipart labeled application/json. |
-| WebhookManager | ListWebhooks |  | detour | go-gitee: the Hook model stringifies numeric/boolean fields and list decode errors are swallowed. |
 
 ## gitea
 

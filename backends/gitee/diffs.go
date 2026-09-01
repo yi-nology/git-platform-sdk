@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	gitee "gitee.com/openeuler/go-gitee/gitee"
+	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -15,15 +15,13 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 	if err != nil {
 		return nil, err
 	}
-	files, resp, err := p.client.PullRequestsApi.GetV5ReposOwnerRepoPullsNumberFiles(ctx, esc(owner), esc(repo), n, &gitee.GetV5ReposOwnerRepoPullsNumberFilesOpts{
-		AccessToken: p.accessToken(),
-	})
+	files, _, err := p.client.PullRequests.ListFiles(ctx, esc(owner), esc(repo), n)
 	if err != nil {
-		return nil, p.sdkErr("GetCRDiff", resp, err)
+		return nil, p.sdkErr("GetCRDiff", err)
 	}
 	diff := &provider.MergeDiff{}
-	for i := range files {
-		diff.Files = append(diff.Files, convertPRFile(files[i]))
+	for _, f := range files {
+		diff.Files = append(diff.Files, convertPRFile(f))
 	}
 	diff.TotalAdd, diff.TotalDel = provider.SumDiffStats(diff.Files)
 	diff.RawDiff = provider.BuildRawDiff(diff.Files)
@@ -45,19 +43,17 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 	if err != nil {
 		return "", err
 	}
-	comment, resp, err := p.client.PullRequestsApi.PostV5ReposOwnerRepoPullsNumberComments(ctx, esc(owner), esc(repo), n, gitee.PullRequestCommentPostParam{
-		AccessToken: p.token,
-		Body:        body,
-	})
-	if err != nil {
-		return "", p.sdkErr("CreateNote", resp, err)
+	opts := &gitee.CreatePullRequestCommentOptions{
+		Body: gitee.String(body),
 	}
-	return strconv.FormatInt(int64(comment.Id), 10), nil
+	comment, _, err := p.client.PullRequests.CreateComment(ctx, esc(owner), esc(repo), n, opts)
+	if err != nil {
+		return "", p.sdkErr("CreateNote", err)
+	}
+	return strconv.FormatInt(int64(deref(comment.ID)), 10), nil
 }
 
-// DeleteNote implements provider.DiffManager. The note itself is addressed
-// by its numeric platform ID; the change-request number is only validated,
-// as Gitee's delete-comment endpoint does not take it.
+// DeleteNote implements provider.DiffManager.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
 	if _, err := prNumber("DeleteNote", number); err != nil {
 		return err
@@ -66,19 +62,16 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 	if err != nil {
 		return provider.Wrapf(provider.PlatformGitee, "DeleteNote", "invalid note id %q", noteID)
 	}
-	resp, err := p.client.PullRequestsApi.DeleteV5ReposOwnerRepoPullsCommentsId(ctx, esc(owner), esc(repo), toInt32(id), &gitee.DeleteV5ReposOwnerRepoPullsCommentsIdOpts{
-		AccessToken: p.accessToken(),
-	})
+	_, err = p.client.PullRequests.DeleteComment(ctx, esc(owner), esc(repo), id)
 	if err != nil {
-		return p.sdkErr("DeleteNote", resp, err)
+		return p.sdkErr("DeleteNote", err)
 	}
 	return nil
 }
 
 // CreateDiscussion implements provider.DiffManager.
 //
-// Gitee has no separate discussion endpoint; PR comments are the only
-// option. We post the body as a regular PR comment.
+// Gitee has no separate discussion endpoint; PR comments are the only option.
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
 	return p.CreateNote(ctx, owner, repo, number, opts.Body)
 }

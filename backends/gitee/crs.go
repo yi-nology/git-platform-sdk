@@ -5,36 +5,33 @@ import (
 	"strconv"
 	"strings"
 
-	gitee "gitee.com/openeuler/go-gitee/gitee"
-	"github.com/antihax/optional"
+	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// prNumber parses the SDK's string change-request number into Gitee's
-// int32 form. op is the public operation the parse serves; failures
-// surface under it.
-func prNumber(op, number string) (int32, error) {
-	n, err := strconv.ParseInt(number, 10, 32)
+// prNumber parses the SDK's string change-request number into an int.
+func prNumber(op, number string) (int, error) {
+	n, err := strconv.Atoi(number)
 	if err != nil {
 		return 0, provider.Wrapf(provider.PlatformGitee, op, "invalid pull request number %q", number)
 	}
-	return int32(n), nil // #nosec:G115 -- ParseInt already bounded to 32 bits
+	return n, nil
 }
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
-	pr, resp, err := p.client.PullRequestsApi.PostV5ReposOwnerRepoPulls(ctx, esc(opts.Owner), esc(opts.Repo), gitee.CreatePullRequestParam{
-		AccessToken:       p.token,
-		Title:             opts.Title,
-		Head:              opts.SourceBranch,
-		Base:              opts.TargetBranch,
-		Body:              opts.Description,
-		Labels:            strings.Join(opts.Labels, ","),
-		PruneSourceBranch: opts.RemoveSourceBranch,
-	})
+	createOpts := &gitee.CreatePullRequestOptions{
+		Title:             gitee.String(opts.Title),
+		Head:              gitee.String(opts.SourceBranch),
+		Base:              gitee.String(opts.TargetBranch),
+		Body:              gitee.String(opts.Description),
+		Labels:            gitee.String(strings.Join(opts.Labels, ",")),
+		PruneSourceBranch: gitee.Bool(opts.RemoveSourceBranch),
+	}
+	pr, _, err := p.client.PullRequests.Create(ctx, esc(opts.Owner), esc(opts.Repo), createOpts)
 	if err != nil {
-		return nil, p.sdkErr("CreateCR", resp, err)
+		return nil, p.sdkErr("CreateCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
@@ -45,11 +42,9 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 	if err != nil {
 		return nil, err
 	}
-	pr, resp, err := p.client.PullRequestsApi.GetV5ReposOwnerRepoPullsNumber(ctx, esc(owner), esc(repo), n, &gitee.GetV5ReposOwnerRepoPullsNumberOpts{
-		AccessToken: p.accessToken(),
-	})
+	pr, _, err := p.client.PullRequests.Get(ctx, esc(owner), esc(repo), n)
 	if err != nil {
-		return nil, p.sdkErr("GetCR", resp, err)
+		return nil, p.sdkErr("GetCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
@@ -57,94 +52,80 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 // ListCRs implements provider.ChangeRequestManager.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gitee.GetV5ReposOwnerRepoPullsOpts{
-		AccessToken: p.accessToken(),
-		State:       optional.NewString(mapCRStateForGitee(opts.State)),
-		Page:        optional.NewInt32(toInt32(page)),
-		PerPage:     optional.NewInt32(toInt32(perPage)),
+	listOpts := &gitee.PullRequestListOptions{
+		State:   gitee.String(mapCRStateForGitee(opts.State)),
+		Page:    gitee.Int(page),
+		PerPage: gitee.Int(perPage),
 	}
 	if opts.SourceBranch != "" {
-		listOpts.Head = optional.NewString(opts.SourceBranch)
+		listOpts.Head = gitee.String(opts.SourceBranch)
 	}
 	if opts.TargetBranch != "" {
-		listOpts.Base = optional.NewString(opts.TargetBranch)
+		listOpts.Base = gitee.String(opts.TargetBranch)
 	}
-	prs, resp, err := p.client.PullRequestsApi.GetV5ReposOwnerRepoPulls(ctx, esc(opts.Owner), esc(opts.Repo), listOpts)
+	prs, resp, err := p.client.PullRequests.List(ctx, esc(opts.Owner), esc(opts.Repo), listOpts)
 	if err != nil {
-		return nil, 0, p.sdkErr("ListCRs", resp, err)
+		return nil, 0, p.sdkErr("ListCRs", err)
 	}
 	result := make([]*provider.ChangeRequest, 0, len(prs))
-	for i := range prs {
-		result = append(result, convertPullRequest(prs[i]))
+	for _, pr := range prs {
+		result = append(result, convertPullRequest(pr))
 	}
-	return result, provider.ParseTotalCountHeader(resp.Header, len(result)), nil
+	total := provider.ParseTotalCountHeader(resp.Header, len(result))
+	return result, total, nil
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-//
-// The SDK's PutV5ReposOwnerRepoPullsNumberMerge returns no decoded body (the
-// live endpoint responds with the merged PR, but the generated method drops
-// it), so the merged change request is re-fetched via GetV5ReposOwnerRepoPullsNumber
-// right after a successful merge.
 func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
 	n, err := prNumber("MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
-	body := gitee.PullRequestMergePutParam{
-		AccessToken:       p.token,
-		PruneSourceBranch: opts.RemoveSourceBranch,
-		Description:       opts.MergeCommitMessage,
+	mergeOpts := &gitee.MergePullRequestOptions{
+		PruneSourceBranch: gitee.Bool(opts.RemoveSourceBranch),
+		Description:       gitee.String(opts.MergeCommitMessage),
 	}
 	if opts.Squash {
-		body.MergeMethod = "squash"
+		mergeOpts.MergeMethod = gitee.String("squash")
 	}
-	if resp, err := p.client.PullRequestsApi.PutV5ReposOwnerRepoPullsNumberMerge(ctx, esc(owner), esc(repo), n, body); err != nil {
-		return nil, p.sdkErr("MergeCR", resp, err)
+	_, err = p.client.PullRequests.Merge(ctx, esc(owner), esc(repo), n, mergeOpts)
+	if err != nil {
+		return nil, p.sdkErr("MergeCR", err)
 	}
 	return p.GetCR(ctx, owner, repo, number)
 }
 
 // CloseCR implements provider.ChangeRequestManager.
 func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	return p.patchCR(ctx, owner, repo, number, gitee.PullRequestUpdateParam{
-		AccessToken: p.token,
-		State:       "closed",
+	return p.patchCR(ctx, owner, repo, number, &gitee.UpdatePullRequestOptions{
+		State: gitee.String("closed"),
 	}, "CloseCR")
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
 func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	return p.patchCR(ctx, owner, repo, number, gitee.PullRequestUpdateParam{
-		AccessToken: p.token,
-		State:       "open",
+	return p.patchCR(ctx, owner, repo, number, &gitee.UpdatePullRequestOptions{
+		State: gitee.String("open"),
 	}, "ReopenCR")
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
-//
-// Registration: UpdateCROptions.TargetBranch has no Gitee counterpart — the
-// SDK's PullRequestUpdateParam (mirroring Gitee's PATCH /pulls/{number})
-// carries no base/target-branch field, so retargeting a PR is not supported
-// by the API and the option is not forwarded.
 func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	return p.patchCR(ctx, owner, repo, number, gitee.PullRequestUpdateParam{
-		AccessToken: p.token,
-		Title:       opts.Title,
-		Body:        opts.Description,
+	return p.patchCR(ctx, owner, repo, number, &gitee.UpdatePullRequestOptions{
+		Title: gitee.String(opts.Title),
+		Body:  gitee.String(opts.Description),
 	}, "UpdateCR")
 }
 
-// patchCR applies a PATCH /pulls/{number} update via the SDK and returns the
-// updated change request.
-func (p *Provider) patchCR(ctx context.Context, owner, repo, number string, body gitee.PullRequestUpdateParam, op string) (*provider.ChangeRequest, error) {
+// patchCR applies a PATCH /pulls/{number} update via the SDK.
+func (p *Provider) patchCR(ctx context.Context, owner, repo, number string, opts *gitee.UpdatePullRequestOptions, op string) (*provider.ChangeRequest, error) {
 	n, err := prNumber(op, number)
 	if err != nil {
 		return nil, err
 	}
-	pr, resp, err := p.client.PullRequestsApi.PatchV5ReposOwnerRepoPullsNumber(ctx, esc(owner), esc(repo), n, body)
+	pr, _, err := p.client.PullRequests.Edit(ctx, esc(owner), esc(repo), n, opts)
 	if err != nil {
-		return nil, p.sdkErr(op, resp, err)
+		return nil, p.sdkErr(op, err)
 	}
 	return convertPullRequest(pr), nil
 }
@@ -155,12 +136,9 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	if err != nil {
 		return err
 	}
-	_, resp, err := p.client.PullRequestsApi.PutV5ReposOwnerRepoPullsNumberLabels(ctx, esc(owner), esc(repo), n, gitee.PullRequestLabelPostParam{
-		AccessToken: p.token,
-		Body:        labels,
-	})
+	_, _, err = p.client.PullRequests.ReplaceLabels(ctx, esc(owner), esc(repo), n, labels)
 	if err != nil {
-		return p.sdkErr("UpdateCRLabels", resp, err)
+		return p.sdkErr("UpdateCRLabels", err)
 	}
 	return nil
 }
@@ -171,57 +149,48 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	if err != nil {
 		return nil, err
 	}
-	page, perPage := provider.NormalizePageOpts(1, 0)
-	comments, resp, err := p.client.PullRequestsApi.GetV5ReposOwnerRepoPullsNumberComments(ctx, esc(owner), esc(repo), n, &gitee.GetV5ReposOwnerRepoPullsNumberCommentsOpts{
-		AccessToken: p.accessToken(),
-		Page:        optional.NewInt32(toInt32(page)),
-		PerPage:     optional.NewInt32(toInt32(perPage)),
-	})
+	listOpts := &gitee.PullRequestCommentListOptions{
+		Page:    gitee.Int(1),
+		PerPage: gitee.Int(100),
+	}
+	comments, _, err := p.client.PullRequests.ListComments(ctx, esc(owner), esc(repo), n, listOpts)
 	if err != nil {
-		return nil, p.sdkErr("ListCRComments", resp, err)
+		return nil, p.sdkErr("ListCRComments", err)
 	}
 	result := make([]*provider.CRComment, 0, len(comments))
-	for i := range comments {
-		result = append(result, convertPRComment(comments[i]))
+	for _, c := range comments {
+		result = append(result, convertPRComment(c))
 	}
 	return result, nil
 }
 
 // ListCRCommits implements provider.ChangeRequestManager.
-//
-// Note: the SDK's GetV5ReposOwnerRepoPullsNumberCommitsOpts carries only
-// AccessToken (no Page/PerPage), so the previous explicit page=1&per_page=20
-// query parameters are no longer sent; Gitee applies the same defaults
-// server-side.
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
 	n, err := prNumber("ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
-	commits, resp, err := p.client.PullRequestsApi.GetV5ReposOwnerRepoPullsNumberCommits(ctx, esc(owner), esc(repo), n, &gitee.GetV5ReposOwnerRepoPullsNumberCommitsOpts{
-		AccessToken: p.accessToken(),
-	})
+	commits, _, err := p.client.PullRequests.ListCommits(ctx, esc(owner), esc(repo), n)
 	if err != nil {
-		return nil, p.sdkErr("ListCRCommits", resp, err)
+		return nil, p.sdkErr("ListCRCommits", err)
 	}
 	result := make([]*provider.CRCommit, 0, len(commits))
-	for i := range commits {
-		result = append(result, convertPRCommit(commits[i]))
+	for _, c := range commits {
+		result = append(result, convertPRCommit(c))
 	}
 	return result, nil
 }
 
 var _ provider.ChangeRequestManager = (*Provider)(nil)
 
-// mapCRStateForGitee maps the SDK CRState to gitee's pull-list vocabulary
-// (open/closed/merged/all). Empty defaults to open, matching gitee's API.
+// mapCRStateForGitee maps the SDK CRState to gitee's pull-list vocabulary.
 func mapCRStateForGitee(s provider.CRState) string {
 	switch s {
 	case provider.CRStateClosed:
 		return "closed"
 	case provider.CRStateMerged:
 		return "merged"
-	default: // CRStateOpened or ""
+	default:
 		return "open"
 	}
 }
