@@ -11,7 +11,7 @@ import (
 func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
 	keys, _, err := p.client.Repositories.ListKeys(ctx, esc(owner), esc(repo), &gitee.ListOptions{})
 	if err != nil {
-		return nil, p.sdkErr("ListDeployKeys", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListDeployKeys", err)
 	}
 	result := make([]*provider.DeployKey, 0, len(keys))
 	for _, k := range keys {
@@ -27,7 +27,7 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 		Key:   gitee.String(opts.Key),
 	})
 	if err != nil {
-		return nil, p.sdkErr("AddDeployKey", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "AddDeployKey", err)
 	}
 	return convertSSHKey(key), nil
 }
@@ -35,7 +35,7 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 // DeleteDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) DeleteDeployKey(ctx context.Context, owner, repo string, keyID int64) error {
 	_, err := p.client.Repositories.DeleteKey(ctx, esc(owner), esc(repo), keyID)
-	return p.sdkErr("DeleteDeployKey", err)
+	return provider.Wrap(provider.PlatformGitee, "DeleteDeployKey", err)
 }
 
 func convertSSHKey(k *gitee.SSHKey) *provider.DeployKey {

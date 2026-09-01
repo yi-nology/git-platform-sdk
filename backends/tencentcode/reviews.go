@@ -6,6 +6,7 @@ import (
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -36,7 +37,7 @@ import (
 // surface uses — the gongfeng SDK's bundled docs/api/notes.md). See the file doc for the registered
 // unmapped fields (Comments, CommitID) and the verdict vocabulary.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	n, err := prNumber("CreateReview", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +57,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 // bookkeeping notes ("milestone removed" and the like); those are not
 // reviews and are filtered out.
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	n, err := prNumber("ListReviews", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 // identifier CreateReview returns as ReviewResult.ID, so created reviews
 // round-trip through this call.
 func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	n, err := prNumber("GetReview", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "GetReview", number)
 	if err != nil {
 		return nil, err
 	}

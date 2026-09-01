@@ -3,13 +3,15 @@ package github
 import (
 	"context"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/google/go-github/v72/github"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListIssueReactions implements provider.ReactionManager.
 func (p *Provider) ListIssueReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
-	n, err := issueNumber("ListIssueReactions", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "ListIssueReactions", number)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +24,7 @@ func (p *Provider) ListIssueReactions(ctx context.Context, owner, repo, number s
 
 // AddIssueReaction implements provider.ReactionManager.
 func (p *Provider) AddIssueReaction(ctx context.Context, owner, repo, number, emoji string) (*provider.Reaction, error) {
-	n, err := issueNumber("AddIssueReaction", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "AddIssueReaction", number)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +37,7 @@ func (p *Provider) AddIssueReaction(ctx context.Context, owner, repo, number, em
 
 // RemoveIssueReaction implements provider.ReactionManager.
 func (p *Provider) RemoveIssueReaction(ctx context.Context, owner, repo, number string, reactionID int64) error {
-	n, err := issueNumber("RemoveIssueReaction", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "RemoveIssueReaction", number)
 	if err != nil {
 		return err
 	}

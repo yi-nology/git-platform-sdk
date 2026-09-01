@@ -56,7 +56,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	}
 	hook, _, err := p.client.Webhooks.Create(ctx, esc(opts.Owner), esc(opts.Repo), createOpts)
 	if err != nil {
-		return nil, p.sdkErr("CreateWebhook", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateWebhook", err)
 	}
 	return convertHook(hook), nil
 }
@@ -65,7 +65,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	_, err := p.client.Webhooks.Delete(ctx, esc(owner), esc(repo), webhookID)
 	if err != nil {
-		return p.sdkErr("DeleteWebhook", err)
+		return provider.Wrap(provider.PlatformGitee, "DeleteWebhook", err)
 	}
 	return nil
 }
@@ -74,7 +74,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
 	hooks, _, err := p.client.Webhooks.List(ctx, esc(owner), esc(repo), &gitee.ListOptions{})
 	if err != nil {
-		return nil, p.sdkErr("ListWebhooks", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListWebhooks", err)
 	}
 	result := make([]*provider.PlatformWebhook, 0, len(hooks))
 	for _, h := range hooks {
@@ -163,11 +163,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 
 	switch hookName {
 	case "pull_request":
-		action := pl.Action
-		if action == "close" && pl.State == "merged" {
-			action = "merged"
-		}
-		event.Type = "cr." + action
+		action := provider.NormalizeCRAction(pl.Action, pl.State == "merged")
+		event.Type = provider.EventTypeCR + action
 		event.Action = action
 		event.CR = &provider.ChangeRequest{
 			Number:       strconv.Itoa(pl.Number),

@@ -9,6 +9,8 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 	"github.com/yi-nology/git-platform-sdk/transport"
 )
@@ -55,7 +57,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 
 // GetMilestone implements provider.MilestoneManager.
 func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	id, err := milestoneNumber("GetMilestone", number)
+	id, err := backendutil.ParseMilestoneNumber(provider.PlatformGitCode, "GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +93,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 // body carries exactly the fields the caller set; everything left nil is
 // absent from the wire, leaving the milestone unchanged.
 func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	id, err := milestoneNumber("UpdateMilestone", number)
+	id, err := backendutil.ParseMilestoneNumber(provider.PlatformGitCode, "UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +120,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	id, err := milestoneNumber("DeleteMilestone", number)
+	id, err := backendutil.ParseMilestoneNumber(provider.PlatformGitCode, "DeleteMilestone", number)
 	if err != nil {
 		return err
 	}

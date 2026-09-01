@@ -4,6 +4,8 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/google/go-github/v72/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -11,7 +13,7 @@ import (
 
 // GetCRDiff implements provider.DiffManager.
 func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
-	n, err := prNumber("GetCRDiff", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "GetCRDiff", number)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +64,7 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) (
 
 // CreateNote implements provider.DiffManager.
 func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
-	n, err := prNumber("CreateNote", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "CreateNote", number)
 	if err != nil {
 		return "", err
 	}
@@ -79,7 +81,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 // by its numeric platform ID; the change-request number is only validated,
 // as GitHub's delete-comment endpoint does not take it.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
-	if _, err := prNumber("DeleteNote", number); err != nil {
+	if _, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "DeleteNote", number); err != nil {
 		return err
 	}
 	id, err := strconv.ParseInt(noteID, 10, 64)
@@ -95,7 +97,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 
 // CreateDiscussion implements provider.DiffManager.
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
-	n, err := prNumber("CreateDiscussion", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "CreateDiscussion", number)
 	if err != nil {
 		return "", err
 	}

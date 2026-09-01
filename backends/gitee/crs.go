@@ -2,22 +2,13 @@ package gitee
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
-
-// prNumber parses the SDK's string change-request number into an int.
-func prNumber(op, number string) (int, error) {
-	n, err := strconv.Atoi(number)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformGitee, op, "invalid pull request number %q", number)
-	}
-	return n, nil
-}
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
@@ -31,20 +22,20 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 	}
 	pr, _, err := p.client.PullRequests.Create(ctx, esc(opts.Owner), esc(opts.Repo), createOpts)
 	if err != nil {
-		return nil, p.sdkErr("CreateCR", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
 
 // GetCR implements provider.ChangeRequestManager.
 func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := prNumber("GetCR", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "GetCR", number)
 	if err != nil {
 		return nil, err
 	}
 	pr, _, err := p.client.PullRequests.Get(ctx, esc(owner), esc(repo), n)
 	if err != nil {
-		return nil, p.sdkErr("GetCR", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "GetCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
@@ -65,7 +56,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	prs, resp, err := p.client.PullRequests.List(ctx, esc(opts.Owner), esc(opts.Repo), listOpts)
 	if err != nil {
-		return nil, 0, p.sdkErr("ListCRs", err)
+		return nil, 0, provider.Wrap(provider.PlatformGitee, "ListCRs", err)
 	}
 	result := make([]*provider.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
@@ -77,7 +68,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 
 // MergeCR implements provider.ChangeRequestManager.
 func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := prNumber("MergeCR", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +81,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	}
 	_, err = p.client.PullRequests.Merge(ctx, esc(owner), esc(repo), n, mergeOpts)
 	if err != nil {
-		return nil, p.sdkErr("MergeCR", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "MergeCR", err)
 	}
 	return p.GetCR(ctx, owner, repo, number)
 }
@@ -119,33 +110,33 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 
 // patchCR applies a PATCH /pulls/{number} update via the SDK.
 func (p *Provider) patchCR(ctx context.Context, owner, repo, number string, opts *gitee.UpdatePullRequestOptions, op string) (*provider.ChangeRequest, error) {
-	n, err := prNumber(op, number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, op, number)
 	if err != nil {
 		return nil, err
 	}
 	pr, _, err := p.client.PullRequests.Edit(ctx, esc(owner), esc(repo), n, opts)
 	if err != nil {
-		return nil, p.sdkErr(op, err)
+		return nil, provider.Wrap(provider.PlatformGitee, op, err)
 	}
 	return convertPullRequest(pr), nil
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := prNumber("UpdateCRLabels", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "UpdateCRLabels", number)
 	if err != nil {
 		return err
 	}
 	_, _, err = p.client.PullRequests.ReplaceLabels(ctx, esc(owner), esc(repo), n, labels)
 	if err != nil {
-		return p.sdkErr("UpdateCRLabels", err)
+		return provider.Wrap(provider.PlatformGitee, "UpdateCRLabels", err)
 	}
 	return nil
 }
 
 // ListCRComments implements provider.ChangeRequestManager.
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := prNumber("ListCRComments", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +146,7 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	}
 	comments, _, err := p.client.PullRequests.ListComments(ctx, esc(owner), esc(repo), n, listOpts)
 	if err != nil {
-		return nil, p.sdkErr("ListCRComments", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListCRComments", err)
 	}
 	result := make([]*provider.CRComment, 0, len(comments))
 	for _, c := range comments {
@@ -166,13 +157,13 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 
 // ListCRCommits implements provider.ChangeRequestManager.
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := prNumber("ListCRCommits", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
 	commits, _, err := p.client.PullRequests.ListCommits(ctx, esc(owner), esc(repo), n)
 	if err != nil {
-		return nil, p.sdkErr("ListCRCommits", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListCRCommits", err)
 	}
 	result := make([]*provider.CRCommit, 0, len(commits))
 	for _, c := range commits {

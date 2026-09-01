@@ -14,7 +14,7 @@ import (
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
 	branches, _, err := p.client.Repositories.ListBranches(ctx, esc(owner), esc(repo), nil)
 	if err != nil {
-		return nil, p.sdkErr("ListBranches", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListBranches", err)
 	}
 	result := make([]*provider.PlatformBranch, 0, len(branches))
 	for _, b := range branches {
@@ -31,7 +31,7 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 	}
 	created, _, err := p.client.Repositories.CreateBranch(ctx, esc(owner), esc(repo), opts)
 	if err != nil {
-		return nil, p.sdkErr("CreateBranch", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateBranch", err)
 	}
 	name := deref(created.Name)
 	if name == "" {

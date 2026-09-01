@@ -6,6 +6,16 @@ import "time"
 // sub-interfaces. The split between "options" (what callers pass in) and
 // "result types" (what platforms return) is intentional so consumers can
 // scan a single file to see the cross-platform API surface.
+//
+// Option field conventions:
+//   - Update*Options (e.g. UpdateIssueOptions, UpdateCROptions): zero-value
+//     fields (empty string, false bool) are treated as "leave unchanged".
+//     There is no way to explicitly set a field to its zero value.
+//   - Update*Options with pointer fields (e.g. UpdateLabelOptions,
+//     UpdateMilestoneOptions): nil means "leave unchanged", non-nil means
+//     "set to this value" (including zero values like "" or false).
+//   - Create*Options: all fields are used as-is; zero values mean "use
+//     platform default".
 
 // --- Listing / pagination ---
 

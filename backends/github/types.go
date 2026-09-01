@@ -217,12 +217,3 @@ func mapCRState(state provider.CRState) string {
 		return "all"
 	}
 }
-
-// mapWebhookAction normalizes a GitHub webhook action into a canonical CR
-// action. "closed" + merged becomes "merged".
-func mapWebhookAction(action string, merged bool) string {
-	if action == "closed" && merged {
-		return "merged"
-	}
-	return action
-}

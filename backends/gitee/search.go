@@ -24,7 +24,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 	}
 	repos, _, err := p.client.Search.Repositories(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, p.sdkErr("SearchRepos", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitee, "SearchRepos", err)
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(repos))
 	for _, r := range repos {
@@ -63,7 +63,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 	}
 	issues, _, err := p.client.Search.Issues(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, p.sdkErr("SearchIssues", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitee, "SearchIssues", err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(issues))
 	for _, issue := range issues {
@@ -103,7 +103,7 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 	}
 	users, _, err := p.client.Search.Users(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, p.sdkErr("SearchUsers", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitee, "SearchUsers", err)
 	}
 	out := make([]*provider.SearchUserResult, 0, len(users))
 	for _, u := range users {

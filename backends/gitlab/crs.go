@@ -3,23 +3,13 @@ package gitlab
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
-
-// prNumber parses the SDK's string change-request number into GitLab's
-// int64 IID form. op is the public operation the parse serves; failures
-// surface under it.
-func prNumber(op, number string) (int64, error) {
-	n, err := strconv.ParseInt(number, 10, 64)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformGitLab, op, "invalid pull request number %q", number)
-	}
-	return n, nil
-}
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
@@ -43,7 +33,7 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 
 // GetCR implements provider.ChangeRequestManager.
 func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := prNumber("GetCR", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "GetCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +76,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 
 // MergeCR implements provider.ChangeRequestManager.
 func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := prNumber("MergeCR", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +113,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 
 // CloseCR implements provider.ChangeRequestManager.
 func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := prNumber("CloseCR", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "CloseCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +127,7 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 
 // ReopenCR implements provider.ChangeRequestManager.
 func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := prNumber("ReopenCR", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ReopenCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +141,7 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 
 // UpdateCR implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	n, err := prNumber("UpdateCR", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "UpdateCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +164,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := prNumber("UpdateCRLabels", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "UpdateCRLabels", number)
 	if err != nil {
 		return err
 	}
@@ -189,7 +179,7 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 
 // ListCRComments implements provider.ChangeRequestManager.
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := prNumber("ListCRComments", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +206,7 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 
 // ListCRCommits implements provider.ChangeRequestManager.
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := prNumber("ListCRCommits", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}

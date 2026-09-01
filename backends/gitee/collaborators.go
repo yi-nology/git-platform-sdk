@@ -12,7 +12,7 @@ import (
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
 	members, _, err := p.client.Repositories.ListCollaborators(ctx, esc(owner), esc(repo), nil)
 	if err != nil {
-		return nil, p.sdkErr("ListCollaborators", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListCollaborators", err)
 	}
 	result := make([]*provider.Collaborator, 0, len(members))
 	for _, m := range members {
@@ -29,7 +29,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 	}
 	_, _, err := p.client.Repositories.AddCollaborator(ctx, esc(owner), esc(repo), esc(username), addOpts)
 	if err != nil {
-		return p.sdkErr("AddCollaborator", err)
+		return provider.Wrap(provider.PlatformGitee, "AddCollaborator", err)
 	}
 	return nil
 }
@@ -38,7 +38,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username string) error {
 	_, err := p.client.Repositories.RemoveCollaborator(ctx, esc(owner), esc(repo), esc(username))
 	if err != nil {
-		return p.sdkErr("RemoveCollaborator", err)
+		return provider.Wrap(provider.PlatformGitee, "RemoveCollaborator", err)
 	}
 	return nil
 }

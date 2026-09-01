@@ -12,7 +12,7 @@ import (
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
 	tags, _, err := p.client.Repositories.ListTags(ctx, esc(owner), esc(repo), nil)
 	if err != nil {
-		return nil, p.sdkErr("ListTags", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListTags", err)
 	}
 	result := make([]*provider.TagInfo, 0, len(tags))
 	for _, t := range tags {
@@ -30,7 +30,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 	}
 	releases, _, err := p.client.Repositories.ListReleases(ctx, esc(owner), esc(repo), opts)
 	if err != nil {
-		return nil, p.sdkErr("ListReleases", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListReleases", err)
 	}
 	result := make([]*provider.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
@@ -56,7 +56,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	}
 	r, _, err := p.client.Repositories.CreateRelease(ctx, esc(owner), esc(repo), createOpts)
 	if err != nil {
-		return nil, p.sdkErr("CreateRelease", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateRelease", err)
 	}
 	return convertRelease(r), nil
 }
@@ -65,7 +65,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
 	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, esc(owner), esc(repo), esc(tag))
 	if err != nil {
-		return nil, p.sdkErr("GetReleaseByTag", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "GetReleaseByTag", err)
 	}
 	return convertRelease(r), nil
 }
@@ -75,7 +75,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	// Resolve the release ID by tag first.
 	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, esc(owner), esc(repo), esc(tag))
 	if err != nil {
-		return nil, p.sdkErr("UpdateRelease", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRelease", err)
 	}
 	updateOpts := &gitee.UpdateReleaseOptions{}
 	if opts.Name != nil {
@@ -89,7 +89,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	}
 	updated, _, err := p.client.Repositories.UpdateRelease(ctx, esc(owner), esc(repo), int64(deref(r.ID)), updateOpts)
 	if err != nil {
-		return nil, p.sdkErr("UpdateRelease", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRelease", err)
 	}
 	return convertRelease(updated), nil
 }
@@ -99,11 +99,11 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 	// Resolve the release ID by tag first.
 	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, esc(owner), esc(repo), esc(tag))
 	if err != nil {
-		return p.sdkErr("DeleteRelease", err)
+		return provider.Wrap(provider.PlatformGitee, "DeleteRelease", err)
 	}
 	_, err = p.client.Repositories.DeleteRelease(ctx, esc(owner), esc(repo), int64(deref(r.ID)))
 	if err != nil {
-		return p.sdkErr("DeleteRelease", err)
+		return provider.Wrap(provider.PlatformGitee, "DeleteRelease", err)
 	}
 	return nil
 }
@@ -121,7 +121,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 		resp, err = p.client.Repositories.DownloadZipball(ctx, esc(owner), esc(repo), opts)
 	}
 	if err != nil {
-		return nil, p.sdkErr("GetArchive", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	buf := make([]byte, 0, 1024*1024)

@@ -12,27 +12,6 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// issueNumber parses the SDK's string issue number into GitLab's int64 IID
-// form. op is the public operation the parse serves; failures surface under
-// it.
-func issueNumber(op, number string) (int64, error) {
-	n, err := strconv.ParseInt(number, 10, 64)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformGitLab, op, "invalid issue number %q", number)
-	}
-	return n, nil
-}
-
-// milestoneNumber parses the SDK's string milestone identifier (GitLab
-// milestone IDs) into GitLab's int64 form.
-func milestoneNumber(op, milestone string) (int64, error) {
-	m, err := strconv.ParseInt(milestone, 10, 64)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformGitLab, op, "invalid milestone number %q", milestone)
-	}
-	return m, nil
-}
-
 // ListIssues implements provider.IssueManager.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
@@ -64,7 +43,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 
 // GetIssue implements provider.IssueManager.
 func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("GetIssue", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "GetIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +73,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		createOpts.AssigneeIDs = &assigneeIDs
 	}
 	if opts.Milestone != "" {
-		m, err := milestoneNumber("CreateIssue", opts.Milestone)
+		m, err := backendutil.ParseMilestoneNumber(provider.PlatformGitLab, "CreateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +89,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 // UpdateIssue implements provider.IssueManager.
 // Assignees are resolved to user IDs via the Users API (cached).
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
-	n, err := issueNumber("UpdateIssue", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +119,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		updateOpts.AssigneeIDs = &assigneeIDs
 	}
 	if opts.Milestone != "" {
-		m, err := milestoneNumber("UpdateIssue", opts.Milestone)
+		m, err := backendutil.ParseMilestoneNumber(provider.PlatformGitLab, "UpdateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
@@ -155,7 +134,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 
 // CloseIssue implements provider.IssueManager via the state_event API.
 func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("CloseIssue", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "CloseIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +148,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 
 // ReopenIssue implements provider.IssueManager via the state_event API.
 func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("ReopenIssue", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "ReopenIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -181,25 +160,17 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	return convertIssue(issue), nil
 }
 
-// issueCommentPageSize is the per-page value for paginated issue-comment
-// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
-// servers that cap lower are handled by the stop-on-empty loop.
-const issueCommentPageSize = 100
-
-// labelPageSize is the per-page value for paginated label-list fetches.
-const labelPageSize = 100
-
 // ListIssueComments implements provider.IssueManager. GitLab models issue
 // comments as notes; the loop exhausts GitLab's pagination (advances until
 // an empty page), so the result is the complete comment list.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	n, err := issueNumber("ListIssueComments", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
 	notes, err := backendutil.AllPages(func(page int) ([]*gitlab.Note, error) {
 		batch, _, err := p.client.Notes.ListIssueNotes(pidOf(owner, repo), n, &gitlab.ListIssueNotesOptions{
-			ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: issueCommentPageSize},
+			ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: backendutil.IssueCommentPageSize},
 		}, gitlab.WithContext(ctx))
 		return batch, err
 	})
@@ -215,7 +186,7 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 
 // CreateIssueComment implements provider.IssueManager.
 func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	n, err := issueNumber("CreateIssueComment", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "CreateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +202,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 // issue notes through the issue, so number must carry the issue's IID; the
 // platform only lets the note's author perform the edit.
 func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
-	n, err := issueNumber("UpdateIssueComment", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "UpdateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +219,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*gitlab.Label, error) {
 		batch, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
-			&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: labelPageSize}}, gitlab.WithContext(ctx))
+			&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: backendutil.LabelPageSize}}, gitlab.WithContext(ctx))
 		return batch, err
 	})
 	if err != nil {
@@ -263,7 +234,7 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 
 // AddIssueLabels implements provider.IssueManager via add_labels.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := issueNumber("AddIssueLabels", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "AddIssueLabels", number)
 	if err != nil {
 		return err
 	}
@@ -278,7 +249,7 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 
 // RemoveIssueLabel implements provider.IssueManager via remove_labels.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	n, err := issueNumber("RemoveIssueLabel", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "RemoveIssueLabel", number)
 	if err != nil {
 		return err
 	}

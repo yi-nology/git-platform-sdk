@@ -12,7 +12,7 @@ import (
 func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
 	commit, _, err := p.client.Repositories.GetCommit(ctx, esc(owner), esc(repo), esc(sha))
 	if err != nil {
-		return nil, p.sdkErr("GetCommit", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "GetCommit", err)
 	}
 	return convertRepoCommitWithFiles(commit), nil
 }
@@ -35,7 +35,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 	}
 	commits, _, err := p.client.Repositories.ListCommits(ctx, esc(owner), esc(repo), listOpts)
 	if err != nil {
-		return nil, p.sdkErr("ListCommits", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
 	}
 	result := make([]*provider.CommitInfo, 0, len(commits))
 	for _, c := range commits {
@@ -48,7 +48,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
 	cmp, _, err := p.client.Repositories.CompareCommits(ctx, esc(owner), esc(repo), esc(base), esc(head), nil)
 	if err != nil {
-		return nil, p.sdkErr("CompareCommits", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CompareCommits", err)
 	}
 	result := &provider.CompareResult{}
 	if cmp.Commits != nil {

@@ -7,12 +7,13 @@ import (
 	"strconv"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // GetCRDiff implements provider.DiffManager.
 func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
-	n, err := prNumber("GetCRDiff", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "GetCRDiff", number)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +44,7 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) (
 
 // CreateNote implements provider.DiffManager.
 func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
-	n, err := prNumber("CreateNote", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "CreateNote", number)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +63,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 // The gongfeng SDK does not expose a delete-note endpoint, so we use the
 // SDK client's NewRequest/Do for a raw API call.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
-	n, err := prNumber("DeleteNote", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "DeleteNote", number)
 	if err != nil {
 		return err
 	}
@@ -81,7 +82,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 // The gongfeng SDK does not expose a discussions endpoint, so we use the
 // SDK client's NewRequest/Do for a raw API call.
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
-	n, err := prNumber("CreateDiscussion", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "CreateDiscussion", number)
 	if err != nil {
 		return "", err
 	}

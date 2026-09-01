@@ -7,12 +7,13 @@ import (
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListReviews implements provider.ReviewManager.
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	index, err := prNumber("ListReviews", number)
+	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +30,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 
 // GetReview implements provider.ReviewManager.
 func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	index, err := prNumber("GetReview", number)
+	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "GetReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +54,7 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 // GitHub-style values: APPROVE and REQUEST_CHANGES map to the forgejo states
 // of the same names; anything else (COMMENT included) becomes COMMENT.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	index, err := prNumber("CreateReview", number)
+	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +99,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 // CreateReviewRequests, which posts the reviewer logins under the same
 // "reviewers" wire key as GitHub.
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	index, err := prNumber("RequestReviewers", number)
+	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "RequestReviewers", number)
 	if err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 // DismissReview implements provider.ReviewManager via DismissPullReview
 // (POST .../reviews/{id}/dismissals with the dismissal message).
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	index, err := prNumber("DismissReview", number)
+	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "DismissReview", number)
 	if err != nil {
 		return err
 	}

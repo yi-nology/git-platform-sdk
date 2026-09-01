@@ -31,17 +31,6 @@ import (
 //     always nil on this platform (the wire state still round-trips via
 //     Issue.State).
 
-// issueNumber parses the SDK's string issue number into gongfeng's int IID
-// form. op is the public operation the parse serves; failures surface
-// under it.
-func issueNumber(op, number string) (int, error) {
-	n, err := strconv.Atoi(number)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformTencentCode, op, "invalid issue number %q", number)
-	}
-	return n, nil
-}
-
 // ListIssues implements provider.IssueManager. State and the Labels csv
 // pass through as filters (open→opened per 工蜂's vocabulary; inbound
 // convertIssue maps back); the Assignee filter is not carried (registered
@@ -74,7 +63,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 
 // GetIssue implements provider.IssueManager. 工蜂 addresses issues by IID.
 func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("GetIssue", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "GetIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -97,11 +86,11 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		createOpts.Labels = gongfeng.Ptr(strings.Join(opts.Labels, ","))
 	}
 	if opts.Milestone != "" {
-		m, err := milestoneNumber("CreateIssue", opts.Milestone)
+		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformTencentCode, "CreateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
-		createOpts.MilestoneID = gongfeng.Ptr(m)
+		createOpts.MilestoneID = gongfeng.Ptr(int(m64))
 	}
 	if len(opts.Assignees) > 0 {
 		ids, err := p.resolveUserIDs(ctx, "CreateIssue", opts.Assignees)
@@ -122,7 +111,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 // travel as 工蜂's state_event verbs. opts.Assignees resolves to the
 // assignee_ids csv through the Users API (see CreateIssue).
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
-	n, err := issueNumber("UpdateIssue", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -144,11 +133,11 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		updateOpts.Labels = gongfeng.Ptr(strings.Join(opts.Labels, ","))
 	}
 	if opts.Milestone != "" {
-		m, err := milestoneNumber("UpdateIssue", opts.Milestone)
+		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformTencentCode, "UpdateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
-		updateOpts.MilestoneID = gongfeng.Ptr(m)
+		updateOpts.MilestoneID = gongfeng.Ptr(int(m64))
 	}
 	if len(opts.Assignees) > 0 {
 		ids, err := p.resolveUserIDs(ctx, "UpdateIssue", opts.Assignees)
@@ -166,7 +155,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 
 // CloseIssue implements provider.IssueManager via the state_event API.
 func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("CloseIssue", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "CloseIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +169,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 
 // ReopenIssue implements provider.IssueManager via the state_event API.
 func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("ReopenIssue", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "ReopenIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -192,25 +181,17 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	return convertIssue(issue), nil
 }
 
-// issueCommentPageSize is the per-page value for paginated issue-comment
-// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
-// servers that cap lower are handled by the stop-on-empty loop.
-const issueCommentPageSize = 100
-
-// labelPageSize is the per-page value for paginated label-list fetches.
-const labelPageSize = 100
-
 // ListIssueComments implements provider.IssueManager via the notes API,
 // exhausting 工蜂's pagination (the loop advances until an empty page, so
 // the result is the complete comment list).
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	n, err := issueNumber("ListIssueComments", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
 	notes, err := backendutil.AllPages(func(page int) ([]*gongfeng.Note, error) {
 		batch, _, err := p.client.Notes.ListIssueNotes(ctx, pid(owner, repo), n, &gongfeng.ListIssueNotesOptions{
-			ListOptions: gongfeng.ListOptions{Page: page, PerPage: issueCommentPageSize},
+			ListOptions: gongfeng.ListOptions{Page: page, PerPage: backendutil.IssueCommentPageSize},
 		})
 		return batch, err
 	})
@@ -226,7 +207,7 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 
 // CreateIssueComment implements provider.IssueManager via the notes API.
 func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	n, err := issueNumber("CreateIssueComment", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "CreateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +223,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 // 工蜂 addresses issue notes through the issue, so number must carry the
 // issue's number; the platform only lets the note's author perform the edit.
 func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
-	n, err := issueNumber("UpdateIssueComment", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "UpdateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +241,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*gongfeng.Label, error) {
 		batch, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo),
-			&gongfeng.ListLabelsOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: labelPageSize}})
+			&gongfeng.ListLabelsOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: backendutil.LabelPageSize}})
 		return batch, err
 	})
 	if err != nil {
@@ -277,7 +258,7 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 // takes the full label set only (no add_labels), so the current set is
 // fetched, unioned with the adds, and rewritten.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := issueNumber("AddIssueLabels", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "AddIssueLabels", number)
 	if err != nil {
 		return err
 	}
@@ -299,7 +280,7 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 // omitempty drops from the PUT body, so the update is a no-op and the
 // label stays.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	n, err := issueNumber("RemoveIssueLabel", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "RemoveIssueLabel", number)
 	if err != nil {
 		return err
 	}

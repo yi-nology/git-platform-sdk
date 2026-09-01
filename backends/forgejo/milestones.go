@@ -6,6 +6,8 @@ import (
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -38,7 +40,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 
 // GetMilestone implements provider.MilestoneManager.
 func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	id, err := milestoneNumber("GetMilestone", number)
+	id, err := backendutil.ParseMilestoneNumber(provider.PlatformForgejo, "GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +74,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 // title — Forgejo's API keeps the existing title for blank values (a title
 // is required to be non-empty, so blank cannot be a legitimate rename).
 func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	id, err := milestoneNumber("UpdateMilestone", number)
+	id, err := backendutil.ParseMilestoneNumber(provider.PlatformForgejo, "UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +102,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	id, err := milestoneNumber("DeleteMilestone", number)
+	id, err := backendutil.ParseMilestoneNumber(provider.PlatformForgejo, "DeleteMilestone", number)
 	if err != nil {
 		return err
 	}
