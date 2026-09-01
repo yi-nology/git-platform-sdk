@@ -68,3 +68,60 @@ func (e *ScanLimitError) Unwrap() error { return ErrLabelScanLimit }
 
 // NewScanLimitError builds a ScanLimitError with the given message.
 func NewScanLimitError(msg string) error { return &ScanLimitError{Msg: msg} }
+
+// ResolveLabelIDs resolves multiple label names in a single scan pass.
+// It fetches pages once and matches all names, returning a map of name → ID.
+// Names not found within the scan budget are omitted from the result (callers
+// can check len(result) vs len(names) to detect misses).
+func ResolveLabelIDs(scan LabelPageFunc, names []string, maxPages, perPage int) (map[string]int64, error) {
+	remaining := make(map[string]bool, len(names))
+	for _, n := range names {
+		remaining[n] = true
+	}
+	result := make(map[string]int64, len(names))
+	for page := 1; page <= maxPages; page++ {
+		refs, err := scan(page, perPage)
+		if err != nil {
+			return result, err
+		}
+		for _, r := range refs {
+			if remaining[r.Name] {
+				result[r.Name] = r.ID
+				delete(remaining, r.Name)
+				if len(remaining) == 0 {
+					return result, nil
+				}
+			}
+		}
+		if len(refs) < perPage {
+			break
+		}
+	}
+	return result, nil
+}
+
+// ResolveLabelIDsWithCache resolves multiple label names, using the cache
+// for hits and falling back to a single scan pass for misses.
+func (c *IDCache) ResolveLabelIDsWithCache(key string, names []string, scan LabelPageFunc, maxPages, perPage int) (map[string]int64, error) {
+	result := make(map[string]int64, len(names))
+	var misses []string
+	for _, name := range names {
+		if id, ok := c.Get(key + "/" + name); ok {
+			result[name] = id
+		} else {
+			misses = append(misses, name)
+		}
+	}
+	if len(misses) == 0 {
+		return result, nil
+	}
+	resolved, err := ResolveLabelIDs(scan, misses, maxPages, perPage)
+	if err != nil && len(resolved) == 0 {
+		return result, err
+	}
+	for name, id := range resolved {
+		result[name] = id
+		c.Put(key+"/"+name, id)
+	}
+	return result, err
+}
