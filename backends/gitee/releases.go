@@ -123,7 +123,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	if err != nil {
 		return nil, p.sdkErr("GetArchive", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	buf := make([]byte, 0, 1024*1024)
 	tmp := make([]byte, 32*1024)
 	for {

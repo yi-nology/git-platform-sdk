@@ -73,5 +73,10 @@ func TestGitee_Contract(t *testing.T) {
 			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
 		},
+		DeployKeys: &contracttest.DeployKeysHarnessConfig{
+			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA"}]`,
+			CreateResponse: `{"id":1,"title":"CI","key":"ssh-rsa AAAA"}`,
+		},
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
 	})
 }

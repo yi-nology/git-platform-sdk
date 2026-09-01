@@ -4,8 +4,8 @@ import (
 	"context"
 	"strconv"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 	"github.com/yi-nology/git-platform-sdk/provider"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 )
 
 // ListNotifications implements provider.NotificationManager.
@@ -31,7 +31,7 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
 	}
-	projectID := int64(pid.ID)
+	projectID := pid.ID
 	todos, _, err := p.client.Todos.ListTodos(&gitlab.ListTodosOptions{ProjectID: &projectID}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
@@ -86,7 +86,7 @@ func convertTodo(t *gitlab.Todo) *provider.Notification {
 	}
 	if t.Project != nil {
 		n.Repo = &provider.EventRepo{
-			ID:       int64(t.Project.ID),
+			ID:       t.Project.ID,
 			FullName: t.Project.PathWithNamespace,
 		}
 		owner, name := provider.SplitFullName(t.Project.PathWithNamespace)

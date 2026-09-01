@@ -69,9 +69,9 @@ func TestBuildEventRepo_NoSlash(t *testing.T) {
 
 func TestExtractMentions(t *testing.T) {
 	tests := []struct {
-		name  string
-		body  string
-		want  []string
+		name string
+		body string
+		want []string
 	}{
 		{"single", "cc @alice", []string{"alice"}},
 		{"multiple", "@alice please review @bob", []string{"alice", "bob"}},

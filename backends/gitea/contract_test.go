@@ -93,8 +93,8 @@ func TestGitea_Contract(t *testing.T) {
 			CreateResponse: `{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}`,
 		},
 		RepoStats: &contracttest.RepoStatsHarnessConfig{
-			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
-			StargazersResponse:   `[{"id":1,"login":"star"}]`,
+			ForksResponse:      `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
+			StargazersResponse: `[{"id":1,"login":"star"}]`,
 		},
 	})
 }

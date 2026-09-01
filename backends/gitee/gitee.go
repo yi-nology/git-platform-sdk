@@ -115,33 +115,22 @@ func (p *Provider) sdkErr(op string, err error) error {
 	return provider.Wrap(p.Platform(), op, err)
 }
 
-// sdkErrResp converts a go-gitee call error into a provider error, using the
-// *Response to extract the HTTP status code when the error type does not carry one.
-func (p *Provider) sdkErrResp(op string, resp *gitee.Response, err error) error {
-	if err == nil {
-		return nil
-	}
-	if resp != nil && resp.Response != nil {
-		return provider.Wrap(p.Platform(), op,
-			provider.WrapStatusError(err, resp.Response.StatusCode))
-	}
-	return provider.Wrap(p.Platform(), op, err)
-}
-
 // Platform implements provider.Provider.
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee }
 
 // Capabilities implements provider.Provider.
 func (p *Provider) Capabilities() provider.CapabilitySet {
 	return provider.CapabilitySet{
-		Labels:           true,
-		Issues:           true,
-		Milestones:       true,
-		Search:           true,
-		Notifications:    true,
+		Labels:            true,
+		Issues:            true,
+		Milestones:        true,
+		Search:            true,
+		Notifications:     true,
 		BranchProtections: true,
-		Collaborators:    true,
-		RepoStats:        true,
+		Collaborators:     true,
+		DeployKeys:        true,
+		CommitStatuses:    true,
+		RepoStats:         true,
 	}
 }
 

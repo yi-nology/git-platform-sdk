@@ -106,24 +106,3 @@ func RunBranchProtectionsSuite(t *testing.T, h BranchProtectionsHarness) {
 		}
 	})
 }
-
-// simpleStubServer returns a mock that returns listResponse for GET and
-// mutateResponse for POST/PATCH/PUT, 204 for DELETE.
-func simpleStubServer(listResponse, mutateResponse string) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.Method {
-		case http.MethodGet:
-			_, _ = w.Write([]byte(listResponse))
-		case http.MethodPost:
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(mutateResponse))
-		case http.MethodPatch, http.MethodPut:
-			_, _ = w.Write([]byte(mutateResponse))
-		case http.MethodDelete:
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
-}

@@ -3,8 +3,8 @@ package gitcode
 import (
 	"context"
 
-	gitcode "github.com/yi-nology/go-gitcode"
 	"github.com/yi-nology/git-platform-sdk/provider"
+	gitcode "github.com/yi-nology/go-gitcode"
 )
 
 // ListIssueReactions implements provider.ReactionManager.

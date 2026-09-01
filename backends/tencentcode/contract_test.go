@@ -77,8 +77,8 @@ func TestTencentCode_Contract(t *testing.T) {
 		// recording server and asserts a single status-reporting request.
 		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
 		RepoStats: &contracttest.RepoStatsHarnessConfig{
-			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
-			StargazersResponse:   `[{"id":1,"login":"star"}]`,
+			ForksResponse:      `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
+			StargazersResponse: `[{"id":1,"login":"star"}]`,
 		},
 	})
 }

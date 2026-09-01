@@ -11,8 +11,8 @@ import (
 
 // RepoStatsHarnessConfig carries fixtures for the repo-stats suite.
 type RepoStatsHarnessConfig struct {
-	ForksResponse       string
-	StargazersResponse  string
+	ForksResponse        string
+	StargazersResponse   string
 	ContributorsResponse string
 }
 

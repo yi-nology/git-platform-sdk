@@ -273,31 +273,40 @@ func convertRepoCommitWithFiles(c *gitee.RepoCommitWithFiles) *provider.CommitIn
 			ci.CreatedAt = parseGiteeTime(c.Commit.Author.Date)
 		}
 	}
-	if c.Author != nil && deref(c.Author.ID) > 0 {
-		ci.Author = &provider.CRUser{
-			ID:       int64(deref(c.Author.ID)),
-			Username: deref(c.Author.Login),
-		}
-		if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
-			ci.Author.Name = deref(c.Commit.Author.Name)
-		}
-	} else if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
-		ci.Author = &provider.CRUser{Name: deref(c.Commit.Author.Name)}
-	}
-	if c.Committer != nil && deref(c.Committer.ID) > 0 {
-		ci.Committer = &provider.CRUser{
-			ID:       int64(deref(c.Committer.ID)),
-			Username: deref(c.Committer.Login),
-		}
-		if c.Commit != nil && c.Commit.Committer != nil && c.Commit.Committer.Name != nil {
-			ci.Committer.Name = deref(c.Commit.Committer.Name)
-		}
-	}
+	ci.Author = convertCommitUser(c.Author, c.Commit, true)
+	ci.Committer = convertCommitUser(c.Committer, c.Commit, false)
 	if c.Stats != nil {
 		ci.Additions = deref(c.Stats.Additions)
 		ci.Deletions = deref(c.Stats.Deletions)
 	}
 	return ci
+}
+
+// convertCommitUser builds a CRUser from a top-level user (with ID/Login)
+// enriched with the commit-level name when available.
+func convertCommitUser(u *gitee.UserBasic, commit *gitee.CommitDetail, isAuthor bool) *provider.CRUser {
+	var cr *provider.CRUser
+	if u != nil && deref(u.ID) > 0 {
+		cr = &provider.CRUser{
+			ID:       int64(deref(u.ID)),
+			Username: deref(u.Login),
+		}
+	}
+	if commit != nil {
+		var gitUser *gitee.GitUser
+		if isAuthor {
+			gitUser = commit.Author
+		} else {
+			gitUser = commit.Committer
+		}
+		if gitUser != nil && gitUser.Name != nil {
+			if cr == nil {
+				cr = &provider.CRUser{}
+			}
+			cr.Name = deref(gitUser.Name)
+		}
+	}
+	return cr
 }
 
 // convertHook translates the SDK Hook model into a provider.PlatformWebhook.
@@ -325,19 +334,6 @@ func convertHook(h *gitee.Hook) *provider.PlatformWebhook {
 		ID:     int64(deref(h.ID)),
 		URL:    deref(h.URL),
 		Events: events,
-	}
-}
-
-// convertUser translates the SDK UserBasic model into a provider.CRUser.
-func convertUser(u *gitee.UserBasic) *provider.CRUser {
-	if u == nil {
-		return nil
-	}
-	return &provider.CRUser{
-		ID:        int64(deref(u.ID)),
-		Username:  deref(u.Login),
-		Name:      deref(u.Name),
-		AvatarURL: deref(u.AvatarURL),
 	}
 }
 
@@ -378,18 +374,6 @@ func convertTag(t *gitee.Tag) *provider.TagInfo {
 	return ti
 }
 
-// convertSSHKey translates the SDK SSHKey model into a provider.DeployKey.
-func convertSSHKey(k *gitee.SSHKey) *provider.DeployKey {
-	if k == nil {
-		return nil
-	}
-	return &provider.DeployKey{
-		ID:    int64(deref(k.ID)),
-		Title: deref(k.Title),
-		Key:   deref(k.Key),
-	}
-}
-
 // convertContributor translates the SDK Contributor model into a
 // provider.Contributor.
 func convertContributor(c *gitee.Contributor) *provider.Contributor {
@@ -411,17 +395,6 @@ func convertCollaborator(m *gitee.ProjectMember) *provider.Collaborator {
 	return &provider.Collaborator{
 		ID:       int64(deref(m.ID)),
 		Username: deref(m.Login),
-	}
-}
-
-// convertProtectionRule translates the SDK ProtectionRule model into a
-// provider.BranchProtection.
-func convertProtectionRule(r *gitee.ProtectionRule) *provider.BranchProtection {
-	if r == nil {
-		return nil
-	}
-	return &provider.BranchProtection{
-		BranchName: deref(r.Wildcard),
 	}
 }
 
