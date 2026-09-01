@@ -40,7 +40,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
 	r, _, err := p.client.Repositories.Get(ctx, esc(owner), esc(repo))
 	if err != nil {
-		return nil, p.sdkErr("GetRepo", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "GetRepo", err)
 	}
 	return convertProject(r), nil
 }
@@ -49,7 +49,7 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 	_, err := p.client.Repositories.Delete(ctx, esc(owner), esc(repo))
 	if err != nil {
-		return p.sdkErr("DeleteRepo", err)
+		return provider.Wrap(provider.PlatformGitee, "DeleteRepo", err)
 	}
 	return nil
 }
@@ -66,7 +66,7 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 	}
 	r, _, err := p.client.Repositories.Edit(ctx, esc(owner), esc(repo), updateOpts)
 	if err != nil {
-		return nil, p.sdkErr("UpdateRepo", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRepo", err)
 	}
 	return convertProject(r), nil
 }
@@ -79,7 +79,7 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 	}
 	r, _, err := p.client.Repositories.CreateFork(ctx, esc(owner), esc(repo), forkOpts)
 	if err != nil {
-		return nil, p.sdkErr("ForkRepo", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ForkRepo", err)
 	}
 	return convertProject(r), nil
 }
@@ -113,7 +113,7 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 		r, _, err = p.client.Repositories.Create(ctx, createOpts)
 	}
 	if err != nil {
-		return nil, p.sdkErr("CreateRepo", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateRepo", err)
 	}
 	return convertProject(r), nil
 }

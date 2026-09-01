@@ -22,7 +22,7 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
 	_, _, err := p.client.Repositories.SetBranchProtection(ctx, esc(owner), esc(repo), esc(opts.BranchName))
 	if err != nil {
-		return nil, p.sdkErr("CreateBranchProtection", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateBranchProtection", err)
 	}
 	return &provider.BranchProtection{
 		BranchName: opts.BranchName,
@@ -33,7 +33,7 @@ func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo strin
 func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
 	_, _, err := p.client.Repositories.SetBranchProtection(ctx, esc(owner), esc(repo), esc(branch))
 	if err != nil {
-		return nil, p.sdkErr("UpdateBranchProtection", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "UpdateBranchProtection", err)
 	}
 	return &provider.BranchProtection{
 		BranchName: branch,
@@ -44,7 +44,7 @@ func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, bran
 func (p *Provider) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
 	_, err := p.client.Repositories.RemoveBranchProtection(ctx, esc(owner), esc(repo), esc(branch))
 	if err != nil {
-		return p.sdkErr("DeleteBranchProtection", err)
+		return provider.Wrap(provider.PlatformGitee, "DeleteBranchProtection", err)
 	}
 	return nil
 }

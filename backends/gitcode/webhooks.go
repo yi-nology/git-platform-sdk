@@ -112,11 +112,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		if err != nil {
 			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
 		}
-		action := prEvent.Action
-		if action == "closed" && prEvent.PullRequest != nil && prEvent.PullRequest.Merged {
-			action = "merged"
-		}
-		ne.Type = "cr." + action
+		action := provider.NormalizeCRAction(prEvent.Action, prEvent.PullRequest != nil && prEvent.PullRequest.Merged)
+		ne.Type = provider.EventTypeCR + action
 		ne.Action = action
 		if prEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(prEvent.Sender.ID)

@@ -529,8 +529,8 @@ func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ne.Type != "cr.open" {
-		t.Errorf("expected cr.open, got %s", ne.Type)
+	if ne.Type != "cr.opened" {
+		t.Errorf("expected cr.opened, got %s", ne.Type)
 	}
 }
 

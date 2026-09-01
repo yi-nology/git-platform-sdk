@@ -13,7 +13,7 @@ import (
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
 	forks, _, err := p.client.Repositories.ListForks(ctx, esc(owner), esc(repo), nil)
 	if err != nil {
-		return nil, p.sdkErr("ListForks", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListForks", err)
 	}
 	result := make([]*provider.PlatformRepo, 0, len(forks))
 	for _, f := range forks {
@@ -30,12 +30,12 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 	u := fmt.Sprintf("repos/%s/%s/stargazers", esc(owner), esc(repo))
 	req, err := p.client.NewRequest(ctx, "GET", u, nil)
 	if err != nil {
-		return nil, p.sdkErr("ListStargazers", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListStargazers", err)
 	}
 	var users []*gitee.UserBasic
 	_, err = p.client.Do(req, &users)
 	if err != nil {
-		return nil, p.sdkErr("ListStargazers", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListStargazers", err)
 	}
 	result := make([]*provider.CRUser, 0, len(users))
 	for _, u := range users {
@@ -53,7 +53,7 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*provider.Contributor, error) {
 	contributors, _, err := p.client.Repositories.ListContributors(ctx, esc(owner), esc(repo), nil)
 	if err != nil {
-		return nil, p.sdkErr("ListContributors", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListContributors", err)
 	}
 	result := make([]*provider.Contributor, 0, len(contributors))
 	for _, c := range contributors {

@@ -106,15 +106,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}, nil
 }
 
-// sdkErr converts a go-gitee call error into a provider error, preserving the
-// HTTP status from *gitee.ErrorResponse.
-func (p *Provider) sdkErr(op string, err error) error {
-	if err == nil {
-		return nil
-	}
-	return provider.Wrap(p.Platform(), op, err)
-}
-
 // Platform implements provider.Provider.
 func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee }
 

@@ -21,7 +21,7 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 			Summary: gitee.String(opts.Description),
 		},
 	})
-	return p.sdkErr("CreateCommitStatus", err)
+	return provider.Wrap(provider.PlatformGitee, "CreateCommitStatus", err)
 }
 
 // mapCommitStatus maps the SDK's normalized state strings to Gitee check-run

@@ -4,6 +4,8 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -11,7 +13,7 @@ import (
 
 // GetCRDiff implements provider.DiffManager.
 func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
-	n, err := prNumber("GetCRDiff", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "GetCRDiff", number)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +47,7 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) (
 
 // CreateNote implements provider.DiffManager.
 func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
-	n, err := prNumber("CreateNote", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "CreateNote", number)
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +61,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 
 // DeleteNote implements provider.DiffManager.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
-	n, err := prNumber("DeleteNote", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "DeleteNote", number)
 	if err != nil {
 		return err
 	}
@@ -76,7 +78,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 
 // CreateDiscussion implements provider.DiffManager.
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
-	n, err := prNumber("CreateDiscussion", number)
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "CreateDiscussion", number)
 	if err != nil {
 		return "", err
 	}

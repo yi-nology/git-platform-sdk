@@ -17,7 +17,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 	}
 	labels, _, err := p.client.Labels.List(ctx, esc(owner), esc(repo), listOpts)
 	if err != nil {
-		return nil, p.sdkErr("ListLabels", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListLabels", err)
 	}
 	result := make([]*provider.Label, 0, len(labels))
 	for _, l := range labels {
@@ -34,7 +34,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 	}
 	label, _, err := p.client.Labels.Create(ctx, esc(owner), esc(repo), createOpts)
 	if err != nil {
-		return nil, p.sdkErr("CreateLabel", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -50,7 +50,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	}
 	label, _, err := p.client.Labels.Edit(ctx, esc(owner), esc(repo), esc(name), updateOpts)
 	if err != nil {
-		return nil, p.sdkErr("UpdateLabel", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "UpdateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -59,7 +59,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
 	_, err := p.client.Labels.Delete(ctx, esc(owner), esc(repo), esc(name))
 	if err != nil {
-		return p.sdkErr("DeleteLabel", err)
+		return provider.Wrap(provider.PlatformGitee, "DeleteLabel", err)
 	}
 	return nil
 }

@@ -12,27 +12,6 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// issueNumber parses the SDK's string issue number into forgejo's int64
-// index form. op is the public operation the parse serves; failures surface
-// under it.
-func issueNumber(op, number string) (int64, error) {
-	n, err := strconv.ParseInt(number, 10, 64)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformForgejo, op, "invalid issue number %q", number)
-	}
-	return n, nil
-}
-
-// milestoneNumber parses the SDK's string milestone identifier (forgejo
-// milestone IDs) into forgejo's int64 form.
-func milestoneNumber(op, milestone string) (int64, error) {
-	m, err := strconv.ParseInt(milestone, 10, 64)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformForgejo, op, "invalid milestone number %q", milestone)
-	}
-	return m, nil
-}
-
 // ListIssues implements provider.IssueManager. The forgejo SDK accepts no
 // context (same as its other services).
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
@@ -62,7 +41,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 
 // GetIssue implements provider.IssueManager.
 func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("GetIssue", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "GetIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +62,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		Assignees: opts.Assignees,
 	}
 	if opts.Milestone != "" {
-		m, err := milestoneNumber("CreateIssue", opts.Milestone)
+		m, err := backendutil.ParseMilestoneNumber(provider.PlatformForgejo, "CreateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +88,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 // all-empty update short-circuits to a plain GetIssue. opts.Labels replaces
 // the issue's labels via the dedicated endpoint.
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
-	n, err := issueNumber("UpdateIssue", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +143,7 @@ func (p *Provider) buildEditIssueOption(op, owner, repo string, n int64, opts pr
 		edit.State = &s
 	}
 	if opts.Milestone != "" {
-		m, err := milestoneNumber(op, opts.Milestone)
+		m, err := backendutil.ParseMilestoneNumber(provider.PlatformForgejo, op, opts.Milestone)
 		if err != nil {
 			return edit, err
 		}
@@ -175,7 +154,7 @@ func (p *Provider) buildEditIssueOption(op, owner, repo string, n int64, opts pr
 
 // CloseIssue implements provider.IssueManager.
 func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("CloseIssue", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "CloseIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +163,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 
 // ReopenIssue implements provider.IssueManager.
 func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("ReopenIssue", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "ReopenIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -206,23 +185,15 @@ func (p *Provider) setIssueState(owner, repo string, n int64, state forgejo.Stat
 	return convertIssue(issue), nil
 }
 
-// issueCommentPageSize is the per-page value for paginated issue-comment
-// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
-// servers that cap lower are handled by the stop-on-empty loop.
-const issueCommentPageSize = 100
-
-// labelPageSize is the per-page value for paginated label-list fetches.
-const labelPageSize = 100
-
 // ListIssueComments implements provider.IssueManager.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	n, err := issueNumber("ListIssueComments", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
 	comments, err := backendutil.AllPages(func(page int) ([]*forgejo.Comment, error) {
 		batch, _, err := p.client.ListIssueComments(owner, repo, n, forgejo.ListIssueCommentOptions{
-			ListOptions: forgejo.ListOptions{Page: page, PageSize: issueCommentPageSize},
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: backendutil.IssueCommentPageSize},
 		})
 		return batch, err
 	})
@@ -238,7 +209,7 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 
 // CreateIssueComment implements provider.IssueManager.
 func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	n, err := issueNumber("CreateIssueComment", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "CreateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +237,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*forgejo.Label, error) {
 		batch, _, err := p.client.ListRepoLabels(owner, repo, forgejo.ListLabelsOptions{
-			ListOptions: forgejo.ListOptions{Page: page, PageSize: labelPageSize},
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: backendutil.LabelPageSize},
 		})
 		return batch, err
 	})
@@ -282,7 +253,7 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 
 // AddIssueLabels implements provider.IssueManager.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := issueNumber("AddIssueLabels", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "AddIssueLabels", number)
 	if err != nil {
 		return err
 	}
@@ -298,7 +269,7 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 
 // RemoveIssueLabel implements provider.IssueManager.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	n, err := issueNumber("RemoveIssueLabel", number)
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "RemoveIssueLabel", number)
 	if err != nil {
 		return err
 	}

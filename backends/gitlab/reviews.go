@@ -7,6 +7,7 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -20,7 +21,7 @@ import (
 // per-approval ID on the wire, so every synthesized review shares the MR IID
 // as its ID, and an approver listed under several rules yields one review.
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	iid, err := prNumber("ListReviews", number)
+	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 // be matched; this returns the first synthesized approver review as an
 // approximation. When nobody has approved yet the call reports NotFound.
 func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	iid, err := prNumber("GetReview", number)
+	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "GetReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +64,7 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 // mapped: a note is neither an approval nor a commit report, so the created
 // review is always in the commented state.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	iid, err := prNumber("CreateReview", number)
+	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 // are resolved to user IDs via the Users API (cached) and written through
 // UpdateMergeRequest's reviewer_ids.
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	iid, err := prNumber("RequestReviewers", number)
+	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "RequestReviewers", number)
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 // individual review objects, so reviewID is not addressable and the
 // dismissal message has no GitLab equivalent (ignored).
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	iid, err := prNumber("DismissReview", number)
+	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "DismissReview", number)
 	if err != nil {
 		return err
 	}

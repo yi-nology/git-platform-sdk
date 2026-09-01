@@ -12,26 +12,6 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// issueNumber parses the SDK's string issue number into GitHub's int form.
-// op is the public operation the parse serves; failures surface under it.
-func issueNumber(op, number string) (int, error) {
-	n, err := strconv.Atoi(number)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformGitHub, op, "invalid issue number %q", number)
-	}
-	return n, nil
-}
-
-// milestoneNumber parses the SDK's string milestone identifier (GitHub
-// milestone numbers) into GitHub's int form.
-func milestoneNumber(op, milestone string) (int, error) {
-	m, err := strconv.Atoi(milestone)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformGitHub, op, "invalid milestone number %q", milestone)
-	}
-	return m, nil
-}
-
 // ListIssues implements provider.IssueManager.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
@@ -58,7 +38,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 
 // GetIssue implements provider.IssueManager.
 func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("GetIssue", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "GetIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -82,11 +62,11 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		req.Labels = &opts.Labels
 	}
 	if opts.Milestone != "" {
-		m, err := milestoneNumber("CreateIssue", opts.Milestone)
+		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "CreateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
-		req.Milestone = github.Ptr(m)
+		req.Milestone = github.Ptr(int(m64))
 	}
 	issue, _, err := p.client.Issues.Create(ctx, opts.Owner, opts.Repo, req)
 	if err != nil {
@@ -97,7 +77,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 
 // UpdateIssue implements provider.IssueManager.
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
-	n, err := issueNumber("UpdateIssue", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -115,11 +95,11 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		req.Labels = &opts.Labels
 	}
 	if opts.Milestone != "" {
-		m, err := milestoneNumber("UpdateIssue", opts.Milestone)
+		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "UpdateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
-		req.Milestone = github.Ptr(m)
+		req.Milestone = github.Ptr(int(m64))
 	}
 	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, n, req)
 	if err != nil {
@@ -130,7 +110,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 
 // CloseIssue implements provider.IssueManager.
 func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("CloseIssue", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "CloseIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +123,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 
 // ReopenIssue implements provider.IssueManager.
 func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := issueNumber("ReopenIssue", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "ReopenIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -154,23 +134,15 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	return convertIssue(issue), nil
 }
 
-// issueCommentPageSize is the per-page value for paginated issue-comment
-// fetches — 100 is the documented maximum on the GitHub-shaped platforms;
-// servers that cap lower are handled by the stop-on-empty loop.
-const issueCommentPageSize = 100
-
-// labelPageSize is the per-page value for paginated label-list fetches.
-const labelPageSize = 100
-
 // ListIssueComments implements provider.IssueManager.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	n, err := issueNumber("ListIssueComments", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
 	comments, err := backendutil.AllPages(func(page int) ([]*github.IssueComment, error) {
 		batch, _, err := p.client.Issues.ListComments(ctx, owner, repo, n, &github.IssueListCommentsOptions{
-			ListOptions: github.ListOptions{Page: page, PerPage: issueCommentPageSize},
+			ListOptions: github.ListOptions{Page: page, PerPage: backendutil.IssueCommentPageSize},
 		})
 		return batch, err
 	})
@@ -186,7 +158,7 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 
 // CreateIssueComment implements provider.IssueManager.
 func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	n, err := issueNumber("CreateIssueComment", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "CreateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +184,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 // exhausting pagination (the loop advances until an empty page).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*github.Label, error) {
-		batch, _, err := p.client.Issues.ListLabels(ctx, owner, repo, &github.ListOptions{Page: page, PerPage: labelPageSize})
+		batch, _, err := p.client.Issues.ListLabels(ctx, owner, repo, &github.ListOptions{Page: page, PerPage: backendutil.LabelPageSize})
 		return batch, err
 	})
 	if err != nil {
@@ -227,7 +199,7 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 
 // AddIssueLabels implements provider.IssueManager.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := issueNumber("AddIssueLabels", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "AddIssueLabels", number)
 	if err != nil {
 		return err
 	}
@@ -239,7 +211,7 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 
 // RemoveIssueLabel implements provider.IssueManager.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	n, err := issueNumber("RemoveIssueLabel", number)
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "RemoveIssueLabel", number)
 	if err != nil {
 		return err
 	}

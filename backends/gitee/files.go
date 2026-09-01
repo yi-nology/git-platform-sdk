@@ -16,7 +16,7 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	}
 	contents, _, err := p.client.Repositories.GetContents(ctx, esc(owner), esc(repo), escPath(path), opts)
 	if err != nil {
-		return "", p.sdkErr("GetFileContent", err)
+		return "", provider.Wrap(provider.PlatformGitee, "GetFileContent", err)
 	}
 	if len(contents) == 0 {
 		return "", provider.Wrapf(provider.PlatformGitee, "GetFileContent", "no content returned for %s", path)
@@ -41,7 +41,7 @@ func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts prov
 	}
 	cc, _, err := p.client.Repositories.CreateFile(ctx, esc(owner), esc(repo), escPath(opts.Path), createOpts)
 	if err != nil {
-		return nil, p.sdkErr("CreateFile", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "CreateFile", err)
 	}
 	result := &provider.FileResult{}
 	if cc.Content != nil {
@@ -73,7 +73,7 @@ func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts prov
 	}
 	cc, _, err := p.client.Repositories.UpdateFile(ctx, esc(owner), esc(repo), escPath(opts.Path), updateOpts)
 	if err != nil {
-		return nil, p.sdkErr("UpdateFile", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "UpdateFile", err)
 	}
 	result := &provider.FileResult{}
 	if cc.Content != nil {
@@ -104,7 +104,7 @@ func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts prov
 	}
 	cc, _, err := p.client.Repositories.DeleteFile(ctx, esc(owner), esc(repo), escPath(opts.Path), deleteOpts)
 	if err != nil {
-		return nil, p.sdkErr("DeleteFile", err)
+		return nil, provider.Wrap(provider.PlatformGitee, "DeleteFile", err)
 	}
 	result := &provider.FileResult{}
 	if cc.Commit != nil {

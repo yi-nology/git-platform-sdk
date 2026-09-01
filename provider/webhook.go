@@ -266,3 +266,98 @@ func init() {
 	defaultWebhookRegistry.Register(PlatformTencentCode, StaticTokenValidator{Header: "X-Token"})
 	defaultWebhookRegistry.Register(PlatformGitLab, StaticTokenValidator{Header: "X-Gitlab-Token"})
 }
+
+// --- Canonical webhook event types ---
+//
+// These constants define the normalized event type vocabulary. Each backend's
+// ParseWebhookEvent must produce these values so consumers can switch on event
+// types without knowing the source platform.
+
+const (
+	// CR (change request / pull request / merge request) actions.
+	CRActionOpened   = "opened"
+	CRActionClosed   = "closed"
+	CRActionMerged   = "merged"
+	CRActionReopened = "reopened"
+	CRActionUpdated  = "updated"
+
+	// Event type prefixes.
+	EventTypeCR      = "cr."
+	EventTypePush    = "push"
+	EventTypeTag     = "tag."
+	EventTypeBranch  = "branch."
+	EventTypeIssue   = "issue."
+	EventTypeComment = "comment."
+)
+
+// NormalizeCRAction maps platform-specific PR/MR action strings to the
+// canonical vocabulary. Each backend should call this instead of ad-hoc
+// string mapping.
+//
+// Mappings:
+//
+//	GitHub:   "opened" → opened, "closed" (+merged) → merged/closed,
+//	          "reopened" → reopened, "synchronize"/"edited" → updated
+//	GitLab:   "open" → opened, "close" → closed, "merge" → merged,
+//	          "reopen" → reopened, "update" → updated
+//	Gitee:    "open" → opened, "close" (+merged check) → merged/closed
+//	GitCode:  "opened" → opened, "closed" (+merged check) → merged/closed
+//	Gitea:    "opened" → opened, "closed" (+merged check) → merged/closed
+func NormalizeCRAction(action string, merged bool) string {
+	switch strings.ToLower(action) {
+	case "opened", "open":
+		return CRActionOpened
+	case "closed", "close":
+		if merged {
+			return CRActionMerged
+		}
+		return CRActionClosed
+	case "merged", "merge":
+		return CRActionMerged
+	case "reopened", "reopen":
+		return CRActionReopened
+	case "synchronize", "sync", "edited", "edit", "update":
+		return CRActionUpdated
+	default:
+		return action
+	}
+}
+
+// NormalizeTagAction maps platform-specific tag event actions to the
+// canonical vocabulary.
+func NormalizeTagAction(action string) string {
+	switch strings.ToLower(action) {
+	case "push", "pushed", "created", "create":
+		return "push"
+	default:
+		return action
+	}
+}
+
+// NormalizeBranchAction maps platform-specific branch event actions.
+func NormalizeBranchAction(action string) string {
+	switch strings.ToLower(action) {
+	case "created", "create":
+		return "created"
+	case "deleted", "delete":
+		return "deleted"
+	default:
+		return action
+	}
+}
+
+// NormalizeIssueAction maps platform-specific issue event actions.
+func NormalizeIssueAction(action string) string {
+	switch strings.ToLower(action) {
+	case "opened", "open":
+		return "opened"
+	case "closed", "close":
+		return "closed"
+	case "reopened", "reopen":
+		return "reopened"
+	case "edited", "edit", "updated", "update":
+		return "updated"
+	default:
+		return action
+	}
+}

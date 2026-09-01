@@ -2,22 +2,13 @@ package tencentcode
 
 import (
 	"context"
-	"strconv"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
-
-// prNumber parses the SDK's string change-request number into gongfeng's
-// int merge-request IID form. op is the public operation the parse serves;
-// failures surface under it.
-func prNumber(op, number string) (int, error) {
-	n, err := strconv.Atoi(number)
-	if err != nil {
-		return 0, provider.Wrapf(provider.PlatformTencentCode, op, "invalid pull request number %q", number)
-	}
-	return n, nil
-}
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
@@ -39,7 +30,7 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 
 // GetCR implements provider.ChangeRequestManager.
 func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := prNumber("GetCR", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "GetCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +65,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 
 // MergeCR implements provider.ChangeRequestManager.
 func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := prNumber("MergeCR", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +91,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 
 // CloseCR implements provider.ChangeRequestManager.
 func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := prNumber("CloseCR", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "CloseCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +108,7 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 
 // ReopenCR implements provider.ChangeRequestManager.
 func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := prNumber("ReopenCR", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ReopenCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +125,7 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 
 // UpdateCR implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	n, err := prNumber("UpdateCR", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "UpdateCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +156,7 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 
 // ListCRComments implements provider.ChangeRequestManager.
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := prNumber("ListCRComments", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +183,7 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 
 // ListCRCommits implements provider.ChangeRequestManager.
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := prNumber("ListCRCommits", number)
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}

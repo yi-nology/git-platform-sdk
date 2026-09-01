@@ -92,7 +92,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 
 	switch e := event.(type) {
 	case *github.PullRequestEvent:
-		ne.Type = "cr." + mapWebhookAction(e.GetAction(), e.GetPullRequest().GetMerged())
+		ne.Type = provider.EventTypeCR + provider.NormalizeCRAction(e.GetAction(), e.GetPullRequest().GetMerged())
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
 			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())

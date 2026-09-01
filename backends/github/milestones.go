@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/go-github/v72/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -35,11 +37,11 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 
 // GetMilestone implements provider.MilestoneManager.
 func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	n, err := milestoneNumber("GetMilestone", number)
+	n, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
-	m, _, err := p.client.Issues.GetMilestone(ctx, owner, repo, n)
+	m, _, err := p.client.Issues.GetMilestone(ctx, owner, repo, int(n))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "GetMilestone", err)
 	}
@@ -67,7 +69,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 // UpdateMilestone implements provider.MilestoneManager. Nil fields in opts
 // stay absent from the PATCH body, leaving the milestone unchanged.
 func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	n, err := milestoneNumber("UpdateMilestone", number)
+	n, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +86,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	if opts.DueOn != nil {
 		editOpts.DueOn = &github.Timestamp{Time: *opts.DueOn}
 	}
-	m, _, err := p.client.Issues.EditMilestone(ctx, owner, repo, n, editOpts)
+	m, _, err := p.client.Issues.EditMilestone(ctx, owner, repo, int(n), editOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateMilestone", err)
 	}
@@ -94,11 +96,11 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	n, err := milestoneNumber("DeleteMilestone", number)
+	n, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "DeleteMilestone", number)
 	if err != nil {
 		return err
 	}
-	if _, err := p.client.Issues.DeleteMilestone(ctx, owner, repo, n); err != nil {
+	if _, err := p.client.Issues.DeleteMilestone(ctx, owner, repo, int(n)); err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "DeleteMilestone", err)
 	}
 	return nil
