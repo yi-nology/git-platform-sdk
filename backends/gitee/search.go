@@ -3,94 +3,85 @@ package gitee
 import (
 	"context"
 
-	gitee "gitee.com/openeuler/go-gitee/gitee"
-	"github.com/antihax/optional"
+	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// This file implements the provider.SearchManager surface over the go-gitee
-// SDK's search API (/v5/search/{repositories,issues,users}). All three
-// endpoints are real; Repo/State on issue search forward as native query
-// parameters, and the returned arrays are parsed directly (no generated
-// wrapper defects observed — unlike gitee's create/patch endpoints, the
-// search calls are plain GETs).
-
 // SearchRepos implements provider.SearchManager.
 func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	searchOpts := gitee.GetV5SearchRepositoriesOpts{
-		AccessToken: p.accessToken(),
-		Page:        optional.NewInt32(toInt32(page)),
-		PerPage:     optional.NewInt32(toInt32(perPage)),
+	searchOpts := &gitee.SearchRepoOptions{
+		Q:       gitee.String(opts.Query),
+		Page:    gitee.Int(page),
+		PerPage: gitee.Int(perPage),
 	}
 	if opts.Sort != "" {
-		searchOpts.Sort = optional.NewString(opts.Sort)
+		searchOpts.Sort = gitee.String(opts.Sort)
 	}
 	if opts.Order != "" {
-		searchOpts.Order = optional.NewString(opts.Order)
+		searchOpts.Order = gitee.String(opts.Order)
 	}
-	repos, resp, err := p.client.SearchApi.GetV5SearchRepositories(ctx, opts.Query, &searchOpts)
+	repos, _, err := p.client.Search.Repositories(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, p.sdkErr("SearchRepos", resp, err)
+		return nil, nil, p.sdkErr("SearchRepos", err)
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(repos))
-	for i := range repos {
-		r := repos[i]
+	for _, r := range repos {
 		out = append(out, &provider.SearchRepoResult{
-			FullName:      r.FullName,
-			Description:   r.Description,
-			WebURL:        r.HtmlUrl,
-			Stars:         int(r.StargazersCount),
-			Forks:         int(r.ForksCount),
-			DefaultBranch: r.DefaultBranch,
-			Private:       r.Private,
+			FullName:      deref(r.FullName),
+			Description:   deref(r.Description),
+			WebURL:        deref(r.HTMLURL),
+			Stars:         deref(r.StargazersCount),
+			Forks:         deref(r.ForksCount),
+			DefaultBranch: deref(r.DefaultBranch),
+			Private:       deref(r.Private),
 		})
 	}
 	return out, nil, nil
 }
 
-// SearchIssues implements provider.SearchManager. Gitee issue numbers are
-// alphanumeric strings on the wire and carry through as-is.
+// SearchIssues implements provider.SearchManager.
 func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	searchOpts := gitee.GetV5SearchIssuesOpts{
-		AccessToken: p.accessToken(),
-		Page:        optional.NewInt32(toInt32(page)),
-		PerPage:     optional.NewInt32(toInt32(perPage)),
+	searchOpts := &gitee.SearchIssueOptions{
+		Q:       gitee.String(opts.Query),
+		Page:    gitee.Int(page),
+		PerPage: gitee.Int(perPage),
 	}
 	if opts.Repo != "" {
-		searchOpts.Repo = optional.NewString(opts.Repo)
+		searchOpts.Repo = gitee.String(opts.Repo)
 	}
 	if opts.State != "" {
-		searchOpts.State = optional.NewString(opts.State)
+		searchOpts.State = gitee.String(opts.State)
 	}
 	if opts.Sort != "" {
-		searchOpts.Sort = optional.NewString(opts.Sort)
+		searchOpts.Sort = gitee.String(opts.Sort)
 	}
 	if opts.Order != "" {
-		searchOpts.Order = optional.NewString(opts.Order)
+		searchOpts.Order = gitee.String(opts.Order)
 	}
-	issues, resp, err := p.client.SearchApi.GetV5SearchIssues(ctx, opts.Query, &searchOpts)
+	issues, _, err := p.client.Search.Issues(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, p.sdkErr("SearchIssues", resp, err)
+		return nil, nil, p.sdkErr("SearchIssues", err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(issues))
-	for i := range issues {
-		issue := issues[i]
-		labels := make([]string, 0, len(issue.Labels))
-		for _, l := range issue.Labels {
-			labels = append(labels, l.Name)
+	for _, issue := range issues {
+		var labels []string
+		if issue.Labels != nil {
+			for _, l := range *issue.Labels {
+				labels = append(labels, deref(l.Name))
+			}
 		}
 		out = append(out, &provider.SearchIssueResult{
-			Number:    issue.Number,
-			Title:     issue.Title,
-			Body:      issue.Body,
-			State:     provider.IssueState(issue.State),
-			WebURL:    issue.HtmlUrl,
+			Number:    deref(issue.Number),
+			Title:     deref(issue.Title),
+			Body:      deref(issue.Body),
+			State:     provider.IssueState(deref(issue.State)),
+			WebURL:    deref(issue.HTMLURL),
 			Labels:    labels,
-			Comments:  int(issue.Comments),
-			CreatedAt: issue.CreatedAt,
+			Comments:  deref(issue.Comments),
+			CreatedAt: parseGiteeTime(issue.CreatedAt),
 		})
 	}
 	return out, nil, nil
@@ -99,29 +90,28 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 // SearchUsers implements provider.SearchManager.
 func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	searchOpts := gitee.GetV5SearchUsersOpts{
-		AccessToken: p.accessToken(),
-		Page:        optional.NewInt32(toInt32(page)),
-		PerPage:     optional.NewInt32(toInt32(perPage)),
+	searchOpts := &gitee.SearchUserOptions{
+		Q:       gitee.String(opts.Query),
+		Page:    gitee.Int(page),
+		PerPage: gitee.Int(perPage),
 	}
 	if opts.Sort != "" {
-		searchOpts.Sort = optional.NewString(opts.Sort)
+		searchOpts.Sort = gitee.String(opts.Sort)
 	}
 	if opts.Order != "" {
-		searchOpts.Order = optional.NewString(opts.Order)
+		searchOpts.Order = gitee.String(opts.Order)
 	}
-	users, resp, err := p.client.SearchApi.GetV5SearchUsers(ctx, opts.Query, &searchOpts)
+	users, _, err := p.client.Search.Users(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, p.sdkErr("SearchUsers", resp, err)
+		return nil, nil, p.sdkErr("SearchUsers", err)
 	}
 	out := make([]*provider.SearchUserResult, 0, len(users))
-	for i := range users {
-		u := users[i]
+	for _, u := range users {
 		out = append(out, &provider.SearchUserResult{
-			Login:     u.Login,
-			Name:      u.Name,
-			AvatarURL: u.AvatarUrl,
-			WebURL:    u.HtmlUrl,
+			Login:     deref(u.Login),
+			Name:      deref(u.Name),
+			AvatarURL: deref(u.AvatarURL),
+			WebURL:    deref(u.HTMLURL),
 		})
 	}
 	return out, nil, nil

@@ -3,8 +3,6 @@ package gitee
 import (
 	"context"
 
-	gitee "gitee.com/openeuler/go-gitee/gitee"
-
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -20,28 +18,22 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 	return nil, nil
 }
 
-// CreateBranchProtection implements provider.BranchProtectionManager. Gitee
-// only supports enabling protection via PUT; this delegates to the PUT endpoint.
+// CreateBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
-	_, resp, err := p.client.RepositoriesApi.PutV5ReposOwnerRepoBranchesBranchProtection(ctx, esc(owner), esc(repo), esc(opts.BranchName), gitee.BranchProtectionPutParam{
-		AccessToken: p.token,
-	})
+	_, _, err := p.client.Repositories.SetBranchProtection(ctx, esc(owner), esc(repo), esc(opts.BranchName))
 	if err != nil {
-		return nil, p.sdkErr("CreateBranchProtection", resp, err)
+		return nil, p.sdkErr("CreateBranchProtection", err)
 	}
 	return &provider.BranchProtection{
 		BranchName: opts.BranchName,
 	}, nil
 }
 
-// UpdateBranchProtection implements provider.BranchProtectionManager. Gitee has
-// no update endpoint; this re-enables protection via PUT.
+// UpdateBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
-	_, resp, err := p.client.RepositoriesApi.PutV5ReposOwnerRepoBranchesBranchProtection(ctx, esc(owner), esc(repo), esc(branch), gitee.BranchProtectionPutParam{
-		AccessToken: p.token,
-	})
+	_, _, err := p.client.Repositories.SetBranchProtection(ctx, esc(owner), esc(repo), esc(branch))
 	if err != nil {
-		return nil, p.sdkErr("UpdateBranchProtection", resp, err)
+		return nil, p.sdkErr("UpdateBranchProtection", err)
 	}
 	return &provider.BranchProtection{
 		BranchName: branch,
@@ -50,11 +42,9 @@ func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, bran
 
 // DeleteBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
-	resp, err := p.client.RepositoriesApi.DeleteV5ReposOwnerRepoBranchesBranchProtection(ctx, esc(owner), esc(repo), esc(branch), &gitee.DeleteV5ReposOwnerRepoBranchesBranchProtectionOpts{
-		AccessToken: p.accessToken(),
-	})
+	_, err := p.client.Repositories.RemoveBranchProtection(ctx, esc(owner), esc(repo), esc(branch))
 	if err != nil {
-		return p.sdkErr("DeleteBranchProtection", resp, err)
+		return p.sdkErr("DeleteBranchProtection", err)
 	}
 	return nil
 }

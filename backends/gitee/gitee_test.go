@@ -642,7 +642,7 @@ func TestWebhooks_CreateBodyAndDeleteWire(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		writeJSON(w, map[string]any{"id": 9, "url": "https://example.com/hook", "events": []string{"push"}})
+		writeJSON(w, map[string]any{"id": 9, "url": "https://example.com/hook", "push_events": true})
 	}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)

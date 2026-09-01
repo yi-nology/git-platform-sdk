@@ -2,223 +2,189 @@ package gitee
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
-	gitee "gitee.com/openeuler/go-gitee/gitee"
+	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// The convertXxx functions below translate go-gitee SDK models into the
-// provider-neutral result types. The giteeXxx types further down mirror the
-// JSON shapes returned by the Gitee REST API for surfaces still served by the
-// raw transport client (the SDK's generated models for those endpoints do not
-// match the live wire format — see the per-endpoint registrations in
-// commits.go); they are intentionally unexported (lowercase) since they only
-// exist to drive the provider-neutral result types.
-
-// convertRepo translates the SDK Project model (gitee's repo object) into a
-// PlatformRepo. The SDK Project model has no clone_url field (Gitee's repo
-// payload carries ssh_url/html_url only), so CloneURL stays empty.
-func convertRepo(r gitee.Project) *provider.PlatformRepo {
-	out := &provider.PlatformRepo{
-		ID:            int64(r.Id),
-		FullName:      r.FullName,
-		Name:          r.Name,
-		Description:   r.Description,
-		SSHURL:        r.SshUrl,
-		DefaultBranch: r.DefaultBranch,
-		Private:       r.Private,
-		Platform:      provider.PlatformGitee,
+// deref safely dereferences a pointer, returning the zero value when nil.
+func deref[T any](p *T) T {
+	if p == nil {
+		var zero T
+		return zero
 	}
-	if r.Owner != nil {
-		out.Owner = r.Owner.Login
-	}
-	return out
+	return *p
 }
 
-// convertBranch translates the SDK Branch model into a PlatformBranch.
-func convertBranch(b gitee.Branch) *provider.PlatformBranch {
-	return &provider.PlatformBranch{Name: b.Name}
-}
-
-// parseGiteeTime parses the RFC3339 timestamp strings the go-gitee SDK uses
-// for fields the live API reports as dates (PullRequest.CreatedAt and
-// friends). Unparseable/empty values stay zero, matching the previous
-// time.Time decoding behaviour for absent fields.
-func parseGiteeTime(s string) time.Time {
-	if s == "" {
+// parseGiteeTime parses the RFC3339 timestamp strings the Gitee API uses.
+// Unparseable/empty values stay zero.
+func parseGiteeTime(s *string) time.Time {
+	if s == nil || *s == "" {
 		return time.Time{}
 	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
+	if t, err := time.Parse(time.RFC3339, *s); err == nil {
 		return t
 	}
 	return time.Time{}
 }
 
-// toInt32 narrows an int for the go-gitee SDK's int32-typed parameters (PR
-// numbers, pagination). Inputs are either provider-normalized pagination
-// values (page >= 1, perPage <= 100) or Gitee PR/note numbers, which the
-// platform numbers well inside the int32 range, so the narrowing cannot
-// wrap.
-func toInt32(n int) int32 {
-	return int32(n) // #nosec:G115 -- inputs bounded by NormalizePageOpts / PR numbering
+// convertProject translates the SDK Project model into a PlatformRepo.
+func convertProject(p *gitee.Project) *provider.PlatformRepo {
+	if p == nil {
+		return nil
+	}
+	out := &provider.PlatformRepo{
+		ID:            int64(deref(p.ID)),
+		FullName:      deref(p.FullName),
+		Name:          deref(p.Name),
+		Description:   deref(p.Description),
+		SSHURL:        deref(p.SshURL),
+		DefaultBranch: deref(p.DefaultBranch),
+		Private:       deref(p.Private),
+		Platform:      provider.PlatformGitee,
+	}
+	if p.Owner != nil {
+		out.Owner = deref(p.Owner.Login)
+	}
+	return out
 }
 
 // convertPullRequest translates the SDK PullRequest model into a
 // provider.ChangeRequest.
-//
-// Registration: the live Gitee PR payload carries a top-level boolean "draft"
-// field, but the SDK's PullRequest model does not expose it, so
-// ChangeRequest.Draft is always false for Gitee until the SDK model catches
-// up (upstream swagger omission). Branch names are taken from head.ref /
-// base.ref — the REST payload has no top-level source_branch/target_branch
-// fields (those exist only in creation/webhook payloads).
-func convertPullRequest(pr gitee.PullRequest) *provider.ChangeRequest {
-	state := provider.MapBoolStateToCR(pr.State, pr.MergedAt != "")
+func convertPullRequest(pr *gitee.PullRequest) *provider.ChangeRequest {
+	if pr == nil {
+		return nil
+	}
+	state := provider.MapBoolStateToCR(deref(pr.State), pr.MergedAt != nil && *pr.MergedAt != "")
 	var labels []string
-	for _, l := range pr.Labels {
-		labels = append(labels, l.Name)
+	if pr.Labels != nil {
+		for _, l := range *pr.Labels {
+			labels = append(labels, deref(l.Name))
+		}
 	}
 	var assignees []*provider.CRUser
-	for i := range pr.Assignees {
-		a := pr.Assignees[i]
-		assignees = append(assignees, &provider.CRUser{ID: int64(a.Id), Username: a.Login})
+	if pr.Assignees != nil {
+		for _, a := range *pr.Assignees {
+			assignees = append(assignees, &provider.CRUser{
+				ID:       int64(deref(a.ID)),
+				Username: deref(a.Login),
+			})
+		}
 	}
 	mergeStatus := "conflicting"
-	if pr.Mergeable {
+	if deref(pr.Mergeable) {
 		mergeStatus = "mergeable"
 	}
 	out := &provider.ChangeRequest{
-		ID:          int64(pr.Id),
-		Number:      strconv.Itoa(int(pr.Number)),
-		Title:       pr.Title,
-		Description: pr.Body,
+		ID:          int64(deref(pr.ID)),
+		Number:      strconv.Itoa(deref(pr.Number)),
+		Title:       deref(pr.Title),
+		Description: deref(pr.Body),
 		State:       state,
 		Assignees:   assignees,
 		Reviewers:   assignees, // Gitee has no separate RequestedReviewers
 		Labels:      labels,
 		MergeStatus: mergeStatus,
-		WebURL:      pr.HtmlUrl,
+		WebURL:      deref(pr.HTMLURL),
+		Draft:       deref(pr.Draft),
 		CreatedAt:   parseGiteeTime(pr.CreatedAt),
 		UpdatedAt:   parseGiteeTime(pr.UpdatedAt),
 	}
 	if pr.Head != nil {
-		out.SourceBranch = pr.Head.Ref
-		out.HeadSHA = pr.Head.Sha
+		out.SourceBranch = deref(pr.Head.Ref)
+		if pr.Head.Sha != nil {
+			out.HeadSHA = *pr.Head.Sha
+		}
 	}
 	if pr.Base != nil {
-		out.TargetBranch = pr.Base.Ref
-		out.BaseSHA = pr.Base.Sha
+		out.TargetBranch = deref(pr.Base.Ref)
+		if pr.Base.Sha != nil {
+			out.BaseSHA = *pr.Base.Sha
+		}
 	}
 	if pr.User != nil {
-		out.Author = &provider.CRUser{ID: int64(pr.User.Id), Username: pr.User.Login, Name: pr.User.Name}
+		out.Author = &provider.CRUser{
+			ID:       int64(deref(pr.User.ID)),
+			Username: deref(pr.User.Login),
+			Name:     deref(pr.User.Name),
+		}
 	}
 	return out
 }
 
 // convertPRComment translates the SDK PullRequestComments model into a
 // provider.CRComment.
-func convertPRComment(c gitee.PullRequestComments) *provider.CRComment {
+func convertPRComment(c *gitee.PullRequestComments) *provider.CRComment {
+	if c == nil {
+		return nil
+	}
 	out := &provider.CRComment{
-		ID:        int64(c.Id),
-		Body:      c.Body,
+		ID:        int64(deref(c.ID)),
+		Body:      deref(c.Body),
 		CreatedAt: parseGiteeTime(c.CreatedAt),
 		UpdatedAt: parseGiteeTime(c.UpdatedAt),
 	}
 	if c.User != nil {
-		out.Author = &provider.CRUser{ID: int64(c.User.Id), Username: c.User.Login, Name: c.User.Name}
+		out.Author = &provider.CRUser{
+			ID:       int64(deref(c.User.ID)),
+			Username: deref(c.User.Login),
+			Name:     deref(c.User.Name),
+		}
 	}
 	return out
 }
 
 // convertPRCommit translates the SDK PullRequestCommits model into a
 // provider.CRCommit.
-func convertPRCommit(c gitee.PullRequestCommits) *provider.CRCommit {
-	cc := &provider.CRCommit{SHA: c.Sha}
+func convertPRCommit(c *gitee.PullRequestCommits) *provider.CRCommit {
+	if c == nil {
+		return nil
+	}
+	cc := &provider.CRCommit{SHA: deref(c.Sha)}
 	if c.Commit != nil {
-		cc.Message = c.Commit.Message
+		cc.Message = deref(c.Commit.Message)
 		if c.Commit.Author != nil {
-			cc.CreatedAt = c.Commit.Author.Date
+			cc.CreatedAt = parseGiteeTime(c.Commit.Author.Date)
 		}
 	}
-	if c.Author != nil && c.Author.Id > 0 {
-		cc.Author = &provider.CRUser{ID: int64(c.Author.Id), Username: c.Author.Login}
-	} else if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != "" {
-		cc.Author = &provider.CRUser{Name: c.Commit.Author.Name}
+	if c.Author != nil && deref(c.Author.ID) > 0 {
+		cc.Author = &provider.CRUser{
+			ID:       int64(deref(c.Author.ID)),
+			Username: deref(c.Author.Login),
+		}
+	} else if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
+		cc.Author = &provider.CRUser{Name: deref(c.Commit.Author.Name)}
 	}
 	return cc
 }
 
-type giteeCommitDetail struct {
-	SHA    string `json:"sha"`
-	Commit struct {
-		Message string `json:"message"`
-		Author  struct {
-			Name  string    `json:"name"`
-			Email string    `json:"email"`
-			Date  time.Time `json:"date"`
-		} `json:"author"`
-		Committer struct {
-			Name  string `json:"name"`
-			Email string `json:"email"`
-		} `json:"committer"`
-	} `json:"commit"`
-	Author *struct {
-		ID    int    `json:"id"`
-		Login string `json:"login"`
-	} `json:"author"`
-	Committer *struct {
-		ID    int    `json:"id"`
-		Login string `json:"login"`
-	} `json:"committer"`
-	Stats struct {
-		Additions int `json:"additions"`
-		Deletions int `json:"deletions"`
-	} `json:"stats"`
-}
-
-func (c *giteeCommitDetail) toCommitInfo() *provider.CommitInfo {
-	ci := &provider.CommitInfo{
-		SHA:       c.SHA,
-		Message:   c.Commit.Message,
-		CreatedAt: c.Commit.Author.Date,
-		Additions: c.Stats.Additions,
-		Deletions: c.Stats.Deletions,
+// convertPRFile translates the SDK PullRequestFiles model into a
+// provider.ChangedFile.
+func convertPRFile(f *gitee.PullRequestFiles) *provider.ChangedFile {
+	if f == nil {
+		return nil
 	}
-	if c.Author != nil {
-		ci.Author = &provider.CRUser{ID: int64(c.Author.ID), Username: c.Author.Login, Name: c.Commit.Author.Name}
-	} else if c.Commit.Author.Name != "" {
-		ci.Author = &provider.CRUser{Name: c.Commit.Author.Name}
-	}
-	if c.Committer != nil {
-		ci.Committer = &provider.CRUser{ID: int64(c.Committer.ID), Username: c.Committer.Login, Name: c.Commit.Committer.Name}
-	}
-	return ci
-}
-
-// convertPRFile translates the SDK PullRequestFiles model (the live PR-files
-// payload) into a provider.ChangedFile. Gitee reports additions/deletions as
-// strings on this endpoint and nests the diff details under "patch"; the diff
-// line counts act as a fallback when the server omits the numeric stats.
-func convertPRFile(f gitee.PullRequestFiles) *provider.ChangedFile {
+	filename := deref(f.Filename)
 	out := &provider.ChangedFile{
-		OldPath: f.Filename,
-		NewPath: f.Filename,
+		OldPath: filename,
+		NewPath: filename,
 	}
 	if f.Patch != nil {
-		out.OldPath = orDefault(f.Patch.OldPath, f.Filename)
-		out.NewPath = orDefault(f.Patch.NewPath, f.Filename)
-		out.Diff = f.Patch.Diff
-		out.IsNew = f.Patch.NewFile
-		out.IsDeleted = f.Patch.DeletedFile
-		out.IsRenamed = f.Patch.RenamedFile
+		out.OldPath = orDefault(deref(f.Patch.OldPath), filename)
+		out.NewPath = orDefault(deref(f.Patch.NewPath), filename)
+		out.Diff = deref(f.Patch.Diff)
+		out.IsNew = deref(f.Patch.NewFile)
+		out.IsDeleted = deref(f.Patch.DeletedFile)
+		out.IsRenamed = deref(f.Patch.RenamedFile)
 	}
 	add, del := provider.CountDiffLines(out.Diff)
-	if n, err := strconv.Atoi(f.Additions); err == nil && n > 0 {
+	if n, err := strconv.Atoi(deref(f.Additions)); err == nil && n > 0 {
 		add = n
 	}
-	if n, err := strconv.Atoi(f.Deletions); err == nil && n > 0 {
+	if n, err := strconv.Atoi(deref(f.Deletions)); err == nil && n > 0 {
 		del = n
 	}
 	out.Additions = add
@@ -233,74 +199,340 @@ func orDefault(s, fallback string) string {
 	return fallback
 }
 
-// giteeCompareFile mirrors the file objects of the compare endpoint's wire
-// response (repos/{owner}/{repo}/compare/{base}...{head}), which differs from
-// the PR-files payload: numeric additions/deletions, a string "patch" diff,
-// and a status vocabulary (added/modified/removed).
-type giteeCompareFile struct {
-	Filename  string `json:"filename"`
-	Status    string `json:"status"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
-	Patch     string `json:"patch"`
-	Truncated bool   `json:"truncated"`
-}
-
-func (f *giteeCompareFile) toChangedFile() *provider.ChangedFile {
-	add, del := provider.CountDiffLines(f.Patch)
-	if f.Additions > 0 {
-		add = f.Additions
+// convertDiffFile translates the SDK DiffFile (from compare endpoint) into a
+// provider.ChangedFile.
+func convertDiffFile(f *gitee.DiffFile) *provider.ChangedFile {
+	if f == nil {
+		return nil
 	}
-	if f.Deletions > 0 {
-		del = f.Deletions
+	filename := deref(f.Filename)
+	patch := deref(f.Patch)
+	add, del := provider.CountDiffLines(patch)
+	if deref(f.Additions) > 0 {
+		add = deref(f.Additions)
 	}
+	if deref(f.Deletions) > 0 {
+		del = deref(f.Deletions)
+	}
+	status := deref(f.Status)
 	return &provider.ChangedFile{
-		OldPath:   f.Filename,
-		NewPath:   f.Filename,
-		Diff:      f.Patch,
+		OldPath:   filename,
+		NewPath:   filename,
+		Diff:      patch,
 		Additions: add,
 		Deletions: del,
-		IsNew:     f.Status == "added",
-		IsDeleted: f.Status == "removed",
-		IsRenamed: f.Status == "renamed",
+		IsNew:     status == "added",
+		IsDeleted: status == "removed",
+		IsRenamed: status == "renamed",
 	}
 }
 
-type giteeWebhook struct {
-	ID     int64    `json:"id"`
-	URL    string   `json:"url"`
-	Events []string `json:"events"`
+// convertRepoCommit translates the SDK RepoCommit into a provider.CommitInfo.
+func convertRepoCommit(c *gitee.RepoCommit) *provider.CommitInfo {
+	if c == nil {
+		return nil
+	}
+	ci := &provider.CommitInfo{
+		SHA: deref(c.Sha),
+	}
+	if c.Commit != nil {
+		ci.Message = deref(c.Commit.Message)
+		if c.Commit.Author != nil {
+			ci.CreatedAt = parseGiteeTime(c.Commit.Author.Date)
+		}
+	}
+	if c.Author != nil && deref(c.Author.ID) > 0 {
+		ci.Author = &provider.CRUser{
+			ID:       int64(deref(c.Author.ID)),
+			Username: deref(c.Author.Login),
+		}
+	} else if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
+		ci.Author = &provider.CRUser{Name: deref(c.Commit.Author.Name)}
+	}
+	if c.Committer != nil && deref(c.Committer.ID) > 0 {
+		ci.Committer = &provider.CRUser{
+			ID:       int64(deref(c.Committer.ID)),
+			Username: deref(c.Committer.Login),
+		}
+	}
+	return ci
 }
 
-func (h *giteeWebhook) toPlatformWebhook() *provider.PlatformWebhook {
-	return &provider.PlatformWebhook{ID: h.ID, URL: h.URL, Events: h.Events}
+// convertRepoCommitWithFiles translates the SDK RepoCommitWithFiles (from
+// GetCommit) into a provider.CommitInfo with stats.
+func convertRepoCommitWithFiles(c *gitee.RepoCommitWithFiles) *provider.CommitInfo {
+	if c == nil {
+		return nil
+	}
+	ci := &provider.CommitInfo{
+		SHA: deref(c.Sha),
+	}
+	if c.Commit != nil {
+		ci.Message = deref(c.Commit.Message)
+		if c.Commit.Author != nil {
+			ci.CreatedAt = parseGiteeTime(c.Commit.Author.Date)
+		}
+	}
+	if c.Author != nil && deref(c.Author.ID) > 0 {
+		ci.Author = &provider.CRUser{
+			ID:       int64(deref(c.Author.ID)),
+			Username: deref(c.Author.Login),
+		}
+		if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
+			ci.Author.Name = deref(c.Commit.Author.Name)
+		}
+	} else if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
+		ci.Author = &provider.CRUser{Name: deref(c.Commit.Author.Name)}
+	}
+	if c.Committer != nil && deref(c.Committer.ID) > 0 {
+		ci.Committer = &provider.CRUser{
+			ID:       int64(deref(c.Committer.ID)),
+			Username: deref(c.Committer.Login),
+		}
+		if c.Commit != nil && c.Commit.Committer != nil && c.Commit.Committer.Name != nil {
+			ci.Committer.Name = deref(c.Commit.Committer.Name)
+		}
+	}
+	if c.Stats != nil {
+		ci.Additions = deref(c.Stats.Additions)
+		ci.Deletions = deref(c.Stats.Deletions)
+	}
+	return ci
 }
 
-type giteeRelease struct {
-	ID          int64      `json:"id"`
-	TagName     string     `json:"tag_name"`
-	Name        string     `json:"name"`
-	Body        string     `json:"body"`
-	HTMLURL     string     `json:"html_url"`
-	Draft       bool       `json:"draft"`
-	Prerelease  bool       `json:"prerelease"`
-	CreatedAt   time.Time  `json:"created_at"`
-	PublishedAt *time.Time `json:"published_at"`
+// convertHook translates the SDK Hook model into a provider.PlatformWebhook.
+func convertHook(h *gitee.Hook) *provider.PlatformWebhook {
+	if h == nil {
+		return nil
+	}
+	var events []string
+	if deref(h.PushEvents) {
+		events = append(events, "push")
+	}
+	if deref(h.TagPushEvents) {
+		events = append(events, "tag_push")
+	}
+	if deref(h.IssuesEvents) {
+		events = append(events, "issues")
+	}
+	if deref(h.NoteEvents) {
+		events = append(events, "note")
+	}
+	if deref(h.MergeRequestsEvents) {
+		events = append(events, "pull_request")
+	}
+	return &provider.PlatformWebhook{
+		ID:     int64(deref(h.ID)),
+		URL:    deref(h.URL),
+		Events: events,
+	}
 }
 
-func (r *giteeRelease) toReleaseInfo() *provider.ReleaseInfo {
+// convertUser translates the SDK UserBasic model into a provider.CRUser.
+func convertUser(u *gitee.UserBasic) *provider.CRUser {
+	if u == nil {
+		return nil
+	}
+	return &provider.CRUser{
+		ID:        int64(deref(u.ID)),
+		Username:  deref(u.Login),
+		Name:      deref(u.Name),
+		AvatarURL: deref(u.AvatarURL),
+	}
+}
+
+// convertBranch translates the SDK Branch model into a PlatformBranch.
+func convertBranch(b *gitee.Branch) *provider.PlatformBranch {
+	if b == nil {
+		return nil
+	}
+	return &provider.PlatformBranch{Name: deref(b.Name)}
+}
+
+// convertRelease translates the SDK Release model into a provider.ReleaseInfo.
+func convertRelease(r *gitee.Release) *provider.ReleaseInfo {
+	if r == nil {
+		return nil
+	}
 	ri := &provider.ReleaseInfo{
-		ID:         r.ID,
-		TagName:    r.TagName,
-		Title:      r.Name,
-		Body:       r.Body,
-		URL:        r.HTMLURL,
-		Draft:      r.Draft,
-		Prerelease: r.Prerelease,
-		CreatedAt:  r.CreatedAt,
-	}
-	if r.PublishedAt != nil {
-		ri.PublishedAt = *r.PublishedAt
+		ID:         int64(deref(r.ID)),
+		TagName:    deref(r.TagName),
+		Title:      deref(r.Name),
+		Body:       deref(r.Body),
+		Draft:      false, // Gitee releases have no draft field
+		Prerelease: deref(r.Prerelease),
+		CreatedAt:  parseGiteeTime(r.CreatedAt),
 	}
 	return ri
 }
+
+// convertTag translates the SDK Tag model into a provider.TagInfo.
+func convertTag(t *gitee.Tag) *provider.TagInfo {
+	if t == nil {
+		return nil
+	}
+	ti := &provider.TagInfo{Name: deref(t.Name)}
+	if t.Commit != nil {
+		ti.Commit = deref(t.Commit.Sha)
+	}
+	return ti
+}
+
+// convertSSHKey translates the SDK SSHKey model into a provider.DeployKey.
+func convertSSHKey(k *gitee.SSHKey) *provider.DeployKey {
+	if k == nil {
+		return nil
+	}
+	return &provider.DeployKey{
+		ID:    int64(deref(k.ID)),
+		Title: deref(k.Title),
+		Key:   deref(k.Key),
+	}
+}
+
+// convertContributor translates the SDK Contributor model into a
+// provider.Contributor.
+func convertContributor(c *gitee.Contributor) *provider.Contributor {
+	if c == nil {
+		return nil
+	}
+	return &provider.Contributor{
+		Username:      deref(c.Name),
+		Contributions: deref(c.Contributions),
+	}
+}
+
+// convertCollaborator translates the SDK ProjectMember model into a
+// provider.Collaborator.
+func convertCollaborator(m *gitee.ProjectMember) *provider.Collaborator {
+	if m == nil {
+		return nil
+	}
+	return &provider.Collaborator{
+		ID:       int64(deref(m.ID)),
+		Username: deref(m.Login),
+	}
+}
+
+// convertProtectionRule translates the SDK ProtectionRule model into a
+// provider.BranchProtection.
+func convertProtectionRule(r *gitee.ProtectionRule) *provider.BranchProtection {
+	if r == nil {
+		return nil
+	}
+	return &provider.BranchProtection{
+		BranchName: deref(r.Wildcard),
+	}
+}
+
+// convertLabel maps the SDK Label to a provider.Label. Gitee colors are 6-digit
+// hex without '#'.
+func convertLabel(l *gitee.Label) *provider.Label {
+	if l == nil {
+		return nil
+	}
+	return &provider.Label{
+		ID:    int64(deref(l.ID)),
+		Name:  deref(l.Name),
+		Color: strings.TrimPrefix(deref(l.Color), "#"),
+	}
+}
+
+// convertIssue maps the SDK Issue model to a provider.Issue. Gitee issue
+// numbers are alphanumeric strings, carried as-is.
+func convertIssue(i *gitee.Issue) *provider.Issue {
+	if i == nil {
+		return nil
+	}
+	issue := &provider.Issue{
+		Number:    deref(i.Number),
+		Title:     deref(i.Title),
+		Body:      deref(i.Body),
+		State:     provider.IssueState(deref(i.State)),
+		WebURL:    deref(i.HTMLURL),
+		CreatedAt: parseGiteeTime(i.CreatedAt),
+		UpdatedAt: parseGiteeTime(i.UpdatedAt),
+	}
+	if i.User != nil {
+		issue.Author = &provider.CRUser{
+			ID:       int64(deref(i.User.ID)),
+			Username: deref(i.User.Login),
+			Name:     deref(i.User.Name),
+		}
+	}
+	if i.Labels != nil {
+		for _, l := range *i.Labels {
+			issue.Labels = append(issue.Labels, deref(l.Name))
+		}
+	}
+	if i.Assignee != nil {
+		issue.Assignees = append(issue.Assignees, deref(i.Assignee.Login))
+	}
+	if i.Collaborators != nil {
+		for _, c := range *i.Collaborators {
+			issue.Assignees = append(issue.Assignees, deref(c.Login))
+		}
+	}
+	if i.Milestone != nil {
+		issue.Milestone = &provider.MilestoneRef{
+			Number: strconv.Itoa(deref(i.Milestone.Number)),
+			Title:  deref(i.Milestone.Title),
+		}
+	}
+	return issue
+}
+
+// convertIssueComment maps the SDK Note model to a provider.IssueComment.
+func convertIssueComment(n *gitee.Note) *provider.IssueComment {
+	if n == nil {
+		return nil
+	}
+	ic := &provider.IssueComment{
+		ID:        int64(deref(n.ID)),
+		Body:      deref(n.Body),
+		CreatedAt: parseGiteeTime(n.CreatedAt),
+		UpdatedAt: parseGiteeTime(n.UpdatedAt),
+	}
+	if n.User != nil {
+		ic.Author = &provider.CRUser{
+			ID:       int64(deref(n.User.ID)),
+			Username: deref(n.User.Login),
+			Name:     deref(n.User.Name),
+		}
+	}
+	return ic
+}
+
+// convertMilestone maps the SDK Milestone to a provider.Milestone.
+func convertMilestone(m *gitee.Milestone) provider.Milestone {
+	if m == nil {
+		return provider.Milestone{}
+	}
+	ms := provider.Milestone{
+		Number:      strconv.Itoa(deref(m.Number)),
+		Title:       deref(m.Title),
+		Description: deref(m.Description),
+		State:       provider.MilestoneState(deref(m.State)),
+	}
+	if due, ok := parseGiteeDueOn(deref(m.DueOn)); ok {
+		ms.DueOn = &due
+	}
+	return ms
+}
+
+// giteeDueOnLayouts are the timestamp layouts Gitee's milestone payload uses.
+var giteeDueOnLayouts = []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"}
+
+func parseGiteeDueOn(s string) (time.Time, bool) {
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range giteeDueOnLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func formatGiteeDueOn(t time.Time) string { return t.Format(time.RFC3339) }

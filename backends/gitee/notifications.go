@@ -2,116 +2,141 @@ package gitee
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"strconv"
-	"time"
 
-	gitee "gitee.com/openeuler/go-gitee/gitee"
-	"github.com/antihax/optional"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
+// rawNotification is a local type that handles Gitee's non-standard
+// notification wire format (unread is a string "true"/"false" instead
+// of a boolean).
+type rawNotification struct {
+	ID         int    `json:"id"`
+	Unread     string `json:"unread"`
+	Type       string `json:"type"`
+	UpdatedAt  string `json:"updated_at"`
+	URL        string `json:"url"`
+	HtmlURL    string `json:"html_url"`
+	Subject    *rawNotifSubject   `json:"subject,omitempty"`
+	Repository *rawNotifRepo      `json:"repository,omitempty"`
+}
+
+type rawNotifSubject struct {
+	Title            string `json:"title"`
+	URL              string `json:"url"`
+	LatestCommentURL string `json:"latest_comment_url"`
+	Type             string `json:"type"`
+}
+
+type rawNotifRepo struct {
+	ID       int    `json:"id"`
+	FullName string `json:"full_name"`
+}
+
+type rawNotificationList struct {
+	TotalCount int                 `json:"total_count"`
+	List       []rawNotification   `json:"list"`
+}
+
 // ListNotifications implements provider.NotificationManager.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	giteeOpts := &gitee.GetV5NotificationsThreadsOpts{
-		AccessToken: p.accessToken(),
-	}
+	u := fmt.Sprintf("%s/notifications", p.baseURL)
+	q := url.Values{}
 	if opts.Since != "" {
-		giteeOpts.Since = optional.NewString(opts.Since)
+		q.Set("since", opts.Since)
 	}
 	if opts.Page > 0 {
-		giteeOpts.Page = optional.NewInt32(int32(opts.Page))
+		q.Set("page", strconv.Itoa(opts.Page))
 	}
 	if opts.PerPage > 0 {
-		giteeOpts.PerPage = optional.NewInt32(int32(opts.PerPage))
+		q.Set("per_page", strconv.Itoa(opts.PerPage))
 	}
-	lists, resp, err := p.client.ActivityApi.GetV5NotificationsThreads(ctx, giteeOpts)
-	if err != nil {
-		return nil, p.sdkErr("ListNotifications", resp, err)
+	if len(q) > 0 {
+		u += "?" + q.Encode()
 	}
-	return flattenNotificationLists(lists), nil
+	return p.listNotificationsURL(ctx, u)
 }
 
 // ListRepoNotifications implements provider.NotificationManager.
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	giteeOpts := &gitee.GetV5ReposOwnerRepoNotificationsOpts{
-		AccessToken: p.accessToken(),
-	}
+	u := fmt.Sprintf("%s/repos/%s/%s/notifications", p.baseURL, esc(owner), esc(repo))
+	q := url.Values{}
 	if opts.Since != "" {
-		giteeOpts.Since = optional.NewString(opts.Since)
+		q.Set("since", opts.Since)
 	}
 	if opts.Page > 0 {
-		giteeOpts.Page = optional.NewInt32(int32(opts.Page))
+		q.Set("page", strconv.Itoa(opts.Page))
 	}
 	if opts.PerPage > 0 {
-		giteeOpts.PerPage = optional.NewInt32(int32(opts.PerPage))
+		q.Set("per_page", strconv.Itoa(opts.PerPage))
 	}
-	lists, resp, err := p.client.ActivityApi.GetV5ReposOwnerRepoNotifications(ctx, esc(owner), esc(repo), giteeOpts)
+	if len(q) > 0 {
+		u += "?" + q.Encode()
+	}
+	return p.listNotificationsURL(ctx, u)
+}
+
+func (p *Provider) listNotificationsURL(ctx context.Context, u string) ([]*provider.Notification, error) {
+	req, err := p.client.NewRequest(ctx, "GET", u, nil)
 	if err != nil {
-		return nil, p.sdkErr("ListRepoNotifications", resp, err)
+		return nil, provider.Wrap(provider.PlatformGitee, "ListNotifications", err)
 	}
-	return flattenNotificationLists(lists), nil
+	var nl rawNotificationList
+	if _, err := p.client.Do(req, &nl); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "ListNotifications", err)
+	}
+	result := make([]*provider.Notification, 0, len(nl.List))
+	for i := range nl.List {
+		result = append(result, convertRawNotification(&nl.List[i]))
+	}
+	return result, nil
 }
 
 // MarkNotificationRead implements provider.NotificationManager.
 func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) error {
-	resp, err := p.client.ActivityApi.PatchV5NotificationsThreadsId(ctx, esc(threadID), &gitee.PatchV5NotificationsThreadsIdOpts{
-		AccessToken: p.accessToken(),
-	})
-	return p.sdkErr("MarkNotificationRead", resp, err)
+	_, err := p.client.Activity.MarkNotificationAsRead(ctx, threadID)
+	return provider.Wrap(provider.PlatformGitee, "MarkNotificationRead", err)
 }
 
 // MarkNotificationsRead implements provider.NotificationManager.
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
-	resp, err := p.client.ActivityApi.PutV5NotificationsThreads(ctx, &gitee.PutV5NotificationsThreadsOpts{
-		AccessToken: p.accessToken(),
-	})
-	return p.sdkErr("MarkNotificationsRead", resp, err)
+	_, err := p.client.Activity.MarkNotificationsAsRead(ctx, nil)
+	return provider.Wrap(provider.PlatformGitee, "MarkNotificationsRead", err)
 }
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	resp, err := p.client.ActivityApi.PutV5ReposOwnerRepoNotifications(ctx, esc(owner), esc(repo), &gitee.PutV5ReposOwnerRepoNotificationsOpts{
-		AccessToken: p.accessToken(),
-	})
-	return p.sdkErr("MarkRepoNotificationsRead", resp, err)
+	_, err := p.client.Activity.MarkRepoNotificationsAsRead(ctx, esc(owner), esc(repo), nil)
+	return provider.Wrap(provider.PlatformGitee, "MarkRepoNotificationsRead", err)
 }
 
-// flattenNotificationLists flattens the Gitee nested []UserNotificationList
-// into a flat []*provider.Notification.
-func flattenNotificationLists(lists []gitee.UserNotificationList) []*provider.Notification {
-	var result []*provider.Notification
-	for _, nl := range lists {
-		for _, n := range nl.List {
-			result = append(result, convertNotification(n))
-		}
+func convertRawNotification(n *rawNotification) *provider.Notification {
+	if n == nil {
+		return nil
 	}
-	return result
-}
-
-func convertNotification(n gitee.UserNotification) *provider.Notification {
 	out := &provider.Notification{
-		ID:     strconv.FormatInt(int64(n.Id), 10),
+		ID:     strconv.Itoa(n.ID),
 		Unread: n.Unread == "true",
 	}
 	if n.Subject != nil {
 		out.Subject = provider.NotificationSubject{
 			Title: n.Subject.Title,
-			Type:  n.Subject.Type_,
-			URL:   n.Subject.Url,
+			Type:  n.Subject.Type,
+			URL:   n.Subject.URL,
 		}
 	}
 	if n.Repository != nil {
 		out.Repo = &provider.EventRepo{
-			ID:       int64(n.Repository.Id),
+			ID:       int64(n.Repository.ID),
 			FullName: n.Repository.FullName,
 		}
 		owner, name := provider.SplitFullName(n.Repository.FullName)
 		out.Repo.Owner = owner
 		out.Repo.Name = name
 	}
-	if t, err := time.Parse(time.RFC3339, n.UpdatedAt); err == nil {
-		out.UpdatedAt = t
-	}
+	out.UpdatedAt = parseGiteeTime(&n.UpdatedAt)
 	return out
 }
 
