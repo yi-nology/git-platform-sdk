@@ -36,13 +36,21 @@ func (p *Provider) AddIssueReaction(ctx context.Context, owner, repo, number, em
 }
 
 // RemoveIssueReaction implements provider.ReactionManager.
+//
+// KNOWN N+1 COST: Gitea reactions do not have their own ID; the reactionID
+// parameter is actually the reacting user's User.ID (set in convertReaction).
+// Gitea's DeleteIssueReaction API only accepts the reaction content string
+// (emoji), not an ID, so we must ListIssueReactions to find the matching
+// user's reaction content first. This is an O(reactions) scan per call and
+// cannot be avoided given Gitea's API design.
 func (p *Provider) RemoveIssueReaction(ctx context.Context, owner, repo, number string, reactionID int64) error {
 	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitea, "RemoveIssueReaction", number)
 	if err != nil {
 		return err
 	}
 	// Gitea's DeleteIssueReaction takes the reaction content string, not the ID.
-	// Since we only have the ID, we need to look up the reaction first.
+	// Since we only have the user ID, we must list all reactions to find the
+	// matching content string. This is the only approach available with Gitea's API.
 	reactions, _, err := p.client.ListIssueReactions(owner, repo, n, gitea.ListIssueReactionsOptions{})
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "RemoveIssueReaction", err)
@@ -75,6 +83,10 @@ func (p *Provider) AddIssueCommentReaction(ctx context.Context, owner, repo stri
 }
 
 // RemoveIssueCommentReaction implements provider.ReactionManager.
+//
+// KNOWN N+1 COST: Same trade-off as RemoveIssueReaction — Gitea reactions
+// lack their own ID, so reactionID is the user's User.ID and we must list
+// all comment reactions to find the content string for deletion.
 func (p *Provider) RemoveIssueCommentReaction(ctx context.Context, owner, repo string, commentID, reactionID int64) error {
 	reactions, _, err := p.client.GetIssueCommentReactions(owner, repo, commentID)
 	if err != nil {

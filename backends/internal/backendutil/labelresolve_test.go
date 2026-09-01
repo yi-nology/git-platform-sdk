@@ -71,3 +71,75 @@ func TestNewScanLimitErrorPreservesSentinel(t *testing.T) {
 		t.Fatalf("err.Error() = %q, want %q", err.Error(), msg)
 	}
 }
+
+func TestResolveLabelIDsBulk(t *testing.T) {
+	pages := map[int][]LabelRef{
+		1: {{ID: 1, Name: "bug"}, {ID: 2, Name: "feature"}, {ID: 3, Name: "docs"}},
+	}
+	result, err := ResolveLabelIDs(func(page, perPage int) ([]LabelRef, error) {
+		return pages[page], nil
+	}, []string{"bug", "feature"}, 5, 100)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(result))
+	}
+	if result["bug"] != 1 {
+		t.Errorf("bug = %d, want 1", result["bug"])
+	}
+	if result["feature"] != 2 {
+		t.Errorf("feature = %d, want 2", result["feature"])
+	}
+}
+
+func TestResolveLabelIDsBulkPartialMiss(t *testing.T) {
+	scanCalls := 0
+	result, err := ResolveLabelIDs(func(page, perPage int) ([]LabelRef, error) {
+		scanCalls++
+		if page == 1 {
+			return []LabelRef{{ID: 1, Name: "bug"}}, nil
+		}
+		return nil, nil
+	}, []string{"bug", "missing"}, 5, 100)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	if result["bug"] != 1 {
+		t.Errorf("bug = %d, want 1", result["bug"])
+	}
+	// Should stop after first page (short page)
+	if scanCalls != 1 {
+		t.Errorf("scan calls = %d, want 1", scanCalls)
+	}
+}
+
+func TestResolveLabelIDsWithCacheBulk(t *testing.T) {
+	c := NewIDCache(time.Minute)
+	// Pre-populate cache for "bug"
+	c.Put("owner/repo/bug", 42)
+
+	scanCalls := 0
+	result, err := c.ResolveLabelIDsWithCache("owner/repo", []string{"bug", "feature"}, func(page, perPage int) ([]LabelRef, error) {
+		scanCalls++
+		return []LabelRef{{ID: 99, Name: "feature"}}, nil
+	}, 5, 100)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// bug should come from cache
+	if result["bug"] != 42 {
+		t.Errorf("bug = %d, want 42 (from cache)", result["bug"])
+	}
+	// feature should come from scan
+	if result["feature"] != 99 {
+		t.Errorf("feature = %d, want 99 (from scan)", result["feature"])
+	}
+	// Scan should only be called for the miss
+	if scanCalls != 1 {
+		t.Errorf("scan calls = %d, want 1 (only for cache miss)", scanCalls)
+	}
+}

@@ -120,11 +120,18 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 // caller leaves the title empty the current one is backfilled via one GET to
 // avoid clearing it. op is the public operation this build serves; failures
 // surface under that op. n is the parsed issue number.
+//
+// KNOWN COST: When opts.Title is empty this issues an extra GET request to
+// backfill the current title. This is unavoidable because Gitea's
+// EditIssueOption has no omitempty on Title — sending an empty string would
+// clear the title. The cost is one additional API round-trip per update that
+// does not explicitly set the title.
 func (p *Provider) buildEditIssueOption(op, owner, repo string, n int64, opts provider.UpdateIssueOptions) (gitea.EditIssueOption, error) {
 	edit := gitea.EditIssueOption{}
 	if opts.Title != "" {
 		edit.Title = opts.Title
 	} else {
+		// Extra GET: Gitea requires Title on every edit; backfill from current.
 		current, _, err := p.client.GetIssue(owner, repo, n)
 		if err != nil {
 			return edit, provider.Wrap(provider.PlatformGitea, op, err)
@@ -173,6 +180,9 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 // setIssueState closes/reopens an issue. EditIssue always serializes Title,
 // so the current title is fetched first to avoid clearing it. n is the
 // parsed issue number.
+//
+// KNOWN COST: One extra GET per close/reopen to backfill the title (same
+// constraint as buildEditIssueOption).
 func (p *Provider) setIssueState(owner, repo string, n int64, state gitea.StateType, op string) (*provider.Issue, error) {
 	current, _, err := p.client.GetIssue(owner, repo, n)
 	if err != nil {
