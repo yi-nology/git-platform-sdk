@@ -45,6 +45,7 @@ type CapabilitySet struct {
 	Collaborators     bool // provider.CollaboratorManager
 	DeployKeys        bool // provider.DeploymentKeyManager
 	RepoStats         bool // provider.RepoStatsManager
+	Users             bool // provider.UserManager
 }
 
 // Provider is the unified interface for all Git hosting platforms.

@@ -107,5 +107,8 @@ func TestGitLab_Contract(t *testing.T) {
 			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
 		},
+		Users: &contracttest.UsersHarnessConfig{
+			GetUserResponse: `[{"id":1,"username":"dev","name":"Dev","avatar_url":"https://gitlab.com/avatars/1"}]`,
+		},
 	})
 }

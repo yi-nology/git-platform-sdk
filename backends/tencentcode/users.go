@@ -46,3 +46,35 @@ func assigneeIDsCSV(ids []int) string {
 	}
 	return strings.Join(parts, ",")
 }
+
+// GetUser implements provider.UserManager.
+func (p *Provider) GetUser(ctx context.Context, username string) (*provider.CRUser, error) {
+	u, _, err := p.client.Users.GetUser(ctx, username)
+	if err != nil {
+		return nil, sdkError("GetUser", err)
+	}
+	if u == nil || u.ID == 0 {
+		return nil, provider.New(provider.PlatformTencentCode, "GetUser", http.StatusNotFound,
+			"user "+strconv.Quote(username)+" not found")
+	}
+	return &provider.CRUser{
+		ID:       int64(u.ID),
+		Username: u.Username,
+		Name:     u.Name,
+	}, nil
+}
+
+// ResolveUsernames implements provider.UserManager.
+func (p *Provider) ResolveUsernames(ctx context.Context, usernames []string) ([]*provider.CRUser, error) {
+	ids, err := p.resolveUserIDs(ctx, "ResolveUsernames", usernames)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*provider.CRUser, len(usernames))
+	for i, name := range usernames {
+		result[i] = &provider.CRUser{ID: int64(ids[i]), Username: name}
+	}
+	return result, nil
+}
+
+var _ provider.UserManager = (*Provider)(nil)
