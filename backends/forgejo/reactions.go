@@ -64,6 +64,14 @@ func (p *Provider) RemoveIssueReaction(ctx context.Context, owner, repo, number 
 	return provider.Wrapf(provider.PlatformForgejo, "RemoveIssueReaction", "reaction %d not found", reactionID)
 }
 
+// ListCRReactions implements provider.ReactionManager.
+// Forgejo does not have a dedicated PR-level reaction API; PR reactions are
+// the same as issue reactions, but the SDK exposes them separately for
+// consistency. This returns "not supported" for now.
+func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
+	return nil, provider.Wrapf(provider.PlatformForgejo, "ListCRReactions", "forgejo does not support change-request-level reactions; use ListIssueReactions instead")
+}
+
 // ListIssueCommentReactions implements provider.ReactionManager.
 func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
 	reactions, _, err := p.client.GetIssueCommentReactions(owner, repo, commentID)

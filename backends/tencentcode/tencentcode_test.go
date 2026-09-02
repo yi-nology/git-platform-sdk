@@ -158,8 +158,8 @@ func TestParseWebhookEvent_MergeRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ne.Type != "cr.open" {
-		t.Errorf("expected cr.open, got %s", ne.Type)
+	if ne.Type != "cr.opened" {
+		t.Errorf("expected cr.opened, got %s", ne.Type)
 	}
 	if ne.CR == nil || ne.CR.Number != "7" {
 		t.Errorf("expected CR with number 7, got %+v", ne.CR)

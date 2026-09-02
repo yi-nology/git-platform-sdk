@@ -180,42 +180,4 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 	return result, nil
 }
 
-func convertPullRequest(pr *gitcode.PullRequest) *provider.ChangeRequest {
-	if pr == nil {
-		return nil
-	}
-	state := provider.CRStateOpened
-	if pr.State == gitcode.PullRequestStateClosed {
-		if pr.Merged {
-			state = provider.CRStateMerged
-		} else {
-			state = provider.CRStateClosed
-		}
-	}
-	cr := &provider.ChangeRequest{
-		ID:          pr.ID,
-		Number:      strconv.Itoa(pr.Number),
-		Title:       pr.Title,
-		Description: pr.Body,
-		State:       state,
-		WebURL:      pr.HTMLURL,
-		CreatedAt:   pr.CreatedAt,
-		UpdatedAt:   pr.UpdatedAt,
-	}
-	if pr.Head != nil {
-		cr.SourceBranch = pr.Head.Ref
-	}
-	if pr.Base != nil {
-		cr.TargetBranch = pr.Base.Ref
-	}
-	if pr.Author != nil {
-		authorID, _ := strconv.ParseInt(string(pr.Author.ID), 10, 64)
-		cr.Author = &provider.CRUser{
-			ID: authorID, Username: pr.Author.Login, AvatarURL: pr.Author.AvatarURL,
-		}
-	}
-	cr.Draft = pr.Draft
-	return cr
-}
-
 var _ provider.ChangeRequestManager = (*Provider)(nil)

@@ -65,29 +65,4 @@ func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo st
 	}))
 }
 
-func convertNotification(t *gitcode.NotificationThread) *provider.Notification {
-	n := &provider.Notification{
-		ID:     strconv.FormatInt(t.ID, 10),
-		Unread: t.Unread,
-	}
-	if t.Subject != nil {
-		n.Subject = provider.NotificationSubject{
-			Title: t.Subject.Title,
-			Type:  t.Subject.Type,
-			URL:   t.Subject.URL,
-		}
-	}
-	if t.Repository != nil {
-		n.Repo = &provider.EventRepo{
-			ID:       t.Repository.ID,
-			FullName: t.Repository.FullName,
-		}
-		owner, name := provider.SplitFullName(t.Repository.FullName)
-		n.Repo.Owner = owner
-		n.Repo.Name = name
-	}
-	n.UpdatedAt = t.UpdatedAt
-	return n
-}
-
 var _ provider.NotificationManager = (*Provider)(nil)

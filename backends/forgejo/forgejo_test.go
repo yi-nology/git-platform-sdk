@@ -163,6 +163,109 @@ func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	}
 }
 
+func TestParseWebhookEvent_Merged(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	body := `{"action":"closed","number":1,"sender":{"id":1,"login":"dev"},"repository":{"full_name":"owner/repo"},"pull_request":{"number":1,"title":"t","state":"closed","merged":true,"head":{"ref":"f","sha":"abc"},"base":{"ref":"main"},"html_url":"https://codeberg.org/owner/repo/pulls/1","user":{"id":1,"login":"dev"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("X-Forgejo-Event", "pull_request")
+	r.Header.Set("Content-Type", "application/json")
+	ne, err := p.ParseWebhookEvent(r, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "cr.merged" {
+		t.Errorf("expected cr.merged, got %s", ne.Type)
+	}
+	if ne.CR == nil || ne.CR.Number != "1" {
+		t.Errorf("expected CR with number 1, got %+v", ne.CR)
+	}
+}
+
+func TestParseWebhookEvent_PRClosed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	body := `{"action":"closed","number":2,"sender":{"id":1,"login":"dev"},"repository":{"full_name":"owner/repo"},"pull_request":{"number":2,"title":"t","state":"closed","merged":false,"head":{"ref":"f","sha":"abc"},"base":{"ref":"main"},"html_url":"https://codeberg.org/owner/repo/pulls/2","user":{"id":1,"login":"dev"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("X-Forgejo-Event", "pull_request")
+	r.Header.Set("Content-Type", "application/json")
+	ne, err := p.ParseWebhookEvent(r, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "cr.closed" {
+		t.Errorf("expected cr.closed, got %s", ne.Type)
+	}
+}
+
+func TestParseWebhookEvent_Push(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	body := `{"ref":"refs/heads/main","after":"abc123","sender":{"id":1,"login":"dev"},"repository":{"full_name":"owner/repo"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("X-Forgejo-Event", "push")
+	r.Header.Set("Content-Type", "application/json")
+	ne, err := p.ParseWebhookEvent(r, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "push" {
+		t.Errorf("expected push, got %s", ne.Type)
+	}
+	if ne.Branch != "main" {
+		t.Errorf("expected main, got %s", ne.Branch)
+	}
+	if ne.CommitSHA != "abc123" {
+		t.Errorf("expected abc123, got %s", ne.CommitSHA)
+	}
+	if ne.Repo == nil || ne.Repo.FullName != "owner/repo" {
+		t.Errorf("expected repo owner/repo, got %+v", ne.Repo)
+	}
+}
+
+func TestParseWebhookEvent_BranchCreated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	body := `{"ref":"feature","sender":{"id":1,"login":"dev"},"repository":{"full_name":"owner/repo"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("X-Forgejo-Event", "create")
+	r.Header.Set("Content-Type", "application/json")
+	ne, err := p.ParseWebhookEvent(r, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "branch.created" {
+		t.Errorf("expected branch.created, got %s", ne.Type)
+	}
+	if ne.Branch != "feature" {
+		t.Errorf("expected feature, got %s", ne.Branch)
+	}
+}
+
+func TestParseWebhookEvent_BranchDeleted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	body := `{"ref":"feature","sender":{"id":1,"login":"dev"},"repository":{"full_name":"owner/repo"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("X-Forgejo-Event", "delete")
+	r.Header.Set("Content-Type", "application/json")
+	ne, err := p.ParseWebhookEvent(r, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "branch.deleted" {
+		t.Errorf("expected branch.deleted, got %s", ne.Type)
+	}
+	if ne.Branch != "feature" {
+		t.Errorf("expected feature, got %s", ne.Branch)
+	}
+}
+
 func TestProvider_ImplementsProvider(t *testing.T) {
 	var _ provider.Provider = (*forgejo.Provider)(nil)
 }

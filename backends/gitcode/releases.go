@@ -128,21 +128,4 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	return data, nil
 }
 
-func convertRelease(r *gitcode.Release) *provider.ReleaseInfo {
-	if r == nil {
-		return nil
-	}
-	return &provider.ReleaseInfo{
-		ID:          r.ID,
-		TagName:     r.TagName,
-		Title:       r.Name,
-		Body:        r.Body,
-		URL:         r.HTMLURL,
-		Draft:       r.Draft,
-		Prerelease:  r.Prerelease,
-		CreatedAt:   r.CreatedAt,
-		PublishedAt: r.PublishedAt,
-	}
-}
-
 var _ provider.ReleaseManager = (*Provider)(nil)

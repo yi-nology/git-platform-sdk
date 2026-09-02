@@ -98,16 +98,4 @@ func (p *Provider) DeleteBranchProtection(ctx context.Context, owner, repo, bran
 	return nil
 }
 
-// convertBranchProtectionRule maps a gitcode.BranchProtectionRule to a
-// provider.BranchProtection.
-func convertBranchProtectionRule(r *gitcode.BranchProtectionRule) *provider.BranchProtection {
-	return &provider.BranchProtection{
-		BranchName:               r.Name,
-		RequiredApprovingReviews: r.RequiredApprovingReviews,
-		RequiredStatusChecks:     r.RequiredStatusChecks,
-		AllowForcePushes:         r.AllowForcePushes,
-		AllowDeletions:           r.AllowDeletions,
-	}
-}
-
 var _ provider.BranchProtectionManager = (*Provider)(nil)

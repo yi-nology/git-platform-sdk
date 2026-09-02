@@ -3,7 +3,6 @@ package gitcode
 import (
 	"context"
 	"strconv"
-	"strings"
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
@@ -148,48 +147,6 @@ func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string
 		return provider.Wrap(provider.PlatformGitCode, "DismissReview", err)
 	}
 	return nil
-}
-
-// convertReview maps a gitcode PullRequestReview to a provider.Review,
-// normalizing the UPPERCASE wire states to the SDK's lowercase ReviewState
-// constants. GitCode carries the author under "user" with an "author"
-// fallback, and exposes only created_at, which is reported as SubmittedAt.
-// Unknown states pass through lowercased rather than being silently dropped,
-// matching the GitHub backend.
-func convertReview(r *gitcode.PullRequestReview) provider.Review {
-	var review provider.Review
-	if r == nil {
-		return review
-	}
-	review = provider.Review{
-		ID:   r.ID,
-		Body: r.Body,
-	}
-	user := r.User
-	if user == nil {
-		user = r.Author
-	}
-	if user != nil {
-		review.User = user.Login
-	}
-	switch r.State {
-	case "APPROVED":
-		review.State = provider.ReviewStateApproved
-	case "CHANGES_REQUESTED":
-		review.State = provider.ReviewStateChangesRequested
-	case "COMMENTED":
-		review.State = provider.ReviewStateCommented
-	case "PENDING":
-		review.State = provider.ReviewStatePending
-	default:
-		if r.State != "" {
-			review.State = provider.ReviewState(strings.ToLower(r.State))
-		}
-	}
-	if !r.CreatedAt.IsZero() {
-		review.SubmittedAt = r.CreatedAt
-	}
-	return review
 }
 
 var _ provider.ReviewManager = (*Provider)(nil)

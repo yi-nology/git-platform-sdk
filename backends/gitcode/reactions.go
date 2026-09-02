@@ -92,23 +92,10 @@ func (p *Provider) RemoveCRCommentReaction(ctx context.Context, owner, repo stri
 
 func listOpts() gitcode.ListOptions { return gitcode.ListOptions{PerPage: 100} }
 
-func convertReactions(in []*gitcode.Reaction) []*provider.Reaction {
-	out := make([]*provider.Reaction, 0, len(in))
-	for _, r := range in {
-		out = append(out, convertReaction(r))
-	}
-	return out
-}
-
-func convertReaction(r *gitcode.Reaction) *provider.Reaction {
-	if r == nil {
-		return nil
-	}
-	return &provider.Reaction{
-		ID:    r.ID,
-		Emoji: r.Content,
-		User:  convertUser(r.User),
-	}
+// ListCRReactions implements provider.ReactionManager. On GitCode, PRs share
+// the issue reaction API.
+func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
+	return p.ListIssueReactions(ctx, owner, repo, number)
 }
 
 var _ provider.ReactionManager = (*Provider)(nil)

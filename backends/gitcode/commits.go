@@ -80,19 +80,6 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 	return nil
 }
 
-func convertCommit(c *gitcode.Commit) *provider.CommitInfo {
-	if c == nil {
-		return nil
-	}
-	ci := &provider.CommitInfo{SHA: c.SHA, Message: c.Message, CreatedAt: c.CreatedAt}
-	if c.Author != nil {
-		authorID, _ := parseGitCodeID(c.Author.ID)
-		ci.Author = &provider.CRUser{
-			ID: authorID, Username: c.Author.Login, AvatarURL: c.Author.AvatarURL,
-		}
-	}
-	return ci
-}
-
 var _ provider.CommitManager = (*Provider)(nil)
+
 var _ provider.CommitStatusManager = (*Provider)(nil)

@@ -45,6 +45,20 @@ func (p *Provider) RemoveIssueReaction(ctx context.Context, owner, repo, number 
 	return provider.Wrap(provider.PlatformGitHub, "RemoveIssueReaction", err)
 }
 
+// ListCRReactions implements provider.ReactionManager.
+// On GitHub, PRs share the issue reactions API.
+func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
+	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "ListCRReactions", number)
+	if err != nil {
+		return nil, err
+	}
+	reactions, _, err := p.client.Reactions.ListIssueReactions(ctx, owner, repo, n, nil)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRReactions", err)
+	}
+	return convertReactions(reactions), nil
+}
+
 // ListIssueCommentReactions implements provider.ReactionManager.
 func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
 	reactions, _, err := p.client.Reactions.ListIssueCommentReactions(ctx, owner, repo, commentID, nil)
