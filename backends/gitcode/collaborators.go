@@ -40,16 +40,4 @@ func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username
 	return nil
 }
 
-// convertCollaborator maps a gitcode.Collaborator to a provider.Collaborator.
-func convertCollaborator(c *gitcode.Collaborator) *provider.Collaborator {
-	if c == nil {
-		return nil
-	}
-	return &provider.Collaborator{
-		ID:         c.ID,
-		Username:   c.Login,
-		Permission: c.Permission,
-	}
-}
-
 var _ provider.CollaboratorManager = (*Provider)(nil)

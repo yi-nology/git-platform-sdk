@@ -43,17 +43,4 @@ func (p *Provider) DeleteDeployKey(ctx context.Context, owner, repo string, keyI
 	return nil
 }
 
-// convertDeployKey maps a gitcode.DeployKey to a provider.DeployKey.
-func convertDeployKey(k *gitcode.DeployKey) *provider.DeployKey {
-	if k == nil {
-		return nil
-	}
-	return &provider.DeployKey{
-		ID:       k.ID,
-		Title:    k.Title,
-		Key:      k.Key,
-		ReadOnly: k.ReadOnly,
-	}
-}
-
 var _ provider.DeploymentKeyManager = (*Provider)(nil)

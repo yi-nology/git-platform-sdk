@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 	"time"
 
 	gitcode "github.com/yi-nology/go-gitcode"
@@ -150,24 +149,6 @@ func (p *Provider) doJSON(ctx context.Context, method, path string, body, result
 		Result: result,
 	})
 	return err
-}
-
-// convertMilestone maps a gitcode.Milestone to a provider.Milestone.
-// Number carries the GitCode milestone ID (the identifier the write
-// endpoints take).
-func convertMilestone(m *gitcode.Milestone) provider.Milestone {
-	var ms provider.Milestone
-	if m == nil {
-		return ms
-	}
-	ms = provider.Milestone{
-		Number:      strconv.FormatInt(m.ID, 10),
-		Title:       m.Title,
-		Description: m.Description,
-		State:       provider.MilestoneState(m.State),
-		DueOn:       m.DueDate,
-	}
-	return ms
 }
 
 var _ provider.MilestoneManager = (*Provider)(nil)

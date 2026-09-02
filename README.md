@@ -64,13 +64,13 @@ func main() {
 
 | Platform | Status | Coverage |
 |----------|--------|----------|
-| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
-| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
-| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
-| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
-| Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Search |
-| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses |
-| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/CommitStatuses + exclusive features |
+| GitHub | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses/Notifications/Reactions/BranchProtection/Collaborators/DeployKeys/RepoStats |
+| GitLab | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses/Notifications/Reactions/BranchProtection/DeployKeys/RepoStats/Users |
+| Gitea | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses/Notifications/Reactions/BranchProtection/Collaborators/DeployKeys/RepoStats |
+| Forgejo | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses/Notifications/Reactions/BranchProtection/Collaborators/DeployKeys/RepoStats |
+| Gitee | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Search/Notifications/BranchProtection/Collaborators/DeployKeys/CommitStatuses/RepoStats |
+| GitCode | ✅ Stable | Repos/PR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/Search/CommitStatuses/Notifications/Reactions/BranchProtection/Collaborators/DeployKeys/RepoStats |
+| Tencent Code | ✅ Stable | Repos/MR/Webhook/Branches/Commits/Files/Release/Labels/Issues/Milestones/Reviews/CommitStatuses/RepoStats/Users + exclusive features |
 
 ### Installation
 

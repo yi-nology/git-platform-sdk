@@ -152,11 +152,9 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 
 	switch eventType {
 	case "pull_request":
-		action := pl.Action
-		if action == "closed" && pl.PullRequest != nil && pl.PullRequest.Merged {
-			action = "merged"
-		}
+		action := provider.NormalizeCRAction(pl.Action, pl.PullRequest != nil && pl.PullRequest.Merged)
 		event.Type = "cr." + action
+		event.Action = action
 		if pl.PullRequest != nil {
 			event.CommitSHA = pl.PullRequest.Head.SHA
 			event.CR = &provider.ChangeRequest{
@@ -180,7 +178,12 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		}
 	case "push":
 		event.Type = "push"
+		event.Action = "push"
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
+		event.CommitSHA = pl.After
+	case "tag_push":
+		event.Type = "tag.created"
+		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
 		event.CommitSHA = pl.After
 	case "create":
 		event.Type = "branch.created"

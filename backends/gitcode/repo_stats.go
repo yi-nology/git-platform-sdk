@@ -56,27 +56,4 @@ func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]
 	return result, nil
 }
 
-// convertGitcodeRepo maps a gitcode.Repository to a provider.PlatformRepo.
-func convertGitcodeRepo(r *gitcode.Repository) *provider.PlatformRepo {
-	if r == nil {
-		return nil
-	}
-	owner := ""
-	if r.Owner != nil {
-		owner = r.Owner.Login
-	}
-	return &provider.PlatformRepo{
-		ID:            r.ID,
-		FullName:      r.FullName,
-		Name:          r.Name,
-		Owner:         owner,
-		Description:   r.Description,
-		CloneURL:      r.CloneURL,
-		SSHURL:        r.SSHURL,
-		DefaultBranch: r.DefaultBranch,
-		Private:       r.Private,
-		Platform:      provider.PlatformGitCode,
-	}
-}
-
 var _ provider.RepoStatsManager = (*Provider)(nil)

@@ -70,6 +70,19 @@ func (p *Provider) RemoveIssueReaction(ctx context.Context, owner, repo, number 
 	return provider.Wrap(provider.PlatformGitLab, "RemoveIssueReaction", err)
 }
 
+// ListCRReactions implements provider.ReactionManager.
+func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "ListCRReactions", number)
+	if err != nil {
+		return nil, err
+	}
+	emojis, _, err := p.client.AwardEmoji.ListMergeRequestAwardEmoji(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListCRReactions", err)
+	}
+	return convertAwardEmojis(emojis), nil
+}
+
 // ListIssueCommentReactions implements provider.ReactionManager.
 // On GitLab, issue comments are "notes" on the issue.
 func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {

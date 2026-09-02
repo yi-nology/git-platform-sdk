@@ -63,17 +63,4 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 	return nil
 }
 
-// convertLabel maps a gitcode.Label to a provider.Label. GitCode labels have
-// no description, so Description is always empty.
-func convertLabel(l *gitcode.Label) *provider.Label {
-	if l == nil {
-		return nil
-	}
-	return &provider.Label{
-		ID:    l.ID,
-		Name:  l.Name,
-		Color: strings.TrimPrefix(l.Color, "#"),
-	}
-}
-
 var _ provider.LabelManager = (*Provider)(nil)

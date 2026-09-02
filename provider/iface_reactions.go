@@ -30,6 +30,8 @@ type ReactionManager interface {
 	// RemoveIssueCommentReaction removes a reaction by its platform ID.
 	RemoveIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, reactionID int64) error
 
+	// ListCRReactions returns all reactions on a change request (PR/MR).
+	ListCRReactions(ctx context.Context, owner, repo, number string) ([]*Reaction, error)
 	// ListCRCommentReactions returns all reactions on a change-request
 	// comment (PR review comment / MR note).
 	ListCRCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*Reaction, error)

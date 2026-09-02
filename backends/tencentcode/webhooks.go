@@ -166,11 +166,9 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	switch pl.ObjectKind {
 	case "merge_request":
 		state := mapState(pl.ObjectAttributes.State)
-		action := pl.ObjectAttributes.Action
-		if action == "merge" {
-			action = "merged"
-		}
+		action := provider.NormalizeCRAction(pl.ObjectAttributes.Action, state == provider.CRStateMerged)
 		event.Type = "cr." + action
+		event.Action = action
 		event.CommitSHA = pl.ObjectAttributes.LastCommit.ID
 		headSHA, baseSHA, startSHA := provider.ResolveMRSHAs(
 			pl.ObjectAttributes.DiffRefs.HeadSHA,
