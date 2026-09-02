@@ -33,7 +33,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 	}
 	milestones, _, err := p.client.Milestones.ListMilestones(ctx, pid(owner, repo), listOpts)
 	if err != nil {
-		return nil, sdkError("ListMilestones", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListMilestones", err)
 	}
 	result := make([]provider.Milestone, 0, len(milestones))
 	for _, ms := range milestones {
@@ -50,7 +50,7 @@ func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string)
 	}
 	ms, _, err := p.client.Milestones.GetMilestone(ctx, pid(owner, repo), int(id64))
 	if err != nil {
-		return nil, sdkError("GetMilestone", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetMilestone", err)
 	}
 	out := convertMilestone(ms)
 	return &out, nil
@@ -67,7 +67,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 	}
 	ms, _, err := p.client.Milestones.CreateMilestone(ctx, pid(owner, repo), createOpts)
 	if err != nil {
-		return nil, sdkError("CreateMilestone", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateMilestone", err)
 	}
 	out := convertMilestone(ms)
 	return &out, nil
@@ -102,7 +102,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	}
 	ms, _, err := p.client.Milestones.EditMilestone(ctx, pid(owner, repo), int(id64), editOpts)
 	if err != nil {
-		return nil, sdkError("UpdateMilestone", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateMilestone", err)
 	}
 	out := convertMilestone(ms)
 	return &out, nil
@@ -115,7 +115,7 @@ func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number stri
 		return err
 	}
 	if _, err := p.client.Milestones.DeleteMilestone(ctx, pid(owner, repo), int(id64)); err != nil {
-		return sdkError("DeleteMilestone", err)
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteMilestone", err)
 	}
 	return nil
 }

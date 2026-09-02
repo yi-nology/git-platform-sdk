@@ -12,7 +12,7 @@ func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*pro
 	pid := owner + "/" + repo
 	branches, _, err := p.client.Branches.ListBranches(ctx, pid, nil)
 	if err != nil {
-		return nil, sdkError("ListBranches", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListBranches", err)
 	}
 	result := make([]*provider.PlatformBranch, 0, len(branches))
 	for _, b := range branches {
@@ -30,7 +30,7 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 	}
 	b, _, err := p.client.Branches.CreateBranch(ctx, pid, opts)
 	if err != nil {
-		return nil, sdkError("CreateBranch", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateBranch", err)
 	}
 	return convertBranch(b), nil
 }
@@ -40,7 +40,7 @@ func (p *Provider) DeleteBranch(ctx context.Context, owner, repo, branch string)
 	pid := owner + "/" + repo
 	_, err := p.client.Branches.DeleteBranch(ctx, pid, branch)
 	if err != nil {
-		return sdkError("DeleteBranch", err)
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteBranch", err)
 	}
 	return nil
 }

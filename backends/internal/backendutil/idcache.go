@@ -46,3 +46,23 @@ func (c *IDCache) Put(key string, id int64) {
 	}
 	c.entries[key] = idCacheEntry{id: id, expiresAt: expiresAt}
 }
+
+// Evict removes all expired entries from the cache. Call this periodically
+// to prevent unbounded memory growth in long-lived processes.
+func (c *IDCache) Evict() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+	for k, e := range c.entries {
+		if c.ttl > 0 && !now.Before(e.expiresAt) {
+			delete(c.entries, k)
+		}
+	}
+}
+
+// Len returns the number of entries in the cache (including stale ones).
+func (c *IDCache) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.entries)
+}

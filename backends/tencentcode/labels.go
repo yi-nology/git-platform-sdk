@@ -33,7 +33,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 	}
 	labels, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo), listOpts)
 	if err != nil {
-		return nil, sdkError("ListLabels", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListLabels", err)
 	}
 	result := make([]*provider.Label, 0, len(labels))
 	for _, l := range labels {
@@ -54,7 +54,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 	}
 	label, _, err := p.client.Labels.CreateLabel(ctx, pid(owner, repo), createOpts)
 	if err != nil {
-		return nil, sdkError("CreateLabel", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -77,7 +77,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	}
 	label, _, err := p.client.Labels.UpdateLabel(ctx, pid(owner, repo), updateOpts)
 	if err != nil {
-		return nil, sdkError("UpdateLabel", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -88,7 +88,7 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 	if _, err := p.client.Labels.DeleteLabel(ctx, pid(owner, repo), &gongfeng.DeleteLabelOptions{
 		Name: gongfeng.Ptr(name),
 	}); err != nil {
-		return sdkError("DeleteLabel", err)
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteLabel", err)
 	}
 	return nil
 }

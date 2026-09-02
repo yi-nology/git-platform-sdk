@@ -25,7 +25,7 @@ func (p *Provider) resolveUserIDs(ctx context.Context, op string, usernames []st
 		if err != nil {
 			// Wrap classifies a 404 lookup as NotFound, so an unknown
 			// username keeps the unified "user not found" shape.
-			return nil, sdkError(op, err)
+			return nil, provider.Wrap(provider.PlatformTencentCode, op, err)
 		}
 		if u == nil || u.ID == 0 {
 			return nil, provider.New(provider.PlatformTencentCode, op, http.StatusNotFound,
@@ -51,7 +51,7 @@ func assigneeIDsCSV(ids []int) string {
 func (p *Provider) GetUser(ctx context.Context, username string) (*provider.CRUser, error) {
 	u, _, err := p.client.Users.GetUser(ctx, username)
 	if err != nil {
-		return nil, sdkError("GetUser", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetUser", err)
 	}
 	if u == nil || u.ID == 0 {
 		return nil, provider.New(provider.PlatformTencentCode, "GetUser", http.StatusNotFound,

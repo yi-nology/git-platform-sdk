@@ -52,7 +52,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	}
 	issues, resp, err := p.client.Issues.ListIssues(ctx, pid(opts.Owner, opts.Repo), listOpts)
 	if err != nil {
-		return nil, 0, sdkError("ListIssues", err)
+		return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListIssues", err)
 	}
 	result := make([]*provider.Issue, 0, len(issues))
 	for _, i := range issues {
@@ -69,7 +69,7 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 	}
 	issue, _, err := p.client.Issues.GetIssue(ctx, pid(owner, repo), n)
 	if err != nil {
-		return nil, sdkError("GetIssue", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -101,7 +101,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	}
 	issue, _, err := p.client.Issues.CreateIssue(ctx, pid(opts.Owner, opts.Repo), createOpts)
 	if err != nil {
-		return nil, sdkError("CreateIssue", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -148,7 +148,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, updateOpts)
 	if err != nil {
-		return nil, sdkError("UpdateIssue", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -162,7 +162,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 	issue, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n,
 		&gongfeng.UpdateIssueOptions{StateEvent: gongfeng.Ptr("close")})
 	if err != nil {
-		return nil, sdkError("CloseIssue", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CloseIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -176,7 +176,7 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	issue, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n,
 		&gongfeng.UpdateIssueOptions{StateEvent: gongfeng.Ptr("reopen")})
 	if err != nil {
-		return nil, sdkError("ReopenIssue", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ReopenIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -196,7 +196,7 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 		return batch, err
 	})
 	if err != nil {
-		return nil, sdkError("ListIssueComments", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListIssueComments", err)
 	}
 	result := make([]*provider.IssueComment, 0, len(notes))
 	for _, note := range notes {
@@ -214,7 +214,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	note, _, err := p.client.Notes.CreateIssueNote(ctx, pid(owner, repo), n,
 		&gongfeng.CreateIssueNoteOptions{Body: gongfeng.Ptr(body)})
 	if err != nil {
-		return nil, sdkError("CreateIssueComment", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateIssueComment", err)
 	}
 	return convertIssueComment(note), nil
 }
@@ -230,7 +230,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	note, _, err := p.client.Notes.UpdateIssueNote(ctx, pid(owner, repo), n, int(commentID),
 		&gongfeng.UpdateIssueNoteOptions{Body: gongfeng.Ptr(body)})
 	if err != nil {
-		return nil, sdkError("UpdateIssueComment", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateIssueComment", err)
 	}
 	return convertIssueComment(note), nil
 }
@@ -245,7 +245,7 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 		return batch, err
 	})
 	if err != nil {
-		return nil, sdkError("ListIssueLabels", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListIssueLabels", err)
 	}
 	result := make([]*provider.IssueLabel, 0, len(labels))
 	for _, l := range labels {
@@ -264,11 +264,11 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 	}
 	issue, _, err := p.client.Issues.GetIssue(ctx, pid(owner, repo), n)
 	if err != nil {
-		return sdkError("AddIssueLabels", err)
+		return provider.Wrap(provider.PlatformTencentCode, "AddIssueLabels", err)
 	}
 	merged := unionLabels(issue.Labels, labels)
 	if _, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, labelUpdate(merged)); err != nil {
-		return sdkError("AddIssueLabels", err)
+		return provider.Wrap(provider.PlatformTencentCode, "AddIssueLabels", err)
 	}
 	return nil
 }
@@ -286,7 +286,7 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	}
 	issue, _, err := p.client.Issues.GetIssue(ctx, pid(owner, repo), n)
 	if err != nil {
-		return sdkError("RemoveIssueLabel", err)
+		return provider.Wrap(provider.PlatformTencentCode, "RemoveIssueLabel", err)
 	}
 	remaining := make([]string, 0, len(issue.Labels))
 	for _, l := range issue.Labels {
@@ -295,7 +295,7 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 		}
 	}
 	if _, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, labelUpdate(remaining)); err != nil {
-		return sdkError("RemoveIssueLabel", err)
+		return provider.Wrap(provider.PlatformTencentCode, "RemoveIssueLabel", err)
 	}
 	return nil
 }

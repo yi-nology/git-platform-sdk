@@ -18,7 +18,7 @@ func (p *Provider) ListForks(_ context.Context, _, _ string) ([]*provider.Platfo
 func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
 	stars, _, err := p.client.Projects.ListProjectStars(ctx, pid(owner, repo), nil)
 	if err != nil {
-		return nil, sdkError("ListStargazers", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListStargazers", err)
 	}
 	result := make([]*provider.CRUser, 0, len(stars))
 	for _, s := range stars {

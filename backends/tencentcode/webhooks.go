@@ -38,7 +38,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	}
 	hook, _, err := p.client.Webhooks.AddWebhook(ctx, pid, addOpts)
 	if err != nil {
-		return nil, sdkError("CreateWebhook", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateWebhook", err)
 	}
 	return convertWebhook(hook), nil
 }
@@ -48,7 +48,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 	pid := owner + "/" + repo
 	_, err := p.client.Webhooks.DeleteWebhook(ctx, pid, int(webhookID))
 	if err != nil {
-		return sdkError("DeleteWebhook", err)
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteWebhook", err)
 	}
 	return nil
 }
@@ -58,7 +58,7 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 	pid := owner + "/" + repo
 	hooks, _, err := p.client.Webhooks.ListWebhooks(ctx, pid, nil)
 	if err != nil {
-		return nil, sdkError("ListWebhooks", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListWebhooks", err)
 	}
 	result := make([]*provider.PlatformWebhook, 0, len(hooks))
 	for _, wh := range hooks {
