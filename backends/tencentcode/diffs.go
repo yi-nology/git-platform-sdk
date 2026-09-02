@@ -20,7 +20,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 	pid := owner + "/" + repo
 	changes, _, err := p.client.MergeRequests.GetMergeRequestChanges(ctx, pid, n)
 	if err != nil {
-		return nil, sdkError("GetCRDiff", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCRDiff", err)
 	}
 	files := make([]*provider.ChangedFile, 0, len(changes.Files))
 	totalAdd, totalDel := 0, 0
@@ -54,7 +54,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 	}
 	note, _, err := p.client.Notes.CreateMergeRequestNote(ctx, pid, n, opts)
 	if err != nil {
-		return "", sdkError("CreateNote", err)
+		return "", provider.Wrap(provider.PlatformTencentCode, "CreateNote", err)
 	}
 	return fmt.Sprintf("%d", note.ID), nil
 }
@@ -73,7 +73,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 		return provider.Wrap(provider.PlatformTencentCode, "DeleteNote", err)
 	}
 	if _, err := p.client.Do(req, nil); err != nil {
-		return sdkError("DeleteNote", err)
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteNote", err)
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 		ID int64 `json:"id"`
 	}
 	if _, err := p.client.Do(req, &resp); err != nil {
-		return "", sdkError("CreateDiscussion", err)
+		return "", provider.Wrap(provider.PlatformTencentCode, "CreateDiscussion", err)
 	}
 	return strconv.FormatInt(resp.ID, 10), nil
 }

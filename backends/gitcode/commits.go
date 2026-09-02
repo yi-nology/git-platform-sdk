@@ -2,7 +2,6 @@ package gitcode
 
 import (
 	"context"
-	"strconv"
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
@@ -87,7 +86,7 @@ func convertCommit(c *gitcode.Commit) *provider.CommitInfo {
 	}
 	ci := &provider.CommitInfo{SHA: c.SHA, Message: c.Message, CreatedAt: c.CreatedAt}
 	if c.Author != nil {
-		authorID, _ := strconv.ParseInt(string(c.Author.ID), 10, 64)
+		authorID, _ := parseGitCodeID(c.Author.ID)
 		ci.Author = &provider.CRUser{
 			ID: authorID, Username: c.Author.Login, AvatarURL: c.Author.AvatarURL,
 		}

@@ -47,7 +47,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 	}
 	note, _, err := p.client.Notes.CreateMergeRequestNote(ctx, pid(owner, repo), n, createOpts)
 	if err != nil {
-		return nil, sdkError("CreateReview", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateReview", err)
 	}
 	return convertReviewNoteResult(note), nil
 }
@@ -63,7 +63,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 	}
 	notes, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid(owner, repo), n, nil)
 	if err != nil {
-		return nil, sdkError("ListReviews", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListReviews", err)
 	}
 	reviews := make([]provider.Review, 0, len(notes))
 	for _, note := range notes {
@@ -86,7 +86,7 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 	}
 	note, _, err := p.client.Notes.GetMergeRequestNote(ctx, pid(owner, repo), n, int(reviewID))
 	if err != nil {
-		return nil, sdkError("GetReview", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetReview", err)
 	}
 	review := convertReviewNote(note)
 	return &review, nil

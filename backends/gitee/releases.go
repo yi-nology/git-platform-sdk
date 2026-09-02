@@ -2,15 +2,24 @@ package gitee
 
 import (
 	"context"
+	"io"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListTags implements provider.ReleaseManager.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	tags, _, err := p.client.Repositories.ListTags(ctx, esc(owner), esc(repo), nil)
+	tags, err := backendutil.AllPages(func(page int) ([]*gitee.Tag, error) {
+		opts := &gitee.ListTagsOptions{
+			Page:    gitee.Int(page),
+			PerPage: gitee.Int(backendutil.IssueCommentPageSize),
+		}
+		batch, _, err := p.client.Repositories.ListTags(ctx, esc(owner), esc(repo), opts)
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListTags", err)
 	}
@@ -23,12 +32,14 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 
 // ListReleases implements provider.ReleaseManager.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	page, perPage := provider.NormalizePageOpts(1, 0)
-	opts := &gitee.ListReleasesOptions{
-		Page:    gitee.Int(page),
-		PerPage: gitee.Int(perPage),
-	}
-	releases, _, err := p.client.Repositories.ListReleases(ctx, esc(owner), esc(repo), opts)
+	releases, err := backendutil.AllPages(func(page int) ([]*gitee.Release, error) {
+		opts := &gitee.ListReleasesOptions{
+			Page:    gitee.Int(page),
+			PerPage: gitee.Int(backendutil.IssueCommentPageSize),
+		}
+		batch, _, err := p.client.Repositories.ListReleases(ctx, esc(owner), esc(repo), opts)
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListReleases", err)
 	}
@@ -132,7 +143,10 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 			buf = append(buf, tmp[:n]...)
 		}
 		if readErr != nil {
-			break
+			if readErr == io.EOF {
+				break
+			}
+			return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", readErr)
 		}
 	}
 	return buf, nil

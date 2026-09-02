@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -142,6 +143,11 @@ const IssueCommentPageSize = 100
 // across all backends.
 const LabelPageSize = 100
 
+// LabelScanMaxPages is the maximum number of pages to scan when resolving
+// label names to IDs. At LabelPageSize items per page, this caps the scan
+// at 5000 labels.
+const LabelScanMaxPages = 50
+
 // --- Shared number parsing ---
 
 // ParseIssueNumber parses a string issue number into the platform's native
@@ -191,3 +197,7 @@ func ParseMilestoneNumber(platform provider.Platform, op, number string) (int64,
 	}
 	return n, nil
 }
+
+// Esc is a shared path-escaping helper used by backends whose platform
+// API paths contain owner/repo segments that may need URL encoding.
+func Esc(s string) string { return url.PathEscape(s) }

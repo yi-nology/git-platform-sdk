@@ -248,7 +248,7 @@ func convertUser(u *gitcode.User) *provider.CRUser {
 	if u == nil {
 		return nil
 	}
-	id, _ := strconv.ParseInt(string(u.ID), 10, 64)
+	id, _ := parseGitCodeID(u.ID)
 	return &provider.CRUser{
 		ID:        id,
 		Username:  u.Login,
@@ -259,6 +259,9 @@ func convertUser(u *gitcode.User) *provider.CRUser {
 
 // convertIssue maps a gitcode.Issue to a provider.Issue.
 func convertIssue(i *gitcode.Issue) *provider.Issue {
+	if i == nil {
+		return nil
+	}
 	labels := make([]string, 0, len(i.Labels))
 	for _, l := range i.Labels {
 		labels = append(labels, l.Name)
@@ -294,6 +297,9 @@ func convertIssue(i *gitcode.Issue) *provider.Issue {
 
 // convertIssueComment maps a gitcode.IssueComment to a provider.IssueComment.
 func convertIssueComment(c *gitcode.IssueComment) *provider.IssueComment {
+	if c == nil {
+		return nil
+	}
 	author := convertUser(c.Author)
 	if author == nil {
 		author = convertUser(c.User)

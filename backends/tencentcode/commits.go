@@ -12,7 +12,7 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 	pid := owner + "/" + repo
 	c, _, err := p.client.Commits.GetCommit(ctx, pid, sha)
 	if err != nil {
-		return nil, sdkError("GetCommit", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCommit", err)
 	}
 	return convertCommit(c), nil
 }
@@ -35,7 +35,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 	}
 	commits, _, err := p.client.Commits.ListCommits(ctx, pid, listOpts)
 	if err != nil {
-		return nil, sdkError("ListCommits", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
 	}
 	result := make([]*provider.CommitInfo, 0, len(commits))
 	for _, c := range commits {
@@ -53,7 +53,7 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 	}
 	cmp, _, err := p.client.Repositories.Compare(ctx, pid, opts)
 	if err != nil {
-		return nil, sdkError("CompareCommits", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CompareCommits", err)
 	}
 	result := &provider.CompareResult{TotalCommits: len(cmp.Commits)}
 	for _, c := range cmp.Commits {
@@ -78,7 +78,7 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 	}
 	_, _, err := p.client.CommitStatuses.CreateCommitStatus(ctx, pid, sha, statusOpts)
 	if err != nil {
-		return sdkError("CreateCommitStatus", err)
+		return provider.Wrap(provider.PlatformTencentCode, "CreateCommitStatus", err)
 	}
 	return nil
 }

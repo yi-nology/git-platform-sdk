@@ -13,7 +13,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 	pid := owner + "/" + repo
 	tags, _, err := p.client.Tags.ListTags(ctx, pid, nil)
 	if err != nil {
-		return nil, sdkError("ListTags", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListTags", err)
 	}
 	result := make([]*provider.TagInfo, 0, len(tags))
 	for _, t := range tags {
@@ -27,7 +27,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 	pid := owner + "/" + repo
 	releases, _, err := p.client.Releases.ListReleases(ctx, pid, nil)
 	if err != nil {
-		return nil, sdkError("ListReleases", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListReleases", err)
 	}
 	result := make([]*provider.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
@@ -45,7 +45,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	}
 	release, _, err := p.client.Releases.CreateRelease(ctx, pid, createOpts)
 	if err != nil {
-		return nil, sdkError("CreateRelease", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateRelease", err)
 	}
 	return convertRelease(release), nil
 }
@@ -56,7 +56,7 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 	pid := owner + "/" + repo
 	release, _, err := p.client.Releases.GetRelease(ctx, pid, tag)
 	if err != nil {
-		return nil, sdkError("GetReleaseByTag", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetReleaseByTag", err)
 	}
 	return convertRelease(release), nil
 }
@@ -78,7 +78,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	}
 	release, _, err := p.client.Releases.UpdateRelease(ctx, pid, tag, updateOpts)
 	if err != nil {
-		return nil, sdkError("UpdateRelease", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateRelease", err)
 	}
 	return convertRelease(release), nil
 }
@@ -89,7 +89,7 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 	pid := owner + "/" + repo
 	_, err := p.client.Releases.DeleteRelease(ctx, pid, tag)
 	if err != nil {
-		return sdkError("DeleteRelease", err)
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteRelease", err)
 	}
 	return nil
 }
@@ -104,7 +104,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	}
 	_, err := p.client.Repositories.Archive(ctx, pid, &buf, opts)
 	if err != nil {
-		return nil, sdkError("GetArchive", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetArchive", err)
 	}
 	return buf.Bytes(), nil
 }

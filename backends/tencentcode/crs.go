@@ -23,7 +23,7 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 	}
 	mr, _, err := p.client.MergeRequests.CreateMergeRequest(ctx, pid, createOpts)
 	if err != nil {
-		return nil, sdkError("CreateCR", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateCR", err)
 	}
 	return convertMR(mr), nil
 }
@@ -37,7 +37,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 	pid := owner + "/" + repo
 	mr, _, err := p.client.MergeRequests.GetMergeRequest(ctx, pid, n)
 	if err != nil {
-		return nil, sdkError("GetCR", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCR", err)
 	}
 	return convertMR(mr), nil
 }
@@ -54,7 +54,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	mrs, resp, err := p.client.MergeRequests.ListMergeRequests(ctx, pid, listOpts)
 	if err != nil {
-		return nil, 0, sdkError("ListCRs", err)
+		return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
 	}
 	crs := make([]*provider.ChangeRequest, 0, len(mrs))
 	for _, mr := range mrs {
@@ -101,7 +101,7 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
-		return nil, sdkError("CloseCR", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CloseCR", err)
 	}
 	return convertMR(mr), nil
 }
@@ -118,7 +118,7 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
-		return nil, sdkError("ReopenCR", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ReopenCR", err)
 	}
 	return convertMR(mr), nil
 }
@@ -142,7 +142,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
-		return nil, sdkError("UpdateCR", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateCR", err)
 	}
 	return convertMR(mr), nil
 }
@@ -163,7 +163,7 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	pid := owner + "/" + repo
 	notes, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid, n, nil)
 	if err != nil {
-		return nil, sdkError("ListCRComments", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCRComments", err)
 	}
 	result := make([]*provider.CRComment, 0, len(notes))
 	for _, n := range notes {
@@ -190,7 +190,7 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 	pid := owner + "/" + repo
 	commits, _, err := p.client.MergeRequests.ListMergeRequestCommits(ctx, pid, n, nil)
 	if err != nil {
-		return nil, sdkError("ListCRCommits", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCRCommits", err)
 	}
 	result := make([]*provider.CRCommit, 0, len(commits))
 	for _, c := range commits {

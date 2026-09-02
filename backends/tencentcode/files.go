@@ -21,13 +21,13 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	}
 	file, _, err := p.client.Repositories.GetFile(ctx, pid, opts)
 	if err != nil {
-		return "", sdkError("GetFileContent", err)
+		return "", provider.Wrap(provider.PlatformTencentCode, "GetFileContent", err)
 	}
 	if file.Encoding == "base64" {
 		content := strings.ReplaceAll(file.Content, "\n", "")
 		decoded, err := base64.StdEncoding.DecodeString(content)
 		if err != nil {
-			return "", sdkError("GetFileContent", fmt.Errorf("decode base64 content: %w", err))
+			return "", provider.Wrap(provider.PlatformTencentCode, "GetFileContent", fmt.Errorf("decode base64 content: %w", err))
 		}
 		return string(decoded), nil
 	}
@@ -56,7 +56,7 @@ func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts prov
 	}
 	_, err := p.client.Repositories.DeleteFile(ctx, pid, deleteOpts)
 	if err != nil {
-		return nil, sdkError("DeleteFile", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "DeleteFile", err)
 	}
 	return &provider.FileResult{}, nil
 }
@@ -81,7 +81,7 @@ func (p *Provider) mutateFile(ctx context.Context, op, owner, repo string, opts 
 	if op == "CreateFile" {
 		file, _, err := p.client.Repositories.CreateFile(ctx, pid, createOpts)
 		if err != nil {
-			return nil, sdkError(op, err)
+			return nil, provider.Wrap(provider.PlatformTencentCode, op, err)
 		}
 		return &provider.FileResult{CommitSHA: file.CommitID}, nil
 	}
@@ -96,7 +96,7 @@ func (p *Provider) mutateFile(ctx context.Context, op, owner, repo string, opts 
 	}
 	file, _, err := p.client.Repositories.UpdateFile(ctx, pid, updateOpts)
 	if err != nil {
-		return nil, sdkError(op, err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, op, err)
 	}
 	return &provider.FileResult{CommitSHA: file.CommitID}, nil
 }

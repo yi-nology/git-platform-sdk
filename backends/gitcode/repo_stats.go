@@ -2,7 +2,6 @@ package gitcode
 
 import (
 	"context"
-	"strconv"
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
@@ -30,7 +29,7 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 	}
 	result := make([]*provider.CRUser, 0, len(stargazers))
 	for _, u := range stargazers {
-		id, _ := strconv.ParseInt(string(u.ID), 10, 64)
+		id, _ := parseGitCodeID(u.ID)
 		result = append(result, &provider.CRUser{
 			ID:        id,
 			Username:  u.Login,

@@ -255,7 +255,7 @@ func (t *Provider) CreateCodeReview(ctx context.Context, owner, repo string, opt
 	}
 	review, _, err := t.client.Reviews.CreateCommitReview(ctx, pid(owner, repo), sdkOpts)
 	if err != nil {
-		return nil, sdkError("CreateCodeReview", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateCodeReview", err)
 	}
 	return reviewToCodeReview(review), nil
 }
@@ -279,7 +279,7 @@ func (t *Provider) ListCodeReviews(ctx context.Context, owner, repo string, opts
 	}
 	reviews, _, err := t.client.Reviews.ListCommitReviews(ctx, pid(owner, repo), sdkOpts)
 	if err != nil {
-		return nil, sdkError("ListCodeReviews", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCodeReviews", err)
 	}
 	result := make([]*CodeReview, 0, len(reviews))
 	for _, r := range reviews {
@@ -291,7 +291,7 @@ func (t *Provider) ListCodeReviews(ctx context.Context, owner, repo string, opts
 func (t *Provider) GetCodeReview(ctx context.Context, owner, repo string, reviewID int) (*CodeReview, error) {
 	review, _, err := t.client.Reviews.GetCommitReview(ctx, pid(owner, repo), reviewID)
 	if err != nil {
-		return nil, sdkError("GetCodeReview", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCodeReview", err)
 	}
 	return reviewToCodeReview(review), nil
 }
@@ -303,7 +303,7 @@ func (t *Provider) UpdateCodeReview(ctx context.Context, owner, repo string, rev
 	}
 	review, _, err := t.client.Reviews.UpdateCommitReview(ctx, pid(owner, repo), reviewID, sdkOpts)
 	if err != nil {
-		return nil, sdkError("UpdateCodeReview", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateCodeReview", err)
 	}
 	return reviewToCodeReview(review), nil
 }
@@ -322,7 +322,7 @@ func (t *Provider) InviteCodeReviewer(ctx context.Context, owner, repo string, r
 	}
 	_, err := t.client.Reviews.InviteCommitReviewer(ctx, pid(owner, repo), reviewID, sdkOpts)
 	if err != nil {
-		return sdkError("InviteCodeReviewer", err)
+		return provider.Wrap(provider.PlatformTencentCode, "InviteCodeReviewer", err)
 	}
 	return nil
 }
@@ -334,7 +334,7 @@ func (t *Provider) RemoveCodeReviewer(ctx context.Context, owner, repo string, r
 	}
 	_, err := t.client.Reviews.RemoveCommitReviewer(ctx, pid(owner, repo), reviewID, sdkOpts)
 	if err != nil {
-		return sdkError("RemoveCodeReviewer", err)
+		return provider.Wrap(provider.PlatformTencentCode, "RemoveCodeReviewer", err)
 	}
 	return nil
 }
@@ -346,7 +346,7 @@ func (t *Provider) SubmitCodeReview(ctx context.Context, owner, repo string, rev
 	}
 	_, _, err := t.client.Reviews.SubmitCommitReviewSummary(ctx, pid(owner, repo), reviewID, sdkOpts)
 	if err != nil {
-		return sdkError("SubmitCodeReview", err)
+		return provider.Wrap(provider.PlatformTencentCode, "SubmitCodeReview", err)
 	}
 	return nil
 }
@@ -354,7 +354,7 @@ func (t *Provider) SubmitCodeReview(ctx context.Context, owner, repo string, rev
 func (t *Provider) ReopenCodeReview(ctx context.Context, owner, repo string, reviewID int) error {
 	_, _, err := t.client.Reviews.ReopenCommitReview(ctx, pid(owner, repo), reviewID)
 	if err != nil {
-		return sdkError("ReopenCodeReview", err)
+		return provider.Wrap(provider.PlatformTencentCode, "ReopenCodeReview", err)
 	}
 	return nil
 }
@@ -378,7 +378,7 @@ func (t *Provider) GetCodeReviewChangedFiles(ctx context.Context, owner, repo st
 func (t *Provider) GetMRReview(ctx context.Context, owner, repo string, mrNumber int) (*MRReview, error) {
 	review, _, err := t.client.Reviews.GetMRReview(ctx, pid(owner, repo), mrNumber)
 	if err != nil {
-		return nil, sdkError("GetMRReview", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetMRReview", err)
 	}
 	return reviewToMRReview(review), nil
 }
@@ -397,7 +397,7 @@ func (t *Provider) InviteMRReviewer(ctx context.Context, owner, repo string, mrN
 	}
 	_, err := t.client.Reviews.InviteMRReviewer(ctx, pid(owner, repo), mrNumber, sdkOpts)
 	if err != nil {
-		return sdkError("InviteMRReviewer", err)
+		return provider.Wrap(provider.PlatformTencentCode, "InviteMRReviewer", err)
 	}
 	return nil
 }
@@ -408,7 +408,7 @@ func (t *Provider) RemoveMRReviewer(ctx context.Context, owner, repo string, mrN
 	}
 	_, err := t.client.Reviews.RemoveMRReviewer(ctx, pid(owner, repo), mrNumber, sdkOpts)
 	if err != nil {
-		return sdkError("RemoveMRReviewer", err)
+		return provider.Wrap(provider.PlatformTencentCode, "RemoveMRReviewer", err)
 	}
 	return nil
 }
@@ -416,7 +416,7 @@ func (t *Provider) RemoveMRReviewer(ctx context.Context, owner, repo string, mrN
 func (t *Provider) CancelMRReview(ctx context.Context, owner, repo string, mrNumber int) error {
 	_, err := t.client.Reviews.CancelMRReview(ctx, pid(owner, repo), mrNumber)
 	if err != nil {
-		return sdkError("CancelMRReview", err)
+		return provider.Wrap(provider.PlatformTencentCode, "CancelMRReview", err)
 	}
 	return nil
 }
@@ -428,7 +428,7 @@ func (t *Provider) SubmitMRReview(ctx context.Context, owner, repo string, mrNum
 	}
 	_, _, err := t.client.Reviews.SubmitMRReviewSummary(ctx, pid(owner, repo), mrNumber, sdkOpts)
 	if err != nil {
-		return sdkError("SubmitMRReview", err)
+		return provider.Wrap(provider.PlatformTencentCode, "SubmitMRReview", err)
 	}
 	return nil
 }
@@ -436,7 +436,7 @@ func (t *Provider) SubmitMRReview(ctx context.Context, owner, repo string, mrNum
 func (t *Provider) ReopenMRReview(ctx context.Context, owner, repo string, mrNumber int) error {
 	_, _, err := t.client.Reviews.ReopenMRReview(ctx, pid(owner, repo), mrNumber)
 	if err != nil {
-		return sdkError("ReopenMRReview", err)
+		return provider.Wrap(provider.PlatformTencentCode, "ReopenMRReview", err)
 	}
 	return nil
 }
@@ -455,7 +455,7 @@ func (t *Provider) GetCommitDiff(ctx context.Context, owner, repo, sha string, o
 	}
 	diffs, _, err := t.client.Commits.GetCommitDiff(ctx, pid(owner, repo), sha, sdkOpts)
 	if err != nil {
-		return nil, sdkError("GetCommitDiff", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCommitDiff", err)
 	}
 	result := make([]*provider.ChangedFile, 0, len(diffs))
 	for _, d := range diffs {
@@ -471,7 +471,7 @@ func (t *Provider) ListCommitComments(ctx context.Context, owner, repo, sha stri
 	}
 	comments, _, err := t.client.Commits.ListCommitComments(ctx, pid(owner, repo), sha, sdkOpts)
 	if err != nil {
-		return nil, sdkError("ListCommitComments", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommitComments", err)
 	}
 	result := make([]*CommitComment, 0, len(comments))
 	for _, c := range comments {
@@ -504,7 +504,7 @@ func (t *Provider) CreateCommitComment(ctx context.Context, owner, repo, sha str
 	}
 	comment, _, err := t.client.Commits.CreateCommitComment(ctx, pid(owner, repo), sha, sdkOpts)
 	if err != nil {
-		return nil, sdkError("CreateCommitComment", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateCommitComment", err)
 	}
 	cc := &CommitComment{
 		Body:     comment.Note,
@@ -525,7 +525,7 @@ func (t *Provider) GetCommitRefs(ctx context.Context, owner, repo, sha string, r
 	}
 	refs, _, err := t.client.Commits.ListCommitRefs(ctx, pid(owner, repo), sha, sdkOpts)
 	if err != nil {
-		return nil, sdkError("GetCommitRefs", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCommitRefs", err)
 	}
 	result := &CommitRefs{}
 	for _, ref := range refs {
@@ -555,7 +555,7 @@ func (t *Provider) GetRepoTree(ctx context.Context, owner, repo, path, ref strin
 	}
 	nodes, _, err := t.client.Repositories.ListTree(ctx, pid(owner, repo), sdkOpts)
 	if err != nil {
-		return nil, sdkError("GetRepoTree", err)
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetRepoTree", err)
 	}
 	result := make([]*TreeEntryNode, 0, len(nodes))
 	for _, n := range nodes {

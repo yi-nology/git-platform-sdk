@@ -68,7 +68,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 		user = review.Author
 	}
 	if user != nil {
-		authorID, _ := strconv.ParseInt(string(user.ID), 10, 64)
+		authorID, _ := parseGitCodeID(user.ID)
 		result.User = &provider.CRUser{
 			ID: authorID, Username: user.Login, AvatarURL: user.AvatarURL,
 		}
