@@ -356,7 +356,7 @@ func convertUser(u *forgejo.User) *provider.CRUser {
 	if u == nil {
 		return nil
 	}
-	return &provider.CRUser{ID: u.ID, Username: u.UserName, AvatarURL: u.AvatarURL}
+	return &provider.CRUser{ID: u.ID, Username: u.UserName, Name: u.FullName, AvatarURL: u.AvatarURL}
 }
 
 var _ provider.IssueManager = (*Provider)(nil)
