@@ -80,6 +80,8 @@ type Harness struct {
 	DeployKeys *DeployKeysHarnessConfig
 	// RepoStats, when non-nil, auto-mounts the repo-stats suite.
 	RepoStats *RepoStatsHarnessConfig
+	// Users, when non-nil, auto-mounts the user-manager suite.
+	Users *UsersHarnessConfig
 	// Releases auto-mounts the release-management suite inside Run. Unlike
 	// the fields above, ReleaseManager is a core interface composed into
 	// provider.Provider (every backend implements it), so there is no
@@ -113,6 +115,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("CollaboratorsSuite", func(t *testing.T) { testCollaboratorsSuite(t, h) })
 	t.Run("DeployKeysSuite", func(t *testing.T) { testDeployKeysSuite(t, h) })
 	t.Run("RepoStatsSuite", func(t *testing.T) { testRepoStatsSuite(t, h) })
+	t.Run("UsersSuite", func(t *testing.T) { testUsersSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {
