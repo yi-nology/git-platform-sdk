@@ -63,6 +63,7 @@ func convertPR(pr *gitea.PullRequest) *provider.ChangeRequest {
 		Title:        pr.Title,
 		Description:  pr.Body,
 		State:        mapState(string(pr.State), pr.HasMerged),
+		Draft:        pr.Draft,
 		SourceBranch: pr.Head.Ref,
 		TargetBranch: pr.Base.Ref,
 		HeadSHA:      pr.Head.Sha,

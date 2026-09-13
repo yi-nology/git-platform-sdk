@@ -441,6 +441,30 @@ type clientRoundTripper struct {
 // RoundTrip implements http.RoundTripper.
 func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
+	// http.Client.Timeout only fires inside Client.Do; calling Transport.RoundTrip
+	// directly (as below) bypasses it, so a stalled server connection would block
+	// the caller for the full caller deadline — or forever when the caller set
+	// none (the gitea/forgejo SDK methods discard the ctx they are handed).
+	// Cap the request context at the client timeout unless an earlier deadline
+	// is already set.
+	timeout := rt.client.Timeout
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	if dl, ok := ctx.Deadline(); !ok || time.Until(dl) > timeout {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+		req = req.WithContext(ctx)
+	}
+	// Belt and braces: also bound response-header wait on the raw transport so a
+	// stalled (but established) connection aborts even if the context deadline
+	// above is somehow not propagated.
+	if ht, ok := rt.client.httpClient().Transport.(*http.Transport); ok && ht.ResponseHeaderTimeout <= 0 {
+		ht = ht.Clone()
+		ht.ResponseHeaderTimeout = timeout
+		rt.client.Transport = ht
+	}
 	// Proactive rate limiting.
 	if rt.client.Limiter != nil {
 		if err := rt.client.Limiter.WaitContext(ctx); err != nil {

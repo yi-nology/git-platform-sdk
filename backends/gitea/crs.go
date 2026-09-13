@@ -38,11 +38,27 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 	return convertPR(pr), nil
 }
 
+// mapListState normalizes the provider-uniform CR state ("opened"/"closed"/"merged")
+// to the filter value Gitea/Forgejo list endpoints understand ("open"/"closed").
+// Gitea rejects unknown values like "opened" by returning ALL pull requests
+// regardless of state, which made callers review closed PRs; "merged" has no
+// list filter and is the closest superset.
+func mapListState(s provider.CRState) gitea.StateType {
+	switch s {
+	case provider.CRStateClosed:
+		return gitea.StateClosed
+	case provider.CRStateMerged:
+		return gitea.StateClosed
+	default:
+		return gitea.StateOpen
+	}
+}
+
 // ListCRs implements provider.ChangeRequestManager.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	prs, resp, err := p.client.ListRepoPullRequests(opts.Owner, opts.Repo, gitea.ListPullRequestsOptions{
-		State:       gitea.StateType(opts.State),
+		State:       mapListState(opts.State),
 		ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
 	})
 	if err != nil {
