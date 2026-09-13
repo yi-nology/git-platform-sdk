@@ -62,3 +62,27 @@ func TestAllPagesPropagatesErrors(t *testing.T) {
 		t.Errorf("expected the fetch error to surface, got %v", err)
 	}
 }
+
+// Regression: a Forgejo 15.0.1 instance ignored the page parameter on the
+// issue-comment list endpoint and returned the identical full page for every
+// page number, so "stop on first empty page" never fired and callers (argus's
+// report poster) spun forever. AllPages must cap itself instead of hanging.
+func TestAllPagesStopsAtCapWhenPageParamIgnored(t *testing.T) {
+	item := "x"
+	fetch := func(page int) ([]string, error) {
+		if page == 0 {
+			t.Fatal("pages are 1-based")
+		}
+		return []string{item}, nil // server that never advances pagination
+	}
+	got, err := AllPages(fetch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatal("expected non-empty result")
+	}
+	if len(got) > maxAllPages {
+		t.Fatalf("expected cap of %d items, got %d", maxAllPages, len(got))
+	}
+}
