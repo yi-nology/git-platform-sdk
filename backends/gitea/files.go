@@ -2,6 +2,7 @@ package gitea
 
 import (
 	"context"
+	"net/http"
 
 	gitea "code.gitea.io/sdk/gitea"
 
@@ -10,8 +11,15 @@ import (
 
 // GetFileContent implements provider.FileManager.
 func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
-	data, _, err := p.client.GetFile(owner, repo, ref, path)
+	data, resp, err := p.client.GetFile(owner, repo, ref, path)
 	if err != nil {
+		// The gitea SDK flattens API errors to the server's message string (no
+		// status info survives on the error), so classify from the *Response —
+		// otherwise optional-file callers depending on provider.IsNotFound see
+		// a generic failure for every missing file.
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return "", provider.New(provider.PlatformGitea, "GetFileContent", http.StatusNotFound, err.Error())
+		}
 		return "", provider.Wrap(provider.PlatformGitea, "GetFileContent", err)
 	}
 	return string(data), nil
