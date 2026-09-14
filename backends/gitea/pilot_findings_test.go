@@ -58,3 +58,23 @@ func TestGetCR_DraftMapped(t *testing.T) {
 // GetCR is exercised through the exported provider surface; keep the compile
 // guard that the concrete type still satisfies the interface.
 var _ provider.Provider = (*gitea.Provider)(nil)
+
+// Regression: the gitea SDK reports missing files as a plain sentinel error
+// without status info, so provider.IsNotFound stayed false and optional-file
+// callers (repo review config, review guidelines) logged spurious failures
+// instead of falling back silently.
+func TestGetFileContent_MissingFileIsNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"The target couldn't be found."}`))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	_, err := p.GetFileContent(context.Background(), "owner", "repo", ".reviewagents.yaml", "main")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+	if !provider.IsNotFound(err) {
+		t.Fatalf("expected IsNotFound=true, got %v", err)
+	}
+}
