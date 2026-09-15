@@ -19,6 +19,7 @@ var (
 	ErrAuthFailed      = errors.New("authentication failed")
 	ErrAlreadyUpToDate = errors.New("already up to date")
 	ErrNotAGitRepo     = errors.New("not a git repository")
+	ErrInvalidGitArg   = errors.New("invalid git argument")
 )
 
 // GitError is a structured error from a git operation.
