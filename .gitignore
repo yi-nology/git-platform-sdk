@@ -25,3 +25,7 @@ Thumbs.db
 .zcode/
 .worktrees/
 .superpowers/
+
+# Local security-hook state (Mimosa finding ledger / hook status)
+.mimosa/
+.v2c/

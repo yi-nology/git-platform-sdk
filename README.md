@@ -316,6 +316,28 @@ if caps.Labels {
   `GetReleaseByTag` / `UpdateRelease` / `DeleteRelease`（一律按 tag 寻址），
   7 个平台全部实现。
 
+### 自动化与 Agent 场景(等待/批量/投影/MCP)
+
+面向 CI 门禁与 LLM/agent 流水线的原语,全部平台无关:
+
+```go
+// CI 门禁:轮询等待提交状态到终态(错误优先级同 GitHub combined status)
+state, err := provider.WaitForCommitStatus(ctx, p, "o", "r", "sha",
+    provider.WaitOptions{Timeout: 10 * time.Minute, Contexts: []string{"ci/test"}})
+
+// 批量:有界并发读取多个文件,单项失败不影响整批
+results := provider.GetFileContents(ctx, p, "o", "r", "main", []string{
+    "README.md", "go.mod", "Makefile",
+}, provider.BatchOptions{Concurrency: 4})
+
+// 投影:把统一模型裁剪成只含选定字段,喂给 LLM 前省上下文
+doc, _ := projection.Project(cr, "number", "title", "head.ref", "state")
+```
+
+`mcp/` 子模块(独立 go module)提供开箱即用的 MCP server:七平台一套工具面,
+toolset 按能力声明门控、`--read-only` 注册期丢弃写工具、列表工具支持 `fields`
+投影参数。详见 [mcp/README.md](mcp/README.md)。
+
 ### 已知限制
 
 - **Gitee `ChangeRequest.Draft` 恒为 `false`**: 线上 PR 载荷有原生 `draft`
@@ -520,7 +542,11 @@ git-platform-sdk/
 ├── pkg/
 │   ├── branchfilter/            # 分支过滤
 │   ├── credential/              # 凭证管理 + AES-GCM 加密
-│   └── encoding/                # Base64 工具
+│   ├── encoding/                # Base64 工具
+│   └── projection/              # 字段投影 (LLM/agent 上下文经济)
+├── mcp/                         # MCP server 独立模块 (独立 go.mod)
+│   ├── server.go, tools.go      # toolsets + 能力门控 + 读写分离
+│   └── cmd/git-platform-mcp/    # stdio 入口
 ├── Makefile                     # test/lint/fmt/cover 等命令
 ├── .golangci.yml                # lint 配置
 └── go.mod

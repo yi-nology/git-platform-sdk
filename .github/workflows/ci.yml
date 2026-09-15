@@ -104,3 +104,29 @@ jobs:
           name: coverage
           path: coverage.out
           retention-days: 14
+
+  mcp:
+    name: MCP module
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: mcp/go.sum
+
+      - name: Build
+        working-directory: mcp
+        run: go build ./...
+
+      - name: Vet
+        working-directory: mcp
+        run: go vet ./...
+
+      - name: Test
+        working-directory: mcp
+        run: go test -race -count=1 ./...
