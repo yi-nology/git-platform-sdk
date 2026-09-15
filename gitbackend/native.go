@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -30,7 +31,97 @@ func NewNativeGitBackend(opts Options) (*NativeGitBackend, error) {
 
 // --- Internal helpers ---
 
+// gitSubcommands is the closed set of git subcommands this backend issues.
+// args[0] must be one of them: that whitelists the command verb before any
+// caller-controlled value reaches exec.
+var gitSubcommands = map[string]bool{
+	"add": true, "branch": true, "checkout": true, "cherry-pick": true,
+	"clone": true, "commit": true, "config": true, "diff": true,
+	"fetch": true, "init": true, "log": true, "ls-remote": true,
+	"ls-tree": true, "merge": true, "merge-base": true, "pull": true,
+	"push": true, "rebase": true, "remote": true, "rev-list": true,
+	"rev-parse": true, "show": true, "stash": true, "status": true,
+	"tag": true,
+}
+
+// gitExecFlags are git options that hand git an executable or a config
+// override. A caller-controlled positional (URL, ref, pathspec) beginning
+// with one of these would otherwise be parsed as a flag by git's
+// interspersed option parser and turn a routine clone/fetch/push into
+// arbitrary command execution or config injection.
+var gitExecFlags = []string{
+	"-c", "--exec", "--upload-pack", "--receive-pack", "--config-env",
+}
+
+// safeConfigOverrides matches the `-c key=value` pairs this backend issues
+// itself (CommitWithIdentity identity overrides). git config keys that
+// carry executables — core.sshCommand, filter.*.command, protocol.*.command,
+// core.pager — are outside this set, so a smuggled `-c` can never turn into
+// command execution.
+var safeConfigOverrides = regexp.MustCompile(
+	`^user\.(name|email)=[^=\x00-\x1f]*$|^commit\.gpgsign=(true|false)$`)
+
+// checkGitArg validates one non-leading argument: no control characters,
+// no ext:: transport URLs, none of the exec/config primitives.
+func checkGitArg(arg string) error {
+	for _, r := range arg {
+		if (r < 0x20 && r != '\t') || r == 0x7f {
+			return fmt.Errorf("%w: control character in argument", ErrInvalidGitArg)
+		}
+	}
+	if strings.HasPrefix(arg, "ext::") {
+		return fmt.Errorf("%w: ext:: transport URLs are not allowed", ErrInvalidGitArg)
+	}
+	for _, flag := range gitExecFlags {
+		if arg == flag || strings.HasPrefix(arg, flag+"=") {
+			return fmt.Errorf("%w: %q is not accepted from callers", ErrInvalidGitArg, arg)
+		}
+	}
+	return nil
+}
+
+// sanitizeGitArgs enforces the exec boundary of runGit:
+//
+//  1. any leading `-c` flags are accepted only as pairs whose value
+//     matches safeConfigOverrides (the identity overrides this backend
+//     issues itself);
+//  2. args[i] after those pairs must be a whitelisted git subcommand
+//     (gitSubcommands);
+//  3. every later argument passes checkGitArg.
+//
+// Library-issued flags such as --all, --tags or --abort pass through;
+// withInsecureArgs prepends the library's own `-c http.sslVerify=false`
+// AFTER this check.
+func sanitizeGitArgs(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: empty git command", ErrInvalidGitArg)
+	}
+	i := 0
+	for i < len(args) && args[i] == "-c" {
+		value := ""
+		if i+1 < len(args) {
+			value = args[i+1]
+		}
+		if !safeConfigOverrides.MatchString(value) {
+			return fmt.Errorf("%w: -c is only accepted with a known-safe config override", ErrInvalidGitArg)
+		}
+		i += 2
+	}
+	if i >= len(args) || !gitSubcommands[args[i]] {
+		return fmt.Errorf("%w: %q is not an allowed git subcommand", ErrInvalidGitArg, args[i])
+	}
+	for ; i < len(args); i++ {
+		if err := checkGitArg(args[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (b *NativeGitBackend) runGit(ctx context.Context, repoPath string, args []string, auth AuthConfig) (string, string, error) {
+	if err := sanitizeGitArgs(args); err != nil {
+		return "", "", err
+	}
 	args = withInsecureArgs(auth, args)
 
 	//nolint:gosec // G204: args are intentionally dynamic — this wraps arbitrary git commands.
