@@ -14,7 +14,7 @@ require (
 	github.com/yi-nology/go-gitcode v0.7.2
 	gitlab.com/gitlab-org/api/client-go/v3 v3.9.0
 	golang.org/x/crypto v0.55.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 )
 
 require (
