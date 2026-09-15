@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -31,7 +31,7 @@ import (
 // SearchRepos implements provider.SearchManager.
 func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	repos, _, err := p.client.SearchRepos(gitea.SearchRepoOptions{
+	repos, _, err := p.client.Repositories.SearchRepos(ctx, gitea.SearchRepoOptions{
 		Keyword:     opts.Query,
 		Sort:        opts.Sort,
 		Order:       opts.Order,
@@ -73,9 +73,9 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		if owner == "" || repo == "" {
 			return nil, nil, provider.Wrapf(provider.PlatformGitea, "SearchIssues", "invalid repo %q, want owner/name", opts.Repo)
 		}
-		issues, _, err = p.client.ListRepoIssues(owner, repo, listOpts)
+		issues, _, err = p.client.Issues.ListRepoIssues(ctx, owner, repo, listOpts)
 	} else {
-		issues, _, err = p.client.ListIssues(listOpts)
+		issues, _, err = p.client.Issues.ListIssues(ctx, listOpts)
 	}
 	if err != nil {
 		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchIssues", err)
@@ -103,7 +103,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 // SearchUsers implements provider.SearchManager.
 func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	users, _, err := p.client.SearchUsers(gitea.SearchUsersOption{
+	users, _, err := p.client.Users.SearchUsers(ctx, gitea.SearchUsersOption{
 		KeyWord:     opts.Query,
 		ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
 	})

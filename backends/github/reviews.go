@@ -7,7 +7,7 @@ import (
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -116,8 +116,8 @@ func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string
 	if err != nil {
 		return err
 	}
-	if _, _, err := p.client.PullRequests.DismissReview(ctx, owner, repo, n, reviewID, &github.PullRequestReviewDismissalRequest{
-		Message: github.Ptr(message),
+	if _, _, err := p.client.PullRequests.DismissReview(ctx, owner, repo, n, reviewID, github.PullRequestDismissReviewRequest{
+		Message: message,
 	}); err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "DismissReview", err)
 	}

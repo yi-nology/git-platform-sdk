@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -37,8 +37,8 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 
 // CreateRelease implements provider.ReleaseManager.
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
-	r, _, err := p.client.Repositories.CreateRelease(ctx, owner, repo, &github.RepositoryRelease{
-		TagName:         github.Ptr(opts.TagName),
+	r, _, err := p.client.Repositories.CreateRelease(ctx, owner, repo, github.CreateReleaseRequest{
+		TagName:         opts.TagName,
 		TargetCommitish: github.Ptr(opts.Target),
 		Name:            github.Ptr(opts.Title),
 		Body:            github.Ptr(opts.Body),
@@ -63,15 +63,15 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 
 // UpdateRelease implements provider.ReleaseManager. The update endpoint is
 // id-addressed, so the tag is resolved through the by-tag endpoint first
-// (exact lookup, no list window). go-github's RepositoryRelease request
-// carries pointer fields, and GitHub's PATCH leaves omitted fields
+// (exact lookup, no list window). go-github's UpdateReleaseRequest carries
+// pointer fields, and GitHub's PATCH leaves omitted fields
 // unchanged, so nil options pass through untouched.
 func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
 	id, err := p.resolveReleaseID(ctx, "UpdateRelease", owner, repo, tag)
 	if err != nil {
 		return nil, err
 	}
-	r, _, err := p.client.Repositories.EditRelease(ctx, owner, repo, id, &github.RepositoryRelease{
+	r, _, err := p.client.Repositories.UpdateRelease(ctx, owner, repo, id, github.UpdateReleaseRequest{
 		Name:       opts.Name,
 		Body:       opts.Body,
 		Draft:      opts.Draft,

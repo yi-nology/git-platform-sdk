@@ -28,7 +28,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -80,15 +80,21 @@ func New(cfg provider.Config) (provider.Provider, error) {
 
 	var ghClient *github.Client
 	if cfg.BaseURL == "" {
-		ghClient = github.NewClient(httpClient)
+		c, err := github.NewClient(github.WithHTTPClient(httpClient))
+		if err != nil {
+			return nil, fmt.Errorf("github: failed to create client: %w", err)
+		}
+		ghClient = c
 	} else {
 		base := cfg.BaseURL
-		//nolint:staticcheck // NewEnterpriseClient is deprecated but the replacement API (WithEnterpriseURLs) is not available in all go-github versions
-		ec, err := github.NewEnterpriseClient(base, "", httpClient)
+		// go-github v91's WithEnterpriseURLs rejects an empty upload URL (v72's
+		// NewEnterpriseClient silently accepted it); the upload URL is unused
+		// by this backend, so pass the API base for it.
+		c, err := github.NewClient(github.WithHTTPClient(httpClient), github.WithEnterpriseURLs(base, base))
 		if err != nil {
 			return nil, fmt.Errorf("github: failed to create enterprise client for %s: %w", base, err)
 		}
-		ghClient = ec
+		ghClient = c
 	}
 
 	return &Provider{client: ghClient, logger: logger}, nil

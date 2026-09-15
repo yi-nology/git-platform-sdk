@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
@@ -51,15 +51,15 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 
 // CreateIssue implements provider.IssueManager.
 func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
-	req := &github.IssueRequest{Title: github.Ptr(opts.Title)}
+	req := &github.CreateIssueRequest{Title: opts.Title}
 	if opts.Body != "" {
 		req.Body = github.Ptr(opts.Body)
 	}
 	if len(opts.Assignees) > 0 {
-		req.Assignees = &opts.Assignees
+		req.Assignees = opts.Assignees
 	}
 	if len(opts.Labels) > 0 {
-		req.Labels = &opts.Labels
+		req.Labels = opts.Labels
 	}
 	if opts.Milestone != "" {
 		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "CreateIssue", opts.Milestone)
@@ -68,7 +68,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		}
 		req.Milestone = github.Ptr(int(m64))
 	}
-	issue, _, err := p.client.Issues.Create(ctx, opts.Owner, opts.Repo, req)
+	issue, _, err := p.client.Issues.Create(ctx, opts.Owner, opts.Repo, *req)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateIssue", err)
 	}
@@ -81,7 +81,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	if err != nil {
 		return nil, err
 	}
-	req := &github.IssueRequest{}
+	req := &github.UpdateIssueRequest{}
 	if opts.Title != "" {
 		req.Title = github.Ptr(opts.Title)
 	}
@@ -89,10 +89,10 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		req.Body = github.Ptr(opts.Body)
 	}
 	if len(opts.Assignees) > 0 {
-		req.Assignees = &opts.Assignees
+		req.Assignees = opts.Assignees
 	}
 	if len(opts.Labels) > 0 {
-		req.Labels = &opts.Labels
+		req.Labels = opts.Labels
 	}
 	if opts.Milestone != "" {
 		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "UpdateIssue", opts.Milestone)
@@ -101,7 +101,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		}
 		req.Milestone = github.Ptr(int(m64))
 	}
-	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, n, req)
+	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, *req)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateIssue", err)
 	}
@@ -114,7 +114,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 	if err != nil {
 		return nil, err
 	}
-	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, n, &github.IssueRequest{State: github.Ptr("closed")})
+	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, github.UpdateIssueRequest{State: github.Ptr("closed")})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CloseIssue", err)
 	}
@@ -127,7 +127,7 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	if err != nil {
 		return nil, err
 	}
-	issue, _, err := p.client.Issues.Edit(ctx, owner, repo, n, &github.IssueRequest{State: github.Ptr("open")})
+	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, github.UpdateIssueRequest{State: github.Ptr("open")})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ReopenIssue", err)
 	}
@@ -162,7 +162,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	if err != nil {
 		return nil, err
 	}
-	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, n, &github.IssueComment{Body: github.Ptr(body)})
+	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, n, github.IssueCommentRequest{Body: body})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateIssueComment", err)
 	}
@@ -173,7 +173,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 // addresses the comment directly, so number is unused. The platform only
 // lets the comment's author perform the edit.
 func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
-	comment, _, err := p.client.Issues.EditComment(ctx, owner, repo, commentID, &github.IssueComment{Body: github.Ptr(body)})
+	comment, _, err := p.client.Issues.UpdateComment(ctx, owner, repo, commentID, github.IssueCommentRequest{Body: body})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateIssueComment", err)
 	}

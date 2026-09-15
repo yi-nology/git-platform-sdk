@@ -6,7 +6,7 @@ import (
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -68,8 +68,8 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 	if err != nil {
 		return "", err
 	}
-	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, n, &github.IssueComment{
-		Body: github.Ptr(body),
+	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, n, github.IssueCommentRequest{
+		Body: body,
 	})
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitHub, "CreateNote", err)
@@ -101,9 +101,9 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 	if err != nil {
 		return "", err
 	}
-	comment := &github.PullRequestComment{
-		Body: github.Ptr(opts.Body),
-		Path: github.Ptr(opts.FilePath),
+	comment := &github.CreatePullRequestCommentRequest{
+		Body: opts.Body,
+		Path: opts.FilePath,
 	}
 	if opts.NewLine > 0 {
 		comment.Line = github.Ptr(opts.NewLine)
@@ -112,7 +112,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 		comment.Line = github.Ptr(opts.OldLine)
 		comment.Side = github.Ptr("LEFT")
 	}
-	c, _, err := p.client.PullRequests.CreateComment(ctx, owner, repo, n, comment)
+	c, _, err := p.client.PullRequests.CreateComment(ctx, owner, repo, n, *comment)
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitHub, "CreateDiscussion", err)
 	}

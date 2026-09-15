@@ -5,7 +5,7 @@ import (
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
-	"code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -15,7 +15,7 @@ func (p *Provider) ListIssueReactions(ctx context.Context, owner, repo, number s
 	if err != nil {
 		return nil, err
 	}
-	reactions, _, err := p.client.ListIssueReactions(owner, repo, n, gitea.ListIssueReactionsOptions{})
+	reactions, _, err := p.client.Issues.ListIssueReactions(ctx, owner, repo, n, gitea.ListIssueReactionsOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListIssueReactions", err)
 	}
@@ -28,7 +28,7 @@ func (p *Provider) AddIssueReaction(ctx context.Context, owner, repo, number, em
 	if err != nil {
 		return nil, err
 	}
-	r, _, err := p.client.PostIssueReaction(owner, repo, n, emoji)
+	r, _, err := p.client.Issues.PostIssueReaction(ctx, owner, repo, n, emoji)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "AddIssueReaction", err)
 	}
@@ -51,13 +51,13 @@ func (p *Provider) RemoveIssueReaction(ctx context.Context, owner, repo, number 
 	// Gitea's DeleteIssueReaction takes the reaction content string, not the ID.
 	// Since we only have the user ID, we must list all reactions to find the
 	// matching content string. This is the only approach available with Gitea's API.
-	reactions, _, err := p.client.ListIssueReactions(owner, repo, n, gitea.ListIssueReactionsOptions{})
+	reactions, _, err := p.client.Issues.ListIssueReactions(ctx, owner, repo, n, gitea.ListIssueReactionsOptions{})
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "RemoveIssueReaction", err)
 	}
 	for _, r := range reactions {
 		if r.User != nil && r.User.ID == reactionID {
-			_, err = p.client.DeleteIssueReaction(owner, repo, n, r.Reaction)
+			_, err = p.client.Issues.DeleteIssueReaction(ctx, owner, repo, n, r.Reaction)
 			return provider.Wrap(provider.PlatformGitea, "RemoveIssueReaction", err)
 		}
 	}
@@ -74,7 +74,7 @@ func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number stri
 
 // ListIssueCommentReactions implements provider.ReactionManager.
 func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
-	reactions, _, err := p.client.GetIssueCommentReactions(owner, repo, commentID)
+	reactions, _, err := p.client.Issues.GetIssueCommentReactions(ctx, owner, repo, commentID)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListIssueCommentReactions", err)
 	}
@@ -83,7 +83,7 @@ func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo st
 
 // AddIssueCommentReaction implements provider.ReactionManager.
 func (p *Provider) AddIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*provider.Reaction, error) {
-	r, _, err := p.client.PostIssueCommentReaction(owner, repo, commentID, emoji)
+	r, _, err := p.client.Issues.PostIssueCommentReaction(ctx, owner, repo, commentID, emoji)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "AddIssueCommentReaction", err)
 	}
@@ -96,13 +96,13 @@ func (p *Provider) AddIssueCommentReaction(ctx context.Context, owner, repo stri
 // lack their own ID, so reactionID is the user's User.ID and we must list
 // all comment reactions to find the content string for deletion.
 func (p *Provider) RemoveIssueCommentReaction(ctx context.Context, owner, repo string, commentID, reactionID int64) error {
-	reactions, _, err := p.client.GetIssueCommentReactions(owner, repo, commentID)
+	reactions, _, err := p.client.Issues.GetIssueCommentReactions(ctx, owner, repo, commentID)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "RemoveIssueCommentReaction", err)
 	}
 	for _, r := range reactions {
 		if r.User != nil && r.User.ID == reactionID {
-			_, err = p.client.DeleteIssueCommentReaction(owner, repo, commentID, r.Reaction)
+			_, err = p.client.Issues.DeleteIssueCommentReaction(ctx, owner, repo, commentID, r.Reaction)
 			return provider.Wrap(provider.PlatformGitea, "RemoveIssueCommentReaction", err)
 		}
 	}

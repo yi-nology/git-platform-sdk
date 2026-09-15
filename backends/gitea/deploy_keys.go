@@ -3,14 +3,14 @@ package gitea
 import (
 	"context"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListDeployKeys implements provider.DeploymentKeyManager.
 func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
-	keys, _, err := p.client.ListDeployKeys(owner, repo, gitea.ListDeployKeysOptions{})
+	keys, _, err := p.client.Repositories.ListDeployKeys(ctx, owner, repo, gitea.ListDeployKeysOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListDeployKeys", err)
 	}
@@ -23,7 +23,7 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 
 // AddDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*provider.DeployKey, error) {
-	key, _, err := p.client.CreateDeployKey(owner, repo, gitea.CreateKeyOption{
+	key, _, err := p.client.Repositories.CreateDeployKey(ctx, owner, repo, gitea.CreateKeyOption{
 		Title:    opts.Title,
 		Key:      opts.Key,
 		ReadOnly: opts.ReadOnly,
@@ -36,7 +36,7 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 
 // DeleteDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) DeleteDeployKey(ctx context.Context, owner, repo string, keyID int64) error {
-	if _, err := p.client.DeleteDeployKey(owner, repo, keyID); err != nil {
+	if _, err := p.client.Repositories.DeleteDeployKey(ctx, owner, repo, keyID); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteDeployKey", err)
 	}
 	return nil

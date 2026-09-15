@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
@@ -27,7 +27,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 	if opts.State != "" {
 		listOpts.State = gitea.StateType(opts.State)
 	}
-	milestones, _, err := p.client.ListRepoMilestones(owner, repo, listOpts)
+	milestones, _, err := p.client.Repositories.ListMilestones(ctx, owner, repo, listOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListMilestones", err)
 	}
@@ -44,7 +44,7 @@ func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string)
 	if err != nil {
 		return nil, err
 	}
-	m, _, err := p.client.GetMilestone(owner, repo, id)
+	m, _, err := p.client.Repositories.GetMilestone(ctx, owner, repo, id)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "GetMilestone", err)
 	}
@@ -59,7 +59,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 		Description: opts.Description,
 		Deadline:    opts.DueOn,
 	}
-	m, _, err := p.client.CreateMilestone(owner, repo, createOpts)
+	m, _, err := p.client.Repositories.CreateMilestone(ctx, owner, repo, createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "CreateMilestone", err)
 	}
@@ -92,7 +92,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	if opts.DueOn != nil {
 		editOpts.Deadline = opts.DueOn
 	}
-	m, _, err := p.client.EditMilestone(owner, repo, id, editOpts)
+	m, _, err := p.client.Repositories.EditMilestone(ctx, owner, repo, id, editOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "UpdateMilestone", err)
 	}
@@ -106,7 +106,7 @@ func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number stri
 	if err != nil {
 		return err
 	}
-	if _, err := p.client.DeleteMilestone(owner, repo, id); err != nil {
+	if _, err := p.client.Repositories.DeleteMilestone(ctx, owner, repo, id); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteMilestone", err)
 	}
 	return nil

@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -23,12 +23,12 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 
 // AddDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*provider.DeployKey, error) {
-	key := &github.Key{
+	key := &github.CreateDeployKeyRequest{
 		Title:    github.Ptr(opts.Title),
-		Key:      github.Ptr(opts.Key),
+		Key:      opts.Key,
 		ReadOnly: github.Ptr(opts.ReadOnly),
 	}
-	created, _, err := p.client.Repositories.CreateKey(ctx, owner, repo, key)
+	created, _, err := p.client.Repositories.CreateKey(ctx, owner, repo, *key)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "AddDeployKey", err)
 	}

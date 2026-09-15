@@ -17,9 +17,9 @@ This document is generated from the backends' registered divergence ledgers
 
 ## Standing limitations
 
-- The gitea and forgejo SDKs accept no context on most calls, so context
-  cancellation does not propagate into in-flight requests on those
-  platforms.
+- The forgejo SDK accepts no context on most calls, so context cancellation
+  does not propagate into in-flight requests on that platform (the Gitea
+  backend uses gitea.dev/sdk v1, whose methods all take a context).
 - Milestone identifiers are platform-specific (a per-repo serial number on
   GitHub and Gitee, a platform ID on GitLab, Gitea, Forgejo, GitCode, and
   Tencent Code); Milestone.Number round-trips only on the platform it came
@@ -54,6 +54,8 @@ This document is generated from the backends' registered divergence ledgers
 | LabelManager | CreateLabel | opts.Description | ignore | Gitee's label wire has no description field. |
 | LabelManager | UpdateLabel | opts.Description | ignore | Gitee's label wire has no description field. |
 | ReleaseManager | CreateRelease | opts.Draft | ignore | Gitee's release create wire takes no draft flag. |
+| CommitStatusManager | CreateCommitStatus |  | mapping | Gitee's public API has no commit-status endpoint; statuses are published as check runs (Checks API). Context maps to the check-run name, state to the conclusion (pending→neutral). |
+| CommitStatusManager | ListCommitStatuses |  | mapping | Reads map to the check runs of the commit (Checks.List). Context is the check-run name; state is concluded from status/conclusion. This surface has no string description, so CommitStatus.Description stays empty. |
 
 ## gitea
 

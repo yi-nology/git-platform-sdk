@@ -6,7 +6,7 @@ import (
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -17,7 +17,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 	if err != nil {
 		return nil, err
 	}
-	diffBytes, _, err := p.client.GetPullRequestDiff(owner, repo, n, gitea.PullRequestDiffOptions{})
+	diffBytes, _, err := p.client.PullRequests.GetPullRequestDiff(ctx, owner, repo, n, gitea.PullRequestDiffOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "GetCRDiff", err)
 	}
@@ -41,7 +41,7 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) (
 	if err != nil {
 		return nil, err
 	}
-	changedFiles, _, err := p.client.ListPullRequestFiles(owner, repo, n, gitea.ListPullRequestFilesOptions{
+	changedFiles, _, err := p.client.PullRequests.ListPullRequestFiles(ctx, owner, repo, n, gitea.ListPullRequestFilesOptions{
 		ListOptions: gitea.ListOptions{PageSize: 100},
 	})
 	if err != nil {
@@ -72,7 +72,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 	if err != nil {
 		return "", err
 	}
-	comment, _, err := p.client.CreateIssueComment(owner, repo, n, gitea.CreateIssueCommentOption{Body: body})
+	comment, _, err := p.client.Issues.CreateIssueComment(ctx, owner, repo, n, gitea.CreateIssueCommentOption{Body: body})
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitea, "CreateNote", err)
 	}
@@ -90,7 +90,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteNote", err)
 	}
-	resp, err := p.client.DeleteIssueComment(owner, repo, id)
+	resp, err := p.client.Issues.DeleteIssueComment(ctx, owner, repo, id)
 	if err != nil {
 		// Gitea returns 404 when the comment is already gone; tolerate it.
 		if resp != nil && resp.StatusCode == 404 {
@@ -111,7 +111,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 	if err != nil {
 		return "", err
 	}
-	comment, _, err := p.client.CreateIssueComment(owner, repo, n, gitea.CreateIssueCommentOption{Body: opts.Body})
+	comment, _, err := p.client.Issues.CreateIssueComment(ctx, owner, repo, n, gitea.CreateIssueCommentOption{Body: opts.Body})
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitea, "CreateDiscussion", err)
 	}

@@ -6,7 +6,7 @@ import (
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
-	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 )
 
 // emojiFromSDK maps GitLab award-emoji names to the SDK's canonical names.

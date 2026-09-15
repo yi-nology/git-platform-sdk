@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -78,17 +78,44 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 
 // CreateCommitStatus implements provider.CommitStatusManager.
 func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
-	status := &github.RepoStatus{
+	_, _, err := p.client.Repositories.CreateStatus(ctx, owner, repo, sha, github.RepoStatus{
 		State:       github.Ptr(opts.State),
 		Context:     github.Ptr(opts.Context),
 		Description: github.Ptr(opts.Description),
 		TargetURL:   github.Ptr(opts.TargetURL),
-	}
-	_, _, err := p.client.Repositories.CreateStatus(ctx, owner, repo, sha, status)
+	})
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "CreateCommitStatus", err)
 	}
 	return nil
+}
+
+// ListCommitStatuses implements provider.CommitStatusManager.
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+	statuses, _, err := p.client.Repositories.ListStatuses(ctx, owner, repo, sha, nil)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "ListCommitStatuses", err)
+	}
+	return convertCommitStatuses(statuses), nil
+}
+
+// convertCommitStatuses maps go-github RepoStatus entries onto the unified
+// vocabulary. GitHub already speaks the canonical verbs (error/failure/
+// pending/success); they pass through NormalizeCommitStatusState unchanged.
+func convertCommitStatuses(statuses []*github.RepoStatus) []provider.CommitStatus {
+	result := make([]provider.CommitStatus, 0, len(statuses))
+	for _, s := range statuses {
+		if s == nil {
+			continue
+		}
+		result = append(result, provider.CommitStatus{
+			State:       provider.NormalizeCommitStatusState(s.GetState()),
+			Context:     s.GetContext(),
+			Description: s.GetDescription(),
+			TargetURL:   s.GetTargetURL(),
+		})
+	}
+	return result
 }
 
 // compile-time guard

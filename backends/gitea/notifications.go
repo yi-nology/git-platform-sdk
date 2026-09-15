@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -16,9 +16,9 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 		listOpts.Since, _ = parseTime(opts.Since)
 	}
 	if opts.All {
-		listOpts.Status = []gitea.NotifyStatus{gitea.NotifyStatusRead, gitea.NotifyStatusUnread, gitea.NotifyStatusPinned}
+		listOpts.Status = []gitea.NotificationStatus{gitea.NotificationStatusRead, gitea.NotificationStatusUnread, gitea.NotificationStatusPinned}
 	}
-	threads, _, err := p.client.ListNotifications(listOpts)
+	threads, _, err := p.client.Notifications.List(ctx, listOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListNotifications", err)
 	}
@@ -36,9 +36,9 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 		listOpts.Since, _ = parseTime(opts.Since)
 	}
 	if opts.All {
-		listOpts.Status = []gitea.NotifyStatus{gitea.NotifyStatusRead, gitea.NotifyStatusUnread, gitea.NotifyStatusPinned}
+		listOpts.Status = []gitea.NotificationStatus{gitea.NotificationStatusRead, gitea.NotificationStatusUnread, gitea.NotificationStatusPinned}
 	}
-	threads, _, err := p.client.ListRepoNotifications(owner, repo, listOpts)
+	threads, _, err := p.client.Notifications.ListByRepo(ctx, owner, repo, listOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListRepoNotifications", err)
 	}
@@ -55,7 +55,7 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 	if err != nil {
 		return provider.Wrapf(provider.PlatformGitea, "MarkNotificationRead", "invalid thread ID %q", threadID)
 	}
-	_, _, err = p.client.ReadNotification(id)
+	_, _, err = p.client.Notifications.MarkReadByID(ctx, id)
 	return provider.Wrap(provider.PlatformGitea, "MarkNotificationRead", err)
 }
 
@@ -65,7 +65,7 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 	if opts.LastReadAt != "" {
 		markOpts.LastReadAt, _ = parseTime(opts.LastReadAt)
 	}
-	_, _, err := p.client.ReadNotifications(markOpts)
+	_, _, err := p.client.Notifications.MarkRead(ctx, markOpts)
 	return provider.Wrap(provider.PlatformGitea, "MarkNotificationsRead", err)
 }
 
@@ -75,7 +75,7 @@ func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo st
 	if opts.LastReadAt != "" {
 		markOpts.LastReadAt, _ = parseTime(opts.LastReadAt)
 	}
-	_, _, err := p.client.ReadRepoNotifications(owner, repo, markOpts)
+	_, _, err := p.client.Notifications.MarkReadByRepo(ctx, owner, repo, markOpts)
 	return provider.Wrap(provider.PlatformGitea, "MarkRepoNotificationsRead", err)
 }
 

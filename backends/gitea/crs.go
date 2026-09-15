@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
@@ -13,7 +13,7 @@ import (
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
-	pr, _, err := p.client.CreatePullRequest(opts.Owner, opts.Repo, gitea.CreatePullRequestOption{
+	pr, _, err := p.client.PullRequests.CreatePullRequest(ctx, opts.Owner, opts.Repo, gitea.CreatePullRequestOption{
 		Head:  opts.SourceBranch,
 		Base:  opts.TargetBranch,
 		Title: opts.Title,
@@ -31,7 +31,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 	if err != nil {
 		return nil, err
 	}
-	pr, _, err := p.client.GetPullRequest(owner, repo, n)
+	pr, _, err := p.client.PullRequests.GetPullRequest(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "GetCR", err)
 	}
@@ -57,7 +57,7 @@ func mapListState(s provider.CRState) gitea.StateType {
 // ListCRs implements provider.ChangeRequestManager.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	prs, resp, err := p.client.ListRepoPullRequests(opts.Owner, opts.Repo, gitea.ListPullRequestsOptions{
+	prs, resp, err := p.client.PullRequests.ListRepoPullRequests(ctx, opts.Owner, opts.Repo, gitea.ListPullRequestsOptions{
 		State:       mapListState(opts.State),
 		ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
 	})
@@ -86,7 +86,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 		style = gitea.MergeStyleSquash
 	}
 	deleteBranch := opts.RemoveSourceBranch
-	_, resp, err := p.client.MergePullRequest(owner, repo, n, gitea.MergePullRequestOption{
+	_, resp, err := p.client.PullRequests.MergePullRequest(ctx, owner, repo, n, gitea.MergePullRequestOption{
 		Style:                  style,
 		Title:                  opts.MergeCommitMessage,
 		DeleteBranchAfterMerge: &deleteBranch,
@@ -111,7 +111,7 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 		return nil, err
 	}
 	state := gitea.StateClosed
-	_, _, err = p.client.EditPullRequest(owner, repo, n, gitea.EditPullRequestOption{State: &state})
+	_, _, err = p.client.PullRequests.EditPullRequest(ctx, owner, repo, n, gitea.EditPullRequestOption{State: &state})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "CloseCR", err)
 	}
@@ -125,7 +125,7 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 		return nil, err
 	}
 	state := gitea.StateOpen
-	pr, _, err := p.client.EditPullRequest(owner, repo, n, gitea.EditPullRequestOption{State: &state})
+	pr, _, err := p.client.PullRequests.EditPullRequest(ctx, owner, repo, n, gitea.EditPullRequestOption{State: &state})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ReopenCR", err)
 	}
@@ -148,7 +148,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if opts.TargetBranch != "" {
 		editOpts.Base = opts.TargetBranch
 	}
-	pr, _, err := p.client.EditPullRequest(owner, repo, n, editOpts)
+	pr, _, err := p.client.PullRequests.EditPullRequest(ctx, owner, repo, n, editOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "UpdateCR", err)
 	}
@@ -167,7 +167,7 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 			labelIDs = append(labelIDs, id)
 		}
 	}
-	_, _, err = p.client.AddIssueLabels(owner, repo, n, gitea.IssueLabelsOption{Labels: labelIDs})
+	_, _, err = p.client.Issues.AddIssueLabels(ctx, owner, repo, n, gitea.IssueLabelsOption{Labels: labelIDs})
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "UpdateCRLabels", err)
 	}
@@ -180,7 +180,7 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	if err != nil {
 		return nil, err
 	}
-	comments, _, err := p.client.ListIssueComments(owner, repo, n, gitea.ListIssueCommentOptions{})
+	comments, _, err := p.client.Issues.ListIssueComments(ctx, owner, repo, n, gitea.ListIssueCommentOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListCRComments", err)
 	}
@@ -201,7 +201,7 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 	if err != nil {
 		return nil, err
 	}
-	commits, _, err := p.client.ListPullRequestCommits(owner, repo, n, gitea.ListPullRequestCommitsOptions{})
+	commits, _, err := p.client.PullRequests.ListPullRequestCommits(ctx, owner, repo, n, gitea.ListPullRequestCommitsOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListCRCommits", err)
 	}

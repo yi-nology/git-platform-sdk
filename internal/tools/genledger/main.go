@@ -79,9 +79,9 @@ This document is generated from the backends' registered divergence ledgers
 
 ## Standing limitations
 
-- The gitea and forgejo SDKs accept no context on most calls, so context
-  cancellation does not propagate into in-flight requests on those
-  platforms.
+- The forgejo SDK accepts no context on most calls, so context cancellation
+  does not propagate into in-flight requests on that platform (the Gitea
+  backend uses gitea.dev/sdk v1, whose methods all take a context).
 - Milestone identifiers are platform-specific (a per-repo serial number on
   GitHub and Gitee, a platform ID on GitLab, Gitea, Forgejo, GitCode, and
   Tencent Code); Milestone.Number round-trips only on the platform it came

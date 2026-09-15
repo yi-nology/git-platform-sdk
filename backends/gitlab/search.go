@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
-	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 )
 
 // This file implements the provider.SearchManager surface over the GitLab

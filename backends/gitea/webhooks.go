@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -25,7 +25,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
 	}
-	hook, _, err := p.client.CreateRepoHook(opts.Owner, opts.Repo, gitea.CreateHookOption{
+	hook, _, err := p.client.Hooks.CreateRepoHook(ctx, opts.Owner, opts.Repo, gitea.CreateHookOption{
 		Type:   gitea.HookTypeGitea,
 		Config: map[string]string{"url": opts.URL, "content_type": "json", "secret": opts.Secret},
 		Events: events,
@@ -39,7 +39,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	_, err := p.client.DeleteRepoHook(owner, repo, webhookID)
+	_, err := p.client.Hooks.DeleteRepoHook(ctx, owner, repo, webhookID)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteWebhook", err)
 	}
@@ -48,7 +48,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 
 // ListWebhooks implements provider.WebhookManager.
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
-	hooks, _, err := p.client.ListRepoHooks(owner, repo, gitea.ListHooksOptions{})
+	hooks, _, err := p.client.Hooks.ListRepoHooks(ctx, owner, repo, gitea.ListHooksOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListWebhooks", err)
 	}

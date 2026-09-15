@@ -3,14 +3,14 @@ package gitea
 import (
 	"context"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListTags implements provider.ReleaseManager.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	tags, _, err := p.client.ListRepoTags(owner, repo, gitea.ListRepoTagsOptions{})
+	tags, _, err := p.client.Repositories.ListRepoTags(ctx, owner, repo, gitea.ListRepoTagsOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListTags", err)
 	}
@@ -27,7 +27,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 
 // ListReleases implements provider.ReleaseManager.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	releases, _, err := p.client.ListReleases(owner, repo, gitea.ListReleasesOptions{})
+	releases, _, err := p.client.Releases.ListReleases(ctx, owner, repo, gitea.ListReleasesOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListReleases", err)
 	}
@@ -43,7 +43,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 // no omitempty), so a Target-less create sends `"target_commitish": ""`,
 // which the server treats as unchanged (the default branch).
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
-	r, _, err := p.client.CreateRelease(owner, repo, gitea.CreateReleaseOption{
+	r, _, err := p.client.Releases.CreateRelease(ctx, owner, repo, gitea.CreateReleaseOption{
 		TagName:      opts.TagName,
 		Target:       opts.Target,
 		Title:        opts.Title,
@@ -60,7 +60,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 // GetReleaseByTag implements provider.ReleaseManager. Gitea exposes a
 // dedicated tag-addressed endpoint.
 func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
-	r, _, err := p.client.GetReleaseByTag(owner, repo, tag)
+	r, _, err := p.client.Releases.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "GetReleaseByTag", err)
 	}
@@ -74,7 +74,7 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 // current values from the resolution fetch backfill every option the caller
 // left nil; draft/prerelease are pointers that pass through untouched.
 func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
-	cur, _, err := p.client.GetReleaseByTag(owner, repo, tag)
+	cur, _, err := p.client.Releases.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "UpdateRelease", err)
 	}
@@ -85,7 +85,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	if opts.Body != nil {
 		note = *opts.Body
 	}
-	r, _, err := p.client.EditRelease(owner, repo, cur.ID, gitea.EditReleaseOption{
+	r, _, err := p.client.Releases.EditRelease(ctx, owner, repo, cur.ID, gitea.EditReleaseOption{
 		TagName:      tag,
 		Title:        title,
 		Note:         note,
@@ -102,7 +102,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 // tag-addressed delete (server >= 1.14; the SDK version-gates itself).
 // The release's tag is kept.
 func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
-	if _, err := p.client.DeleteReleaseByTag(owner, repo, tag); err != nil {
+	if _, err := p.client.Releases.DeleteReleaseByTag(ctx, owner, repo, tag); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteRelease", err)
 	}
 	return nil
@@ -115,9 +115,9 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 		err  error
 	)
 	if format == "zip" {
-		data, _, err = p.client.GetArchive(owner, repo, ref, gitea.ZipArchive)
+		data, _, err = p.client.Repositories.GetArchive(ctx, owner, repo, ref, gitea.ZipArchive)
 	} else {
-		data, _, err = p.client.GetArchive(owner, repo, ref, gitea.TarGZArchive)
+		data, _, err = p.client.Repositories.GetArchive(ctx, owner, repo, ref, gitea.TarGZArchive)
 	}
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "GetArchive", err)
