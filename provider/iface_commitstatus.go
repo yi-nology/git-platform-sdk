@@ -12,4 +12,8 @@ import "context"
 // declaring the capability instead of stubbing the method.
 type CommitStatusManager interface {
 	CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error
+	// ListCommitStatuses returns the statuses reported on a commit,
+	// newest first (the platforms' native order). State is normalized
+	// into the CommitStatusState vocabulary by the backend.
+	ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]CommitStatus, error)
 }

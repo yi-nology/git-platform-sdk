@@ -80,6 +80,35 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 	return nil
 }
 
+// ListCommitStatuses implements provider.CommitStatusManager.
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+	statuses, err := p.client.ListCommitStatuses(ctx, owner, repo, sha, gitcode.ListOptions{})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "ListCommitStatuses", err)
+	}
+	return convertCommitStatuses(statuses), nil
+}
+
+// convertCommitStatuses maps go-gitcode CommitStatus entries onto the
+// unified vocabulary. GitCode speaks the GitHub-shaped verbs
+// (pending/success/error/failure) under the "state" key; they pass through
+// NormalizeCommitStatusState unchanged.
+func convertCommitStatuses(statuses []*gitcode.CommitStatus) []provider.CommitStatus {
+	result := make([]provider.CommitStatus, 0, len(statuses))
+	for _, s := range statuses {
+		if s == nil {
+			continue
+		}
+		result = append(result, provider.CommitStatus{
+			State:       provider.NormalizeCommitStatusState(s.State),
+			Context:     s.Context,
+			Description: s.Description,
+			TargetURL:   s.TargetURL,
+		})
+	}
+	return result
+}
+
 var _ provider.CommitManager = (*Provider)(nil)
 
 var _ provider.CommitStatusManager = (*Provider)(nil)

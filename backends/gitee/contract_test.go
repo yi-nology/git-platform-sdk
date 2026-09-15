@@ -77,6 +77,13 @@ func TestGitee_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA"}]`,
 			CreateResponse: `{"id":1,"title":"CI","key":"ssh-rsa AAAA"}`,
 		},
-		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
+		// Gitee commit-status fixtures: the public API has no commit-status
+		// endpoint, so reads go through the Checks API
+		// (GET /repos/{o}/{r}/commits/{ref}/check-runs) — the response wraps
+		// the runs in {"total_count":..,"check_runs":[..]}; a completed run
+		// carries its outcome in "conclusion", an in-flight one in "status".
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{
+			ListResponse: `{"total_count":2,"check_runs":[{"id":1,"name":"ci/lint","head_sha":"deadbeef","status":"completed","conclusion":"success","details_url":"https://ci.example.com/1"},{"id":2,"name":"ci/test","head_sha":"deadbeef","status":"in_progress","details_url":"https://ci.example.com/2"}]}`,
+		},
 	})
 }
