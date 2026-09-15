@@ -4,6 +4,154 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`CommitStatusManager.ListCommitStatuses`** — the read side of the
+  commit-status capability, implemented on all seven backends and gated by
+  the existing `Capabilities().CommitStatuses` declaration. Statuses come
+  back in the new unified `CommitStatus` value whose `State` is normalized
+  into the new `CommitStatusState` vocabulary (pending/running/success/
+  failure/error/canceled) via `provider.NormalizeCommitStatusState`;
+  Gitee maps its Checks-API check runs onto the same vocabulary. The
+  commit-status contract suite now also pins the read wire shape with a
+  per-platform `ListResponse` fixture (one GET, decode ≥ 1 status).
+- **`provider.WaitForCommitStatus`** — the CI-gate polling primitive:
+  waits until a commit's combined state is terminal, honoring context
+  cancellation, an overall `Timeout` (`ErrWaitTimedOut` so a red build is
+  never confused with giving up), a per-context filter, and a pluggable
+  poll interval. Combined-state precedence matches GitHub's: error >
+  failure > canceled > pending/running > success.
+- **Batch helpers** (`provider/batch.go`) — `GetFileContents`,
+  `GetCRs`, and `SetCommitStatuses` run per-item operations with bounded
+  concurrency (default 4, capped at 16), preserve input order, and
+  attribute per-item failures by key instead of failing the whole batch.
+- **`pkg/projection`** — JSON-tag-aware field projection
+  (`Project`/`ProjectList`) for trimming unified models to selected
+  dotted paths (e.g. `number`, `head.ref`) before feeding automations or
+  LLM prompts. An empty field list is an error by design.
+- **`mcp/` module** — a Model Context Protocol server
+  (`mcp/cmd/git-platform-mcp`) exposing the SDK as one AI-agent tool
+  surface for all seven platforms: toolsets (core/crs/issues/status/
+  search) gated by `Capabilities()`, read-only mode that drops mutating
+  tools at registration time, `fields` projections on list tools, and
+  the `wait_for_status` polling primitive. Built on
+  `github.com/modelcontextprotocol/go-sdk` v1.8.0 with in-memory-transport
+  end-to-end tests.
+
+### Changed
+
+- **Gitea backend migrated from `code.gitea.io/sdk/gitea` v0.25 to
+  `gitea.dev/sdk` v1.2.0.** All SDK calls moved to the v1 service
+  entrypoints (no deprecated flat wrappers) and every call now carries a
+  `context.Context`, so cancellation finally propagates into in-flight
+  Gitea requests — the standing divergence-ledger limitation now applies
+  to Forgejo only.
+- **GitHub backend rebased from go-github v72 to v91**, adopting the
+  renamed request types (`Update*`), value-typed request payloads, the
+  struct-typed `User.Permissions`, and `ListByAuthenticatedUser`; all 65
+  contract subtests pass with unchanged wire fixtures.
+- **GitLab backend rebased from client-go v2 to v3.9.0** (module path
+  `gitlab.com/gitlab-org/api/client-go/v3`); no behavioral changes.
+
+### Fixed
+
+- **`gitbackend` argument-injection hardening** — `runGit` now enforces
+  an exec boundary: arguments must start with a whitelisted git
+  subcommand (optionally preceded by the backend's own identity
+  `-c key=value` pairs), the exec/config primitives
+  (`--upload-pack`/`--receive-pack`/`--exec`/`--config-env`/`-c`) are
+  rejected in any other position, `ext::` transport URLs are rejected,
+  and control characters are rejected. Previously a caller-controlled
+  URL/ref/pathspec beginning with one of those options could have been
+  parsed by git as a flag and escalated to arbitrary command execution.
+
+## [v0.61.0] - 2026-09-03
+
+### Added
+
+- **Webhook improvements, `ListCRReactions`, GitCode `types.go`, CI
+  hardening** — reaction reads now cover change requests, and the CI
+  pipeline was hardened.
+
+## [v0.60.0] - 2026-09-03
+
+### Fixed
+
+- **Gitea/Forgejo `convertUser` now populates the `Name` field** so user
+  objects carry display names instead of empty strings.
+
+## [v0.59.0] - 2026-09-03
+
+### Fixed
+
+- **Nil guards, error handling, pagination, and code deduplication**
+  across backends: defensive checks where platform responses can be
+  sparse, consistent provider-error wrapping, and pagination fixes.
+
+## [v0.58.0] - 2026-09-02
+
+### Added
+
+- **`UserManager` optional capability** — resolves usernames to platform
+  IDs for the backends whose APIs require numeric or login identifiers
+  in write paths.
+
+## [v0.57.0] - 2026-09-01
+
+### Performance
+
+- **Bulk label resolution** — label-name-to-ID resolution now fans out
+  through a shared paginated resolver with a per-provider TTL cache
+  instead of one API call per label, plus webhook normalization tests.
+
+## [v0.56.0] - 2026-09-01
+
+### Changed
+
+- **Duplication elimination, standardized error handling, and normalized
+  webhook events** across backends: shared conversion helpers, uniform
+  sentinel-error wrapping, and a common `NormalizedEvent` shape for
+  inbound webhooks.
+
+## [v0.55.0] - 2026-09-01
+
+### Added
+
+- **Gitee `DeploymentKeyManager` and `CommitStatusManager` capabilities**
+  (the latter mapped onto Gitee's Checks API), closing two capability
+  gaps on Gitee.
+
+### Fixed
+
+- All outstanding CI lint issues.
+
+## [v0.54.0] - 2026-09-01
+
+### Changed
+
+- **Gitee backend replaced the Swagger-generated SDK with
+  `github.com/next-bin/go-gitee`**, a handwritten go-github-style client
+  (260+ methods). The 22 registered raw-transport detours from the
+  generated era were re-landed on the new SDK's surface.
+
+## [v0.53.0] - 2026-09-01
+
+### Added
+
+- **`BranchProtectionManager`, `CollaboratorManager`,
+  `DeploymentKeyManager`, and `RepoStatsManager` optional capabilities**
+  across backends, plus `ChangeRequest.Assignees` and a mentions fix.
+
+## [v0.52.0] - 2026-08-31
+
+### Added
+
+- **`NotificationManager` and `ReactionManager` optional capabilities** —
+  notification listing/mark-read and emoji reactions on issues, comments,
+  and change requests, gated by `Capabilities()`.
+
 ## [v0.51.0] - 2026-08-31
 
 ### Added
