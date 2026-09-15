@@ -71,9 +71,12 @@ func TestGitea_Contract(t *testing.T) {
 			IssuesResponse: `[{"number":1,"title":"found","state":"open","body":"b","html_url":"https://gitea.example.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z","repository":{"full_name":"owner/repo"}}]`,
 			UsersResponse:  `{"ok":true,"data":[{"login":"dev","full_name":"Dev","avatar_url":"https://gitea.example.com/avatars/1","html_url":"https://gitea.example.com/dev"}]}`,
 		},
-		// CommitStatus is zero-config: the suite self-drives against the
-		// recording server and asserts a single status-reporting request.
-		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
+		// Commit status fixtures: gitea's commit-status shape
+		// (GET /repos/{o}/{r}/commits/{ref}/statuses), a bare array where
+		// the state verb rides the "status" key.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{
+			ListResponse: `[{"id":1,"status":"success","context":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1","url":"https://gitea.example.com/api/v1/repos/owner/repo/statuses/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:10Z"},{"id":2,"status":"pending","context":"ci/test","description":"tests running","target_url":"https://ci.example.com/2","url":"https://gitea.example.com/api/v1/repos/owner/repo/statuses/2","created_at":"2026-01-01T00:00:05Z","updated_at":"2026-01-01T00:00:05Z"}]`,
+		},
 		Notifications: &contracttest.NotificationsHarnessConfig{
 			ListResponse: `[{"id":1,"unread":true,"subject":{"title":"Bug report","type":"Issue","url":"https://gitea.com/api/v1/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00Z"}]`,
 		},

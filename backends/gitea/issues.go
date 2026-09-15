@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
@@ -28,7 +28,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	if opts.Assignee != "" {
 		listOpts.AssignedBy = opts.Assignee
 	}
-	issues, _, err := p.client.ListRepoIssues(opts.Owner, opts.Repo, listOpts)
+	issues, _, err := p.client.Issues.ListRepoIssues(ctx, opts.Owner, opts.Repo, listOpts)
 	if err != nil {
 		return nil, 0, provider.Wrap(provider.PlatformGitea, "ListIssues", err)
 	}
@@ -45,7 +45,7 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 	if err != nil {
 		return nil, err
 	}
-	issue, _, err := p.client.GetIssue(owner, repo, n)
+	issue, _, err := p.client.Issues.GetIssue(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "GetIssue", err)
 	}
@@ -69,13 +69,13 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		createOpts.Milestone = m
 	}
 	if len(opts.Labels) > 0 {
-		ids, err := p.resolveLabelIDs("CreateIssue", opts.Owner, opts.Repo, opts.Labels)
+		ids, err := p.resolveLabelIDs(ctx, "CreateIssue", opts.Owner, opts.Repo, opts.Labels)
 		if err != nil {
 			return nil, err
 		}
 		createOpts.Labels = ids
 	}
-	issue, _, err := p.client.CreateIssue(opts.Owner, opts.Repo, createOpts)
+	issue, _, err := p.client.Issues.CreateIssue(ctx, opts.Owner, opts.Repo, createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "CreateIssue", err)
 	}
@@ -95,20 +95,20 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	if opts.Title == "" && opts.Body == "" && opts.State == "" && len(opts.Assignees) == 0 && len(opts.Labels) == 0 && opts.Milestone == "" {
 		return p.GetIssue(ctx, owner, repo, number)
 	}
-	edit, err := p.buildEditIssueOption("UpdateIssue", owner, repo, n, opts)
+	edit, err := p.buildEditIssueOption(ctx, "UpdateIssue", owner, repo, n, opts)
 	if err != nil {
 		return nil, err
 	}
 	if len(opts.Labels) > 0 {
-		ids, err := p.resolveLabelIDs("UpdateIssue", owner, repo, opts.Labels)
+		ids, err := p.resolveLabelIDs(ctx, "UpdateIssue", owner, repo, opts.Labels)
 		if err != nil {
 			return nil, err
 		}
-		if _, _, err := p.client.ReplaceIssueLabels(owner, repo, n, gitea.IssueLabelsOption{Labels: ids}); err != nil {
+		if _, _, err := p.client.Issues.ReplaceIssueLabels(ctx, owner, repo, n, gitea.IssueLabelsOption{Labels: ids}); err != nil {
 			return nil, provider.Wrap(provider.PlatformGitea, "UpdateIssue", err)
 		}
 	}
-	issue, _, err := p.client.EditIssue(owner, repo, n, edit)
+	issue, _, err := p.client.Issues.EditIssue(ctx, owner, repo, n, edit)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "UpdateIssue", err)
 	}
@@ -126,13 +126,13 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 // EditIssueOption has no omitempty on Title — sending an empty string would
 // clear the title. The cost is one additional API round-trip per update that
 // does not explicitly set the title.
-func (p *Provider) buildEditIssueOption(op, owner, repo string, n int64, opts provider.UpdateIssueOptions) (gitea.EditIssueOption, error) {
+func (p *Provider) buildEditIssueOption(ctx context.Context, op, owner, repo string, n int64, opts provider.UpdateIssueOptions) (gitea.EditIssueOption, error) {
 	edit := gitea.EditIssueOption{}
 	if opts.Title != "" {
 		edit.Title = opts.Title
 	} else {
 		// Extra GET: Gitea requires Title on every edit; backfill from current.
-		current, _, err := p.client.GetIssue(owner, repo, n)
+		current, _, err := p.client.Issues.GetIssue(ctx, owner, repo, n)
 		if err != nil {
 			return edit, provider.Wrap(provider.PlatformGitea, op, err)
 		}
@@ -165,7 +165,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 	if err != nil {
 		return nil, err
 	}
-	return p.setIssueState(owner, repo, n, gitea.StateClosed, "CloseIssue")
+	return p.setIssueState(ctx, owner, repo, n, gitea.StateClosed, "CloseIssue")
 }
 
 // ReopenIssue implements provider.IssueManager.
@@ -174,7 +174,7 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	if err != nil {
 		return nil, err
 	}
-	return p.setIssueState(owner, repo, n, gitea.StateOpen, "ReopenIssue")
+	return p.setIssueState(ctx, owner, repo, n, gitea.StateOpen, "ReopenIssue")
 }
 
 // setIssueState closes/reopens an issue. EditIssue always serializes Title,
@@ -183,12 +183,12 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 //
 // KNOWN COST: One extra GET per close/reopen to backfill the title (same
 // constraint as buildEditIssueOption).
-func (p *Provider) setIssueState(owner, repo string, n int64, state gitea.StateType, op string) (*provider.Issue, error) {
-	current, _, err := p.client.GetIssue(owner, repo, n)
+func (p *Provider) setIssueState(ctx context.Context, owner, repo string, n int64, state gitea.StateType, op string) (*provider.Issue, error) {
+	current, _, err := p.client.Issues.GetIssue(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, op, err)
 	}
-	issue, _, err := p.client.EditIssue(owner, repo, n, gitea.EditIssueOption{Title: current.Title, State: &state})
+	issue, _, err := p.client.Issues.EditIssue(ctx, owner, repo, n, gitea.EditIssueOption{Title: current.Title, State: &state})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, op, err)
 	}
@@ -202,7 +202,7 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 		return nil, err
 	}
 	comments, err := backendutil.AllPages(func(page int) ([]*gitea.Comment, error) {
-		batch, _, err := p.client.ListIssueComments(owner, repo, n, gitea.ListIssueCommentOptions{
+		batch, _, err := p.client.Issues.ListIssueComments(ctx, owner, repo, n, gitea.ListIssueCommentOptions{
 			ListOptions: gitea.ListOptions{Page: page, PageSize: backendutil.IssueCommentPageSize},
 		})
 		return batch, err
@@ -223,7 +223,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	if err != nil {
 		return nil, err
 	}
-	comment, _, err := p.client.CreateIssueComment(owner, repo, n, gitea.CreateIssueCommentOption{Body: body})
+	comment, _, err := p.client.Issues.CreateIssueComment(ctx, owner, repo, n, gitea.CreateIssueCommentOption{Body: body})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "CreateIssueComment", err)
 	}
@@ -235,7 +235,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 // context (see the gitea standing limitation). The platform only lets the
 // comment's author perform the edit.
 func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
-	comment, _, err := p.client.EditIssueComment(owner, repo, commentID, gitea.EditIssueCommentOption{Body: body})
+	comment, _, err := p.client.Issues.EditIssueComment(ctx, owner, repo, commentID, gitea.EditIssueCommentOption{Body: body})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "UpdateIssueComment", err)
 	}
@@ -246,7 +246,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 // exhausting pagination (the loop advances until an empty page).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*gitea.Label, error) {
-		batch, _, err := p.client.ListRepoLabels(owner, repo, gitea.ListLabelsOptions{
+		batch, _, err := p.client.Repositories.ListRepoLabels(ctx, owner, repo, gitea.ListLabelsOptions{
 			ListOptions: gitea.ListOptions{Page: page, PageSize: backendutil.LabelPageSize},
 		})
 		return batch, err
@@ -267,11 +267,11 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 	if err != nil {
 		return err
 	}
-	ids, err := p.resolveLabelIDs("AddIssueLabels", owner, repo, labels)
+	ids, err := p.resolveLabelIDs(ctx, "AddIssueLabels", owner, repo, labels)
 	if err != nil {
 		return err
 	}
-	if _, _, err := p.client.AddIssueLabels(owner, repo, n, gitea.IssueLabelsOption{Labels: ids}); err != nil {
+	if _, _, err := p.client.Issues.AddIssueLabels(ctx, owner, repo, n, gitea.IssueLabelsOption{Labels: ids}); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "AddIssueLabels", err)
 	}
 	return nil
@@ -283,11 +283,11 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	if err != nil {
 		return err
 	}
-	id, err := p.resolveLabelID("RemoveIssueLabel", owner, repo, name)
+	id, err := p.resolveLabelID(ctx, "RemoveIssueLabel", owner, repo, name)
 	if err != nil {
 		return err
 	}
-	if _, err := p.client.DeleteIssueLabel(owner, repo, n, id); err != nil {
+	if _, err := p.client.Issues.DeleteIssueLabel(ctx, owner, repo, n, id); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "RemoveIssueLabel", err)
 	}
 	return nil
@@ -295,10 +295,10 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 
 // resolveLabelIDs resolves label names to numeric IDs, one list call per
 // name (labels.go owns the single-name resolver).
-func (p *Provider) resolveLabelIDs(op, owner, repo string, names []string) ([]int64, error) {
+func (p *Provider) resolveLabelIDs(ctx context.Context, op, owner, repo string, names []string) ([]int64, error) {
 	ids := make([]int64, 0, len(names))
 	for _, name := range names {
-		id, err := p.resolveLabelID(op, owner, repo, name)
+		id, err := p.resolveLabelID(ctx, op, owner, repo, name)
 		if err != nil {
 			return nil, err
 		}

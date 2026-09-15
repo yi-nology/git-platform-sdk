@@ -3,7 +3,7 @@ package gitlab
 import (
 	"context"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )

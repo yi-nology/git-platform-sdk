@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	sdkgithub "github.com/google/go-github/v72/github"
+	sdkgithub "github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/contracttest"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -65,9 +65,12 @@ func TestGitHub_Contract(t *testing.T) {
 			IssuesResponse:  `{"total_count":1,"items":[{"number":1,"title":"found","state":"open","body":"b","html_url":"https://github.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z"}]}`,
 			UsersResponse:   `{"total_count":1,"items":[{"login":"dev","name":"Dev","avatar_url":"https://github.com/avatars/u/1","html_url":"https://github.com/dev"}]}`,
 		},
-		// CommitStatus is zero-config: the suite self-drives against the
-		// recording server and asserts a single status-reporting request.
-		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
+		// Commit status fixtures: GitHub's native commit-status shape
+		// (GET /repos/{o}/{r}/commits/{ref}/statuses), a bare array with
+		// state/context/description/target_url.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{
+			ListResponse: `[{"state":"success","context":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1"},{"state":"pending","context":"ci/test","description":"tests running","target_url":"https://ci.example.com/2"}]`,
+		},
 		Notifications: &contracttest.NotificationsHarnessConfig{
 			ListResponse: `[{"id":"1","unread":true,"reason":"subscribed","subject":{"title":"Bug report","type":"Issue","url":"https://api.github.com/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00Z"}]`,
 		},

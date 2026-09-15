@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	giteasdk "code.gitea.io/sdk/gitea"
+	giteasdk "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/backends/gitea"
 	"github.com/yi-nology/git-platform-sdk/provider"

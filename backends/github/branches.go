@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -37,11 +37,9 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 		}
 		sha = commits[0].SHA
 	}
-	_, _, err := p.client.Git.CreateRef(ctx, owner, repo, &github.Reference{
-		Ref: github.Ptr("refs/heads/" + branch),
-		Object: &github.GitObject{
-			SHA: github.Ptr(sha),
-		},
+	_, _, err := p.client.Git.CreateRef(ctx, owner, repo, github.CreateRef{
+		Ref: "refs/heads/" + branch,
+		SHA: sha,
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateBranch", err)

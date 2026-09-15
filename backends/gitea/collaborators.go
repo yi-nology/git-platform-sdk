@@ -3,14 +3,14 @@ package gitea
 import (
 	"context"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListCollaborators implements provider.CollaboratorManager.
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
-	users, _, err := p.client.ListCollaborators(owner, repo, gitea.ListCollaboratorsOptions{})
+	users, _, err := p.client.Repositories.ListCollaborators(ctx, owner, repo, gitea.ListCollaboratorsOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListCollaborators", err)
 	}
@@ -22,7 +22,7 @@ func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([
 		}
 		// Fetch permission for each collaborator. Gitea's ListCollaborators
 		// returns User objects without permission info.
-		perm, _, permErr := p.client.CollaboratorPermission(owner, repo, u.UserName)
+		perm, _, permErr := p.client.Repositories.CollaboratorPermission(ctx, owner, repo, u.UserName)
 		if permErr == nil && perm != nil {
 			collab.Permission = string(perm.Permission)
 		}
@@ -38,7 +38,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 		perm := gitea.AccessMode(opts.Permission)
 		opt.Permission = &perm
 	}
-	if _, err := p.client.AddCollaborator(owner, repo, username, opt); err != nil {
+	if _, err := p.client.Repositories.AddCollaborator(ctx, owner, repo, username, opt); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "AddCollaborator", err)
 	}
 	return nil
@@ -46,7 +46,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 
 // RemoveCollaborator implements provider.CollaboratorManager.
 func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username string) error {
-	if _, err := p.client.DeleteCollaborator(owner, repo, username); err != nil {
+	if _, err := p.client.Repositories.DeleteCollaborator(ctx, owner, repo, username); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "RemoveCollaborator", err)
 	}
 	return nil

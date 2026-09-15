@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -21,8 +21,11 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 			ListOptions: listOpts.ListOptions,
 		})
 	} else {
-		//nolint:staticcheck // Repositories.List is deprecated but works fine for our use case
-		repos, _, err = p.client.Repositories.List(ctx, "", listOpts)
+		// Same wire call the deprecated Repositories.List makes when user is
+		// empty: list repositories of the authenticated user.
+		repos, _, err = p.client.Repositories.ListByAuthenticatedUser(ctx, &github.RepositoryListByAuthenticatedUserOptions{
+			ListOptions: listOpts.ListOptions,
+		})
 	}
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListRepos", err)

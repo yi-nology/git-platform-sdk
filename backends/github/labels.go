@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -25,12 +25,12 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 
 // CreateLabel implements provider.LabelManager.
 func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
-	label := &github.Label{
-		Name:        github.Ptr(opts.Name),
+	label := &github.CreateIssueLabelRequest{
+		Name:        opts.Name,
 		Color:       github.Ptr(opts.Color),
 		Description: github.Ptr(opts.Description),
 	}
-	created, _, err := p.client.Issues.CreateLabel(ctx, owner, repo, label)
+	created, _, err := p.client.Issues.CreateLabel(ctx, owner, repo, *label)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateLabel", err)
 	}
@@ -40,9 +40,9 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 // UpdateLabel implements provider.LabelManager. GitHub addresses labels by
 // name; nil option fields are simply omitted from the PATCH body.
 func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
-	label := &github.Label{}
+	label := &github.UpdateIssueLabelRequest{}
 	if opts.NewName != nil {
-		label.Name = opts.NewName
+		label.NewName = opts.NewName
 	}
 	if opts.Color != nil {
 		label.Color = opts.Color
@@ -50,7 +50,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	if opts.Description != nil {
 		label.Description = opts.Description
 	}
-	updated, _, err := p.client.Issues.EditLabel(ctx, owner, repo, name, label)
+	updated, _, err := p.client.Issues.UpdateLabel(ctx, owner, repo, name, *label)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateLabel", err)
 	}

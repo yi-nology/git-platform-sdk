@@ -1,6 +1,6 @@
 // Package gitea implements the Gitea Provider for the git-platform-sdk.
 //
-// It builds on top of the official code.gitea.io/sdk/gitea SDK and adds
+// It builds on top of the official gitea.dev/sdk SDK and adds
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
 // provided by the parent project's transport package. All Provider methods
 // are split across the per-responsibility files in this package:
@@ -29,7 +29,7 @@ import (
 	"net/http"
 	"time"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -92,7 +92,7 @@ func (p *Provider) Capabilities() provider.CapabilitySet {
 
 // TestConnection implements provider.Provider.
 func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnectionResult, error) {
-	user, _, err := p.client.GetMyUserInfo()
+	user, _, err := p.client.Users.GetMyUserInfo(ctx)
 	if err != nil {
 		return &provider.TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}

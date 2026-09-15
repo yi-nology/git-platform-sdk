@@ -3,14 +3,14 @@ package gitea
 import (
 	"context"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListForks implements provider.RepoStatsManager.
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
-	forks, _, err := p.client.ListForks(owner, repo, gitea.ListForksOptions{
+	forks, _, err := p.client.Repositories.ListForks(ctx, owner, repo, gitea.ListForksOptions{
 		ListOptions: gitea.ListOptions{Page: 1, PageSize: 50},
 	})
 	if err != nil {
@@ -25,7 +25,7 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 
 // ListStargazers implements provider.RepoStatsManager.
 func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
-	stargazers, _, err := p.client.ListRepoStargazers(owner, repo, gitea.ListStargazersOptions{
+	stargazers, _, err := p.client.Repositories.ListRepoStargazers(ctx, owner, repo, gitea.ListStargazersOptions{
 		ListOptions: gitea.ListOptions{Page: 1, PageSize: 50},
 	})
 	if err != nil {

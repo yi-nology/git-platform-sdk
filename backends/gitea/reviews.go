@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -17,7 +17,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 	if err != nil {
 		return nil, err
 	}
-	reviews, _, err := p.client.ListPullReviews(owner, repo, index, gitea.ListPullReviewsOptions{})
+	reviews, _, err := p.client.PullRequests.ListPullReviews(ctx, owner, repo, index, gitea.ListPullReviewsOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListReviews", err)
 	}
@@ -34,7 +34,7 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 	if err != nil {
 		return nil, err
 	}
-	review, _, err := p.client.GetPullReview(owner, repo, index, reviewID)
+	review, _, err := p.client.PullRequests.GetPullReview(ctx, owner, repo, index, reviewID)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "GetReview", err)
 	}
@@ -88,7 +88,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 		reviewOpts.Comments = append(reviewOpts.Comments, rc)
 	}
 
-	review, _, err := p.client.CreatePullReview(owner, repo, index, reviewOpts)
+	review, _, err := p.client.PullRequests.CreatePullReview(ctx, owner, repo, index, reviewOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "CreateReview", err)
 	}
@@ -103,7 +103,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 	if err != nil {
 		return err
 	}
-	if _, err := p.client.CreateReviewRequests(owner, repo, index, gitea.PullReviewRequestOptions{
+	if _, err := p.client.PullRequests.CreateReviewRequests(ctx, owner, repo, index, gitea.PullReviewRequestOptions{
 		Reviewers: reviewers,
 	}); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "RequestReviewers", err)
@@ -118,7 +118,7 @@ func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string
 	if err != nil {
 		return err
 	}
-	if _, err := p.client.DismissPullReview(owner, repo, index, reviewID, gitea.DismissPullReviewOptions{
+	if _, err := p.client.PullRequests.DismissPullReview(ctx, owner, repo, index, reviewID, gitea.DismissPullReviewOptions{
 		Message: message,
 	}); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DismissReview", err)

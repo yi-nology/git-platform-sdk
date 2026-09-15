@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
@@ -51,14 +51,14 @@ func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string)
 
 // CreateMilestone implements provider.MilestoneManager.
 func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*provider.Milestone, error) {
-	createOpts := &github.Milestone{
-		Title:       github.Ptr(opts.Title),
+	createOpts := &github.CreateMilestoneRequest{
+		Title:       opts.Title,
 		Description: github.Ptr(opts.Description),
 	}
 	if opts.DueOn != nil {
 		createOpts.DueOn = &github.Timestamp{Time: *opts.DueOn}
 	}
-	m, _, err := p.client.Issues.CreateMilestone(ctx, owner, repo, createOpts)
+	m, _, err := p.client.Issues.CreateMilestone(ctx, owner, repo, *createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateMilestone", err)
 	}
@@ -73,7 +73,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	if err != nil {
 		return nil, err
 	}
-	editOpts := &github.Milestone{}
+	editOpts := &github.UpdateMilestoneRequest{}
 	if opts.Title != nil {
 		editOpts.Title = opts.Title
 	}
@@ -86,7 +86,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	if opts.DueOn != nil {
 		editOpts.DueOn = &github.Timestamp{Time: *opts.DueOn}
 	}
-	m, _, err := p.client.Issues.EditMilestone(ctx, owner, repo, int(n), editOpts)
+	m, _, err := p.client.Issues.UpdateMilestone(ctx, owner, repo, int(n), *editOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateMilestone", err)
 	}

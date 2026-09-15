@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -13,7 +13,7 @@ import (
 func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	if opts.Owner != "" {
-		results, _, err := p.client.SearchRepos(gitea.SearchRepoOptions{
+		results, _, err := p.client.Repositories.SearchRepos(ctx, gitea.SearchRepoOptions{
 			ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
 		})
 		if err != nil {
@@ -28,7 +28,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		}
 		return filtered, nil
 	}
-	repos, _, err := p.client.ListMyRepos(gitea.ListReposOptions{
+	repos, _, err := p.client.Repositories.ListMyRepos(ctx, gitea.ListReposOptions{
 		ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
 	})
 	if err != nil {
@@ -43,7 +43,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 
 // GetRepo implements provider.RepoManager.
 func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
-	r, resp, err := p.client.GetRepo(owner, repo)
+	r, resp, err := p.client.Repositories.GetRepo(ctx, owner, repo)
 	if err != nil {
 		// Gitea's error type does not carry the HTTP status; preserve it
 		// from the *Response so provider.IsNotFound works.
@@ -72,9 +72,9 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 	var r *gitea.Repository
 	var err error
 	if owner != "" {
-		r, _, err = p.client.CreateOrgRepo(owner, createOpts)
+		r, _, err = p.client.Repositories.CreateOrgRepo(ctx, owner, createOpts)
 	} else {
-		r, _, err = p.client.CreateRepo(createOpts)
+		r, _, err = p.client.Repositories.CreateRepo(ctx, createOpts)
 	}
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "CreateRepo", err)
@@ -91,7 +91,7 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 	if opts.Name != "" {
 		forkOpts.Name = &opts.Name
 	}
-	r, _, err := p.client.CreateFork(owner, repo, forkOpts)
+	r, _, err := p.client.Repositories.CreateFork(ctx, owner, repo, forkOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ForkRepo", err)
 	}
@@ -100,7 +100,7 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 
 // DeleteRepo implements provider.RepoManager.
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
-	_, err := p.client.DeleteRepo(owner, repo)
+	_, err := p.client.Repositories.DeleteRepo(ctx, owner, repo)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteRepo", err)
 	}
@@ -122,7 +122,7 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 	if opts.Private != nil {
 		editOpts.Private = opts.Private
 	}
-	r, _, err := p.client.EditRepo(owner, repo, editOpts)
+	r, _, err := p.client.Repositories.EditRepo(ctx, owner, repo, editOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "UpdateRepo", err)
 	}

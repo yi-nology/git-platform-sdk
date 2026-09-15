@@ -4,14 +4,14 @@ import (
 	"context"
 	"net/http"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // GetFileContent implements provider.FileManager.
 func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
-	data, resp, err := p.client.GetFile(owner, repo, ref, path)
+	data, resp, err := p.client.Repositories.GetFile(ctx, owner, repo, ref, path)
 	if err != nil {
 		// The gitea SDK flattens API errors to the server's message string (no
 		// status info survives on the error), so classify from the *Response —
@@ -31,7 +31,7 @@ func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts prov
 		FileOptions: gitea.FileOptions{Message: opts.Message, BranchName: opts.Branch},
 		Content:     opts.Content,
 	}
-	resp, _, err := p.client.CreateFile(owner, repo, opts.Path, createOpts)
+	resp, _, err := p.client.Repositories.CreateFile(ctx, owner, repo, opts.Path, createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "CreateFile", err)
 	}
@@ -49,7 +49,7 @@ func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts prov
 		SHA:         opts.SHA,
 		Content:     opts.Content,
 	}
-	resp, _, err := p.client.UpdateFile(owner, repo, opts.Path, updateOpts)
+	resp, _, err := p.client.Repositories.UpdateFile(ctx, owner, repo, opts.Path, updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "UpdateFile", err)
 	}
@@ -66,7 +66,7 @@ func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts prov
 		FileOptions: gitea.FileOptions{Message: opts.Message, BranchName: opts.Branch},
 		SHA:         opts.SHA,
 	}
-	resp, err := p.client.DeleteFile(owner, repo, opts.Path, deleteOpts)
+	resp, err := p.client.Repositories.DeleteFile(ctx, owner, repo, opts.Path, deleteOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "DeleteFile", err)
 	}

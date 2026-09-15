@@ -3,14 +3,14 @@ package gitea
 import (
 	"context"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListBranches implements provider.BranchManager.
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
-	branches, _, err := p.client.ListRepoBranches(owner, repo, gitea.ListRepoBranchesOptions{
+	branches, _, err := p.client.Repositories.ListRepoBranches(ctx, owner, repo, gitea.ListRepoBranchesOptions{
 		ListOptions: gitea.ListOptions{PageSize: 100},
 	})
 	if err != nil {
@@ -25,7 +25,7 @@ func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*pro
 
 // CreateBranch implements provider.BranchManager.
 func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*provider.PlatformBranch, error) {
-	b, _, err := p.client.CreateBranch(owner, repo, gitea.CreateBranchOption{
+	b, _, err := p.client.Repositories.CreateBranch(ctx, owner, repo, gitea.CreateBranchOption{
 		BranchName:    branch,
 		OldBranchName: ref,
 	})
@@ -37,7 +37,7 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 
 // DeleteBranch implements provider.BranchManager.
 func (p *Provider) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
-	_, _, err := p.client.DeleteRepoBranch(owner, repo, branch)
+	_, _, err := p.client.Repositories.DeleteRepoBranch(ctx, owner, repo, branch)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteBranch", err)
 	}

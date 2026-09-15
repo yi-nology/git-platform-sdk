@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	gitea "code.gitea.io/sdk/gitea"
+	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -15,7 +15,7 @@ import (
 // ListLabels implements provider.LabelManager.
 func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	labels, _, err := p.client.ListRepoLabels(owner, repo, gitea.ListLabelsOptions{
+	labels, _, err := p.client.Repositories.ListRepoLabels(ctx, owner, repo, gitea.ListLabelsOptions{
 		ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
 	})
 	if err != nil {
@@ -31,7 +31,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 // CreateLabel implements provider.LabelManager. Gitea accepts colors with or
 // without a leading '#'; we send the '#'-prefixed form.
 func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
-	label, _, err := p.client.CreateLabel(owner, repo, gitea.CreateLabelOption{
+	label, _, err := p.client.Repositories.CreateLabel(ctx, owner, repo, gitea.CreateLabelOption{
 		Name:        opts.Name,
 		Color:       "#" + opts.Color,
 		Description: opts.Description,
@@ -45,7 +45,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 // UpdateLabel implements provider.LabelManager. Gitea addresses labels by
 // numeric ID, so the label is resolved by name first.
 func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
-	id, err := p.resolveLabelID("UpdateLabel", owner, repo, name)
+	id, err := p.resolveLabelID(ctx, "UpdateLabel", owner, repo, name)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	if opts.Description != nil {
 		edit.Description = opts.Description
 	}
-	label, _, err := p.client.EditLabel(owner, repo, id, edit)
+	label, _, err := p.client.Repositories.EditLabel(ctx, owner, repo, id, edit)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "UpdateLabel", err)
 	}
@@ -69,11 +69,11 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 
 // DeleteLabel implements provider.LabelManager.
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
-	id, err := p.resolveLabelID("DeleteLabel", owner, repo, name)
+	id, err := p.resolveLabelID(ctx, "DeleteLabel", owner, repo, name)
 	if err != nil {
 		return err
 	}
-	if _, err := p.client.DeleteLabel(owner, repo, id); err != nil {
+	if _, err := p.client.Repositories.DeleteLabel(ctx, owner, repo, id); err != nil {
 		return provider.Wrap(provider.PlatformGitea, "DeleteLabel", err)
 	}
 	return nil
@@ -85,11 +85,10 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 // them by name. Exhausting the 50-page budget surfaces a scan-limit error
 // (distinct from a definitive 404). op is the public operation the
 // resolution serves; failures surface under that op rather than under this
-// unexported helper's name. The gitea SDK's label methods accept no
-// context, so this helper carries none either.
-func (p *Provider) resolveLabelID(op, owner, repo, name string) (int64, error) {
+// unexported helper's name.
+func (p *Provider) resolveLabelID(ctx context.Context, op, owner, repo, name string) (int64, error) {
 	id, err := p.labelIDs.ResolveLabel(owner+"/"+repo, name, func(page, perPage int) ([]backendutil.LabelRef, error) {
-		labels, _, err := p.client.ListRepoLabels(owner, repo, gitea.ListLabelsOptions{
+		labels, _, err := p.client.Repositories.ListRepoLabels(ctx, owner, repo, gitea.ListLabelsOptions{
 			ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
 		})
 		if err != nil {

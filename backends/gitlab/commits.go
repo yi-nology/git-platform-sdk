@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -85,6 +85,36 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 		return provider.Wrap(provider.PlatformGitLab, "CreateCommitStatus", err)
 	}
 	return nil
+}
+
+// ListCommitStatuses implements provider.CommitStatusManager.
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+	statuses, _, err := p.client.Commits.GetCommitStatuses(pidOf(owner, repo), sha, nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListCommitStatuses", err)
+	}
+	return convertCommitStatuses(statuses), nil
+}
+
+// convertCommitStatuses maps GitLab commit statuses onto the unified
+// vocabulary. On the wire the state verb travels under the "status" key
+// (client-go's CommitStatus.Status), while "name" is the per-check context;
+// GitLab verbs (pending/running/success/failed/canceled) normalize through
+// the shared vocabulary.
+func convertCommitStatuses(statuses []*gitlab.CommitStatus) []provider.CommitStatus {
+	result := make([]provider.CommitStatus, 0, len(statuses))
+	for _, s := range statuses {
+		if s == nil {
+			continue
+		}
+		result = append(result, provider.CommitStatus{
+			State:       provider.NormalizeCommitStatusState(s.Status),
+			Context:     s.Name,
+			Description: s.Description,
+			TargetURL:   s.TargetURL,
+		})
+	}
+	return result
 }
 
 var _ provider.CommitManager = (*Provider)(nil)

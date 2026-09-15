@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
@@ -12,13 +12,13 @@ import (
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
-	newPR := &github.NewPullRequest{
+	newPR := &github.CreatePullRequest{
 		Title: github.Ptr(opts.Title),
 		Body:  github.Ptr(opts.Description),
-		Head:  github.Ptr(opts.SourceBranch),
-		Base:  github.Ptr(opts.TargetBranch),
+		Head:  opts.SourceBranch,
+		Base:  opts.TargetBranch,
 	}
-	pr, _, err := p.client.PullRequests.Create(ctx, opts.Owner, opts.Repo, newPR)
+	pr, _, err := p.client.PullRequests.Create(ctx, opts.Owner, opts.Repo, *newPR)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateCR", err)
 	}

@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -41,8 +41,8 @@ func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username
 }
 
 // convertCollaborator maps a github.User to a provider.Collaborator.
-// GitHub's ListCollaborators returns User objects; the permission map is
-// collapsed to the highest role found (admin > push > pull).
+// GitHub's ListCollaborators returns User objects; the permission flags are
+// collapsed to the highest role found (admin > maintain > push > triage > pull).
 func convertCollaborator(u *github.User) *provider.Collaborator {
 	if u == nil {
 		return nil
@@ -51,15 +51,20 @@ func convertCollaborator(u *github.User) *provider.Collaborator {
 		ID:       u.GetID(),
 		Username: u.GetLogin(),
 	}
-	perms := u.GetPermissions()
-	if len(perms) > 0 {
-		// GitHub returns a map like {"admin": true, "push": true}; pick the
+	if perms := u.GetPermissions(); perms != nil {
+		// GitHub returns flags like {"admin": true, "push": true}; pick the
 		// highest-level permission that is set.
-		for _, role := range []string{"admin", "maintain", "push", "triage", "pull"} {
-			if perms[role] {
-				c.Permission = role
-				break
-			}
+		switch {
+		case perms.GetAdmin():
+			c.Permission = "admin"
+		case perms.GetMaintain():
+			c.Permission = "maintain"
+		case perms.GetPush():
+			c.Permission = "push"
+		case perms.GetTriage():
+			c.Permission = "triage"
+		case perms.GetPull():
+			c.Permission = "pull"
 		}
 	}
 	return c

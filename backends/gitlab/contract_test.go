@@ -82,9 +82,12 @@ func TestGitLab_Contract(t *testing.T) {
 			IssuesResponse: `[{"id":1,"iid":1,"title":"found","state":"opened","description":"b","web_url":"https://gitlab.example.com/owner/repo/-/issues/1","labels":["bug"],"user_notes_count":2,"created_at":"2026-01-01T00:00:00Z"}]`,
 			UsersResponse:  `[{"username":"dev","name":"Dev","avatar_url":"https://gitlab.example.com/uploads/-/system/user/avatar/1/avatar.png","web_url":"https://gitlab.example.com/dev"}]`,
 		},
-		// CommitStatus is zero-config: the suite self-drives against the
-		// recording server and asserts a single status-reporting request.
-		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
+		// Commit status fixtures: GitLab's commit-status shape
+		// (GET /projects/:id/repository/commits/:sha/statuses), a bare array
+		// where the state verb rides the "status" key and the context "name".
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{
+			ListResponse: `[{"id":1,"sha":"deadbeef","ref":"main","status":"success","name":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1","created_at":"2026-01-01T00:00:00Z","finished_at":"2026-01-01T00:00:10Z","allow_failure":false,"coverage":87.5,"pipeline_id":10,"author":{"id":1,"username":"dev"}},{"id":2,"sha":"deadbeef","ref":"main","status":"pending","name":"ci/test","description":"tests running","target_url":"https://ci.example.com/2","created_at":"2026-01-01T00:00:05Z","allow_failure":false,"coverage":0,"pipeline_id":10,"author":{"id":1,"username":"dev"}}]`,
+		},
 		// GitLab's notification surface is the Todos API. The wire shape
 		// differs from GitHub/Gitea-style notification threads: todos carry
 		// action_name, target_type, state, and a nested target object.
