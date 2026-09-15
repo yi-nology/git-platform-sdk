@@ -73,9 +73,13 @@ func TestTencentCode_Contract(t *testing.T) {
 			UpdateResponse:             `{"tag_name":"v1.0.0","description":"updated notes","created_at":"2026-01-01T00:00:00Z"}`,
 			UpdateSendsDescriptionOnly: true,
 		},
-		// CommitStatus is zero-config: the suite self-drives against the
-		// recording server and asserts a single status-reporting request.
-		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
+		// Commit status fixtures: gongfeng's commit-status shape is
+		// GitLab-like (GET /projects/:id/repository/commits/:sha/statuses),
+		// a bare array where the state verb rides the "status" key and the
+		// context "name".
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{
+			ListResponse: `[{"id":1,"sha":"deadbeef","ref":"main","status":"success","name":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1","created_at":"2026-01-01T00:00:00Z"},{"id":2,"sha":"deadbeef","ref":"main","status":"pending","name":"ci/test","description":"tests running","target_url":"https://ci.example.com/2","created_at":"2026-01-01T00:00:05Z"}]`,
+		},
 		RepoStats: &contracttest.RepoStatsHarnessConfig{
 			ForksResponse:      `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
 			StargazersResponse: `[{"id":1,"login":"star"}]`,

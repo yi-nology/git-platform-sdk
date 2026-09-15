@@ -67,9 +67,12 @@ func TestGitCode_Contract(t *testing.T) {
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 		},
-		// CommitStatus is zero-config: the suite self-drives against the
-		// recording server and asserts a single status-reporting request.
-		CommitStatus: &contracttest.CommitStatusHarnessConfig{},
+		// Commit status fixtures: gitcode's commit-status shape is
+		// GitHub-like (GET /repos/{o}/{r}/statuses/{sha}), a bare array with
+		// state/context/description/target_url.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{
+			ListResponse: `[{"id":1,"sha":"deadbeef","state":"success","context":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:10Z"},{"id":2,"sha":"deadbeef","state":"pending","context":"ci/test","description":"tests running","target_url":"https://ci.example.com/2","created_at":"2026-01-01T00:00:05Z","updated_at":"2026-01-01T00:00:05Z"}]`,
+		},
 		Notifications: &contracttest.NotificationsHarnessConfig{
 			ListResponse: `[{"id":1,"unread":true,"reason":"subscribed","subject":{"title":"Bug report","type":"Issue","url":"https://gitcode.com/api/v5/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00Z"}]`,
 		},

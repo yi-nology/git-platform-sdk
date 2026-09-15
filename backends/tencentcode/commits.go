@@ -83,5 +83,34 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 	return nil
 }
 
+// ListCommitStatuses implements provider.CommitStatusManager.
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+	pid := owner + "/" + repo
+	statuses, _, err := p.client.CommitStatuses.ListCommitStatuses(ctx, pid, sha, nil)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommitStatuses", err)
+	}
+	return convertCommitStatuses(statuses), nil
+}
+
+// convertCommitStatuses maps gongfeng CommitStatus entries onto the unified
+// vocabulary. 工蜂 is GitLab-shaped: the wire "status" key carries the state
+// verb and "name" the per-check context.
+func convertCommitStatuses(statuses []*gongfeng.CommitStatus) []provider.CommitStatus {
+	result := make([]provider.CommitStatus, 0, len(statuses))
+	for _, s := range statuses {
+		if s == nil {
+			continue
+		}
+		result = append(result, provider.CommitStatus{
+			State:       provider.NormalizeCommitStatusState(s.Status),
+			Context:     s.Name,
+			Description: s.Description,
+			TargetURL:   s.TargetURL,
+		})
+	}
+	return result
+}
+
 var _ provider.CommitManager = (*Provider)(nil)
 var _ provider.CommitStatusManager = (*Provider)(nil)

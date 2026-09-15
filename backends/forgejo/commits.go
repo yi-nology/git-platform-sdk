@@ -69,5 +69,37 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 	return nil
 }
 
+// ListCommitStatuses implements provider.CommitStatusManager.
+//
+// The forgejo SDK accepts no context parameter (registered platform
+// limitation), so ctx is unused here beyond signature conformance.
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+	statuses, _, err := p.client.ListStatuses(owner, repo, sha, forgejo.ListStatusesOption{})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "ListCommitStatuses", err)
+	}
+	return convertCommitStatuses(statuses), nil
+}
+
+// convertCommitStatuses maps forgejo Status entries onto the unified
+// vocabulary. On the wire the verb rides the "status" key (Status.State);
+// forgejo's extra "warning" terminal-passing verb normalizes to success via
+// the shared vocabulary.
+func convertCommitStatuses(statuses []*forgejo.Status) []provider.CommitStatus {
+	result := make([]provider.CommitStatus, 0, len(statuses))
+	for _, s := range statuses {
+		if s == nil {
+			continue
+		}
+		result = append(result, provider.CommitStatus{
+			State:       provider.NormalizeCommitStatusState(string(s.State)),
+			Context:     s.Context,
+			Description: s.Description,
+			TargetURL:   s.TargetURL,
+		})
+	}
+	return result
+}
+
 var _ provider.CommitManager = (*Provider)(nil)
 var _ provider.CommitStatusManager = (*Provider)(nil)
