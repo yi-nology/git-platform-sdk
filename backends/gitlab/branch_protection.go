@@ -33,8 +33,8 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 // CreateBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
 	protectOpts := &gitlab.ProtectRepositoryBranchesOptions{
-		Name:           gitlab.Ptr(opts.BranchName),
-		AllowForcePush: gitlab.Ptr(opts.AllowForcePushes),
+		Name:           new(opts.BranchName),
+		AllowForcePush: new(opts.AllowForcePushes),
 	}
 	b, _, err := p.client.ProtectedBranches.ProtectRepositoryBranches(pidOf(owner, repo), protectOpts, gitlab.WithContext(ctx))
 	if err != nil {

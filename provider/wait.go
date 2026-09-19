@@ -19,9 +19,10 @@ type WaitOptions struct {
 	// Interval is the poll cadence; defaults to DefaultWaitInterval and
 	// is clamped up to minWaitInterval.
 	Interval time.Duration
-	// Timeout bounds the whole wait; defaults to DefaultWaitTimeout. The
-	// returned error wraps ErrDeadlineExceeded-style context deadlines —
-	// pass Timeout <= 0 with your own context deadline to disable it.
+	// Timeout bounds the whole wait. Zero uses DefaultWaitTimeout; a
+	// negative value disables the budget entirely (rely on your own
+	// context deadline). Expiry surfaces as ErrWaitTimedOut carrying the
+	// last observed combined state.
 	Timeout time.Duration
 	// Contexts, when non-empty, restricts the combined state to the
 	// named status contexts (e.g. []string{"ci/lint", "ci/test"}).
@@ -77,23 +78,69 @@ func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha strin
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	var last CombinedCommitStatus
 	for {
 		statuses, err := csm.ListCommitStatuses(ctx, owner, repo, sha)
-		if err == nil {
-			if state, done := foldTerminalStates(statuses, want); done {
-				return state, nil
+		if err != nil {
+			// A definitive miss is a diagnosis, not a reason to wait:
+			// a wrong SHA (or lost permissions) would otherwise burn the
+			// whole budget and surface as a misleading ErrWaitTimedOut.
+			if errors.Is(err, ErrNotFound) {
+				return "", err
 			}
+			// Transient read errors (5xx, rate limits already retried by
+			// the transport) are not fatal: keep polling.
+		} else {
+			snap, done := foldTerminalStates(statuses, want)
+			if done {
+				return snap.State, nil
+			}
+			last = snap
 		}
-		// Read errors (transient 5xx, rate limits already retried by the
-		// transport) are not fatal: keep polling until ctx/timeout.
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		case <-budget:
-			return "", ErrWaitTimedOut
+			return "", fmt.Errorf("%w (last combined state: %s)", ErrWaitTimedOut, last)
 		case <-ticker.C:
 		}
 	}
+}
+
+// CombinedCommitStatus is the fold of a commit's statuses with a snapshot
+// of the per-context states it was derived from.
+type CombinedCommitStatus struct {
+	State CommitStatusState `json:"state"`
+	// Contexts maps each contributing context to its latest state.
+	Contexts map[string]CommitStatusState `json:"contexts,omitempty"`
+}
+
+func (c CombinedCommitStatus) String() string {
+	if len(c.Contexts) == 0 {
+		return string(c.State)
+	}
+	return fmt.Sprintf("%s %v", c.State, c.Contexts)
+}
+
+// LatestCommitStatuses collapses a commit's status history to one status
+// per context, keeping the FIRST occurrence of each context. All platform
+// list endpoints return statuses newest-first (GitHub documents reverse
+// chronological order; Gitea/GitLab/Gitee/GitCode/Forgejo/Tencent Code
+// sort descending by creation), so first-seen is the most recent report
+// of that context — the same entry GitHub's combined status would use.
+// CI re-runs append history instead of replacing it, so folding the raw
+// list would let a stale failure (or pending) outvote the latest result.
+func LatestCommitStatuses(statuses []CommitStatus) []CommitStatus {
+	seen := make(map[string]bool, len(statuses))
+	out := make([]CommitStatus, 0, len(statuses))
+	for _, s := range statuses {
+		if seen[s.Context] {
+			continue
+		}
+		seen[s.Context] = true
+		out = append(out, s)
+	}
+	return out
 }
 
 // initWait normalizes the wait parameters: it clamps the poll interval,
@@ -110,7 +157,11 @@ func initWait(opts WaitOptions) (interval time.Duration, budget <-chan time.Time
 	if interval < minWaitInterval {
 		interval = minWaitInterval
 	}
-	if opts.Timeout > 0 {
+	switch {
+	case opts.Timeout == 0:
+		opts.Timeout = DefaultWaitTimeout
+		fallthrough
+	case opts.Timeout > 0:
 		// The timer is intentionally never stopped: the budget must stay
 		// armed for the whole (unbounded) wait loop, and an unstopped
 		// timer keeps firing regardless of when the wrapper is collected.
@@ -124,21 +175,29 @@ func initWait(opts WaitOptions) (interval time.Duration, budget <-chan time.Time
 	return interval, budget, want
 }
 
-// foldTerminalStates combines the statuses filtered to the wanted
-// contexts and reports whether the combined state is final. With a
-// context filter, absence of ANY wanted context means the fold cannot be
-// final yet — it is reported as pending regardless of what landed so far.
-func foldTerminalStates(statuses []CommitStatus, want map[string]bool) (CommitStatusState, bool) {
-	states := make([]CommitStatusState, 0, len(statuses))
-	for _, s := range statuses {
-		if len(want) > 0 && !want[s.Context] {
-			continue
+// foldTerminalStates combines the LATEST status per context (filtered to
+// the wanted contexts, when any) and reports whether the combined state
+// is final. A wanted context that has not reported at all keeps the fold
+// pending — absence of a report must never be voted in by a duplicate of
+// another context.
+func foldTerminalStates(statuses []CommitStatus, want map[string]bool) (CombinedCommitStatus, bool) {
+	latest := LatestCommitStatuses(statuses)
+	contexts := make(map[string]CommitStatusState, len(latest))
+	states := make([]CommitStatusState, 0, len(latest))
+	reported := 0
+	for _, s := range latest {
+		if len(want) > 0 {
+			if !want[s.Context] {
+				continue
+			}
+			reported++
 		}
+		contexts[s.Context] = s.State
 		states = append(states, s.State)
 	}
-	combined := CombineCommitStatusStates(states)
-	if len(want) > 0 && combined.Terminal() && len(states) < len(want) {
-		return CommitStatusPending, false
+	if len(want) > 0 && reported < len(want) {
+		return CombinedCommitStatus{State: CommitStatusPending}, false
 	}
-	return combined, combined.Terminal()
+	combined := CombineCommitStatusStates(states)
+	return CombinedCommitStatus{State: combined, Contexts: contexts}, combined.Terminal()
 }

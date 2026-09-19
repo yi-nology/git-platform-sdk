@@ -86,7 +86,10 @@ func run() error {
 		}
 	}
 
-	srv := mcpserver.NewServer(p, opts)
+	srv, err := mcpserver.NewServer(p, opts)
+	if err != nil {
+		return fmt.Errorf("build mcp server: %w", err)
+	}
 
 	ctx := context.Background()
 	if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil {

@@ -28,6 +28,9 @@ func (f fakeProvider) ListRepos(ctx context.Context, opts provider.ListRepoOptio
 func (f fakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
 	return "contents of " + path, nil
 }
+func (f fakeProvider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+	return []*provider.CommitInfo{{SHA: "abc123"}}, nil
+}
 func (f fakeProvider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
 	return "note-1", nil
 }
@@ -82,7 +85,10 @@ func (f fakeProvider) RemoveIssueLabel(ctx context.Context, owner, repo, number,
 // the given provider and returns a client for tool calls.
 func connect(t *testing.T, p provider.Provider, opts Options) *mcp.ClientSession {
 	t.Helper()
-	server := NewServer(p, opts)
+	server, err := NewServer(p, opts)
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0"}, nil)
 	ctx := context.Background()
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()

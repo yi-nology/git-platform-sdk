@@ -32,11 +32,11 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 // a leading '#'.
 func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
 	createOpts := &gitlab.CreateLabelOptions{
-		Name:  gitlab.Ptr(opts.Name),
-		Color: gitlab.Ptr("#" + opts.Color),
+		Name:  new(opts.Name),
+		Color: new("#" + opts.Color),
 	}
 	if opts.Description != "" {
-		createOpts.Description = gitlab.Ptr(opts.Description)
+		createOpts.Description = new(opts.Description)
 	}
 	label, _, err := p.client.Labels.CreateLabel(pidOf(owner, repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -57,7 +57,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 		updateOpts.NewName = opts.NewName
 	}
 	if opts.Color != nil {
-		updateOpts.Color = gitlab.Ptr("#" + *opts.Color)
+		updateOpts.Color = new("#" + *opts.Color)
 	}
 	if opts.Description != nil {
 		updateOpts.Description = opts.Description

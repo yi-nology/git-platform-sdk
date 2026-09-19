@@ -50,10 +50,10 @@ func TestNewProvider_Success(t *testing.T) {
 func TestListRepos(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.Repository{
-			{ID: sdkgithub.Ptr(int64(1)), FullName: sdkgithub.Ptr("owner/r1"), Name: sdkgithub.Ptr("r1"),
-				Owner: &sdkgithub.User{Login: sdkgithub.Ptr("owner")}, DefaultBranch: sdkgithub.Ptr("main")},
-			{ID: sdkgithub.Ptr(int64(2)), FullName: sdkgithub.Ptr("owner/r2"), Name: sdkgithub.Ptr("r2"),
-				Owner: &sdkgithub.User{Login: sdkgithub.Ptr("owner")}, DefaultBranch: sdkgithub.Ptr("main"), Private: sdkgithub.Ptr(true)},
+			{ID: new(int64(1)), FullName: new("owner/r1"), Name: new("r1"),
+				Owner: &sdkgithub.User{Login: new("owner")}, DefaultBranch: new("main")},
+			{ID: new(int64(2)), FullName: new("owner/r2"), Name: new("r2"),
+				Owner: &sdkgithub.User{Login: new("owner")}, DefaultBranch: new("main"), Private: new(true)},
 		})
 	}))
 	defer srv.Close()
@@ -77,8 +77,8 @@ func TestListRepos(t *testing.T) {
 func TestGetRepo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(&sdkgithub.Repository{
-			ID: sdkgithub.Ptr(int64(42)), FullName: sdkgithub.Ptr("owner/repo"), Name: sdkgithub.Ptr("repo"),
-			Owner: &sdkgithub.User{Login: sdkgithub.Ptr("owner")}, DefaultBranch: sdkgithub.Ptr("main"),
+			ID: new(int64(42)), FullName: new("owner/repo"), Name: new("repo"),
+			Owner: &sdkgithub.User{Login: new("owner")}, DefaultBranch: new("main"),
 		})
 	}))
 	defer srv.Close()
@@ -96,11 +96,11 @@ func TestGetRepo(t *testing.T) {
 func TestCreateCR(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(&sdkgithub.PullRequest{
-			Number: sdkgithub.Ptr(7), Title: sdkgithub.Ptr("test"), State: sdkgithub.Ptr("open"),
-			Head:    &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("feature"), SHA: sdkgithub.Ptr("abc")},
-			Base:    &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("main")},
-			User:    &sdkgithub.User{ID: sdkgithub.Ptr(int64(1)), Login: sdkgithub.Ptr("dev"), AvatarURL: sdkgithub.Ptr("https://a/v")},
-			HTMLURL: sdkgithub.Ptr("https://github.com/owner/repo/pull/7"),
+			Number: new(7), Title: new("test"), State: new("open"),
+			Head:    &sdkgithub.PullRequestBranch{Ref: new("feature"), SHA: new("abc")},
+			Base:    &sdkgithub.PullRequestBranch{Ref: new("main")},
+			User:    &sdkgithub.User{ID: new(int64(1)), Login: new("dev"), AvatarURL: new("https://a/v")},
+			HTMLURL: new("https://github.com/owner/repo/pull/7"),
 		})
 	}))
 	defer srv.Close()
@@ -124,12 +124,12 @@ func TestCreateCR(t *testing.T) {
 func TestListCRs_MergedDetected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.PullRequest{
-			{Number: sdkgithub.Ptr(1), Title: sdkgithub.Ptr("a"), State: sdkgithub.Ptr("open"),
-				Head: &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("a")}, Base: &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("main")},
-				User: &sdkgithub.User{ID: sdkgithub.Ptr(int64(1)), Login: sdkgithub.Ptr("u")}},
-			{Number: sdkgithub.Ptr(2), Title: sdkgithub.Ptr("b"), State: sdkgithub.Ptr("closed"), Merged: sdkgithub.Ptr(true),
-				Head: &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("b")}, Base: &sdkgithub.PullRequestBranch{Ref: sdkgithub.Ptr("main")},
-				User: &sdkgithub.User{ID: sdkgithub.Ptr(int64(1)), Login: sdkgithub.Ptr("u")}},
+			{Number: new(1), Title: new("a"), State: new("open"),
+				Head: &sdkgithub.PullRequestBranch{Ref: new("a")}, Base: &sdkgithub.PullRequestBranch{Ref: new("main")},
+				User: &sdkgithub.User{ID: new(int64(1)), Login: new("u")}},
+			{Number: new(2), Title: new("b"), State: new("closed"), Merged: new(true),
+				Head: &sdkgithub.PullRequestBranch{Ref: new("b")}, Base: &sdkgithub.PullRequestBranch{Ref: new("main")},
+				User: &sdkgithub.User{ID: new(int64(1)), Login: new("u")}},
 		})
 	}))
 	defer srv.Close()
@@ -155,14 +155,14 @@ func TestGetCRDiff_Pagination(t *testing.T) {
 			// First page: return 100 files to force pagination
 			files := make([]*sdkgithub.CommitFile, 100)
 			for i := range files {
-				files[i] = &sdkgithub.CommitFile{Filename: sdkgithub.Ptr("f" + string(rune('a'+i%26))), Status: sdkgithub.Ptr("modified"), Additions: sdkgithub.Ptr(1), Deletions: sdkgithub.Ptr(0)}
+				files[i] = &sdkgithub.CommitFile{Filename: new("f" + string(rune('a'+i%26))), Status: new("modified"), Additions: new(1), Deletions: new(0)}
 			}
 			_ = json.NewEncoder(w).Encode(files)
 			return
 		}
 		// Second page: 1 file
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.CommitFile{
-			{Filename: sdkgithub.Ptr("last"), Status: sdkgithub.Ptr("added"), Additions: sdkgithub.Ptr(5)},
+			{Filename: new("last"), Status: new("added"), Additions: new(5)},
 		})
 	}))
 	defer srv.Close()
@@ -253,8 +253,8 @@ func TestParseWebhookEvent_Push(t *testing.T) {
 func TestListBranches(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.Branch{
-			{Name: sdkgithub.Ptr("main")},
-			{Name: sdkgithub.Ptr("dev")},
+			{Name: new("main")},
+			{Name: new("dev")},
 		})
 	}))
 	defer srv.Close()
@@ -290,7 +290,7 @@ func TestCreateBranch_WithCommitSHA(t *testing.T) {
 func TestListTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]*sdkgithub.RepositoryTag{
-			{Name: sdkgithub.Ptr("v1.0"), Commit: &sdkgithub.Commit{SHA: sdkgithub.Ptr("abc")}},
+			{Name: new("v1.0"), Commit: &sdkgithub.Commit{SHA: new("abc")}},
 		})
 	}))
 	defer srv.Close()

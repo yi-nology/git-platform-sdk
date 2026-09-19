@@ -73,6 +73,11 @@ func TestProject(t *testing.T) {
 			fields:  []string{".head"},
 			wantErr: true,
 		},
+		{
+			name:    "segment-level wildcard is an error",
+			fields:  []string{"labels.*"},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

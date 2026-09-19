@@ -24,6 +24,14 @@ linters:
   settings:
     gocyclo:
       min-complexity: 15
+    govet:
+      disable:
+        # `inline` reports call sites of generic helpers (e.g. the SDKs'
+        # Ptr[T]) with "type parameter inference is not yet supported" —
+        # a performance diagnostic about inlining, not a correctness
+        # finding. Fires ~200 times per run on go-github/client-go call
+        # sites since the v91/v3 rebases.
+        - inline
     gocritic:
       enabled-tags:
         - diagnostic

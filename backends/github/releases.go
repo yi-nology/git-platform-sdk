@@ -39,11 +39,11 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
 	r, _, err := p.client.Repositories.CreateRelease(ctx, owner, repo, github.CreateReleaseRequest{
 		TagName:         opts.TagName,
-		TargetCommitish: github.Ptr(opts.Target),
-		Name:            github.Ptr(opts.Title),
-		Body:            github.Ptr(opts.Body),
-		Draft:           github.Ptr(opts.Draft),
-		Prerelease:      github.Ptr(opts.Prerelease),
+		TargetCommitish: new(opts.Target),
+		Name:            new(opts.Title),
+		Body:            new(opts.Body),
+		Draft:           new(opts.Draft),
+		Prerelease:      new(opts.Prerelease),
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateRelease", err)

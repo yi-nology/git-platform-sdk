@@ -14,11 +14,11 @@ import (
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
 	createOpts := &gitlab.CreateMergeRequestOptions{
-		SourceBranch:       gitlab.Ptr(opts.SourceBranch),
-		TargetBranch:       gitlab.Ptr(opts.TargetBranch),
-		Title:              gitlab.Ptr(opts.Title),
-		Description:        gitlab.Ptr(opts.Description),
-		RemoveSourceBranch: gitlab.Ptr(opts.RemoveSourceBranch),
+		SourceBranch:       new(opts.SourceBranch),
+		TargetBranch:       new(opts.TargetBranch),
+		Title:              new(opts.Title),
+		Description:        new(opts.Description),
+		RemoveSourceBranch: new(opts.RemoveSourceBranch),
 	}
 	if len(opts.Labels) > 0 {
 		labels := gitlab.LabelOptions(opts.Labels)
@@ -51,13 +51,13 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
 	}
 	if opts.State != "" {
-		listOpts.State = gitlab.Ptr(string(opts.State))
+		listOpts.State = new(string(opts.State))
 	}
 	if opts.SourceBranch != "" {
-		listOpts.SourceBranch = gitlab.Ptr(opts.SourceBranch)
+		listOpts.SourceBranch = new(opts.SourceBranch)
 	}
 	if opts.TargetBranch != "" {
-		listOpts.TargetBranch = gitlab.Ptr(opts.TargetBranch)
+		listOpts.TargetBranch = new(opts.TargetBranch)
 	}
 	mrs, resp, err := p.client.MergeRequests.ListProjectMergeRequests(pidOf(opts.Owner, opts.Repo), listOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -96,13 +96,13 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	}
 	acceptOpts := &gitlab.AcceptMergeRequestOptions{}
 	if opts.MergeCommitMessage != "" {
-		acceptOpts.MergeCommitMessage = gitlab.Ptr(opts.MergeCommitMessage)
+		acceptOpts.MergeCommitMessage = new(opts.MergeCommitMessage)
 	}
 	if opts.Squash {
-		acceptOpts.Squash = gitlab.Ptr(true)
+		acceptOpts.Squash = new(true)
 	}
 	if opts.RemoveSourceBranch {
-		acceptOpts.ShouldRemoveSourceBranch = gitlab.Ptr(true)
+		acceptOpts.ShouldRemoveSourceBranch = new(true)
 	}
 	mr, _, err := p.client.MergeRequests.AcceptMergeRequest(pid, n, acceptOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -118,7 +118,7 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 		return nil, err
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n,
-		&gitlab.UpdateMergeRequestOptions{StateEvent: gitlab.Ptr("close")}, gitlab.WithContext(ctx))
+		&gitlab.UpdateMergeRequestOptions{StateEvent: new("close")}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CloseCR", err)
 	}
@@ -132,7 +132,7 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 		return nil, err
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n,
-		&gitlab.UpdateMergeRequestOptions{StateEvent: gitlab.Ptr("reopen")}, gitlab.WithContext(ctx))
+		&gitlab.UpdateMergeRequestOptions{StateEvent: new("reopen")}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ReopenCR", err)
 	}
@@ -147,13 +147,13 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	}
 	updateOpts := &gitlab.UpdateMergeRequestOptions{}
 	if opts.Title != "" {
-		updateOpts.Title = gitlab.Ptr(opts.Title)
+		updateOpts.Title = new(opts.Title)
 	}
 	if opts.Description != "" {
-		updateOpts.Description = gitlab.Ptr(opts.Description)
+		updateOpts.Description = new(opts.Description)
 	}
 	if opts.TargetBranch != "" {
-		updateOpts.TargetBranch = gitlab.Ptr(opts.TargetBranch)
+		updateOpts.TargetBranch = new(opts.TargetBranch)
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {

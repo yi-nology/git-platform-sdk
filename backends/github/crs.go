@@ -13,8 +13,8 @@ import (
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
 	newPR := &github.CreatePullRequest{
-		Title: github.Ptr(opts.Title),
-		Body:  github.Ptr(opts.Description),
+		Title: new(opts.Title),
+		Body:  new(opts.Description),
 		Head:  opts.SourceBranch,
 		Base:  opts.TargetBranch,
 	}
@@ -94,7 +94,7 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 		return nil, err
 	}
 	pr, _, err := p.client.PullRequests.Edit(ctx, owner, repo, n, &github.PullRequest{
-		State: github.Ptr("closed"),
+		State: new("closed"),
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CloseCR", err)
@@ -109,7 +109,7 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 		return nil, err
 	}
 	result, _, err := p.client.PullRequests.Edit(ctx, owner, repo, n, &github.PullRequest{
-		State: github.Ptr("open"),
+		State: new("open"),
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ReopenCR", err)
@@ -125,13 +125,13 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	}
 	pr := &github.PullRequest{}
 	if opts.Title != "" {
-		pr.Title = github.Ptr(opts.Title)
+		pr.Title = new(opts.Title)
 	}
 	if opts.Description != "" {
-		pr.Body = github.Ptr(opts.Description)
+		pr.Body = new(opts.Description)
 	}
 	if opts.TargetBranch != "" {
-		pr.Base = &github.PullRequestBranch{Ref: github.Ptr(opts.TargetBranch)}
+		pr.Base = &github.PullRequestBranch{Ref: new(opts.TargetBranch)}
 	}
 	result, _, err := p.client.PullRequests.Edit(ctx, owner, repo, n, pr)
 	if err != nil {

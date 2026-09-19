@@ -53,7 +53,7 @@ func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string)
 func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*provider.Milestone, error) {
 	createOpts := &github.CreateMilestoneRequest{
 		Title:       opts.Title,
-		Description: github.Ptr(opts.Description),
+		Description: new(opts.Description),
 	}
 	if opts.DueOn != nil {
 		createOpts.DueOn = &github.Timestamp{Time: *opts.DueOn}
@@ -81,7 +81,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 		editOpts.Description = opts.Description
 	}
 	if opts.State != "" {
-		editOpts.State = github.Ptr(string(opts.State))
+		editOpts.State = new(string(opts.State))
 	}
 	if opts.DueOn != nil {
 		editOpts.DueOn = &github.Timestamp{Time: *opts.DueOn}

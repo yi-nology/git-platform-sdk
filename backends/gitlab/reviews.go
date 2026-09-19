@@ -69,7 +69,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 		return nil, err
 	}
 	note, _, err := p.client.Notes.CreateMergeRequestNote(pidOf(owner, repo), iid,
-		&gitlab.CreateMergeRequestNoteOptions{Body: gitlab.Ptr(opts.Body)}, gitlab.WithContext(ctx))
+		&gitlab.CreateMergeRequestNoteOptions{Body: new(opts.Body)}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CreateReview", err)
 	}

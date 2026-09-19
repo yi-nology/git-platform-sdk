@@ -106,11 +106,11 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 		Path: opts.FilePath,
 	}
 	if opts.NewLine > 0 {
-		comment.Line = github.Ptr(opts.NewLine)
-		comment.Side = github.Ptr("RIGHT")
+		comment.Line = new(opts.NewLine)
+		comment.Side = new("RIGHT")
 	} else if opts.OldLine > 0 {
-		comment.Line = github.Ptr(opts.OldLine)
-		comment.Side = github.Ptr("LEFT")
+		comment.Line = new(opts.OldLine)
+		comment.Side = new("LEFT")
 	}
 	c, _, err := p.client.PullRequests.CreateComment(ctx, owner, repo, n, *comment)
 	if err != nil {

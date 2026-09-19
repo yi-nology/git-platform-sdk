@@ -21,20 +21,20 @@ import (
 func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
 	pid := pidOf(opts.Owner, opts.Repo)
 	hookOpts := &gitlab.AddProjectHookOptions{
-		URL:   gitlab.Ptr(opts.URL),
-		Token: gitlab.Ptr(opts.Secret),
+		URL:   new(opts.URL),
+		Token: new(opts.Secret),
 	}
-	hookOpts.PushEvents = gitlab.Ptr(true)
+	hookOpts.PushEvents = new(true)
 	if len(opts.Events) > 0 {
 		em := map[string]bool{}
 		for _, e := range opts.Events {
 			em[e] = true
 		}
 		if v, ok := em["push"]; ok {
-			hookOpts.PushEvents = gitlab.Ptr(v)
+			hookOpts.PushEvents = new(v)
 		}
-		hookOpts.MergeRequestsEvents = gitlab.Ptr(em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"])
-		hookOpts.TagPushEvents = gitlab.Ptr(em["tag_push"] || em["tag"])
+		hookOpts.MergeRequestsEvents = new(em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"])
+		hookOpts.TagPushEvents = new(em["tag_push"] || em["tag"])
 	}
 	hook, _, err := p.client.Projects.AddProjectHook(pid, hookOpts, gitlab.WithContext(ctx))
 	if err != nil {

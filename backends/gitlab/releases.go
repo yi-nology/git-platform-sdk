@@ -51,10 +51,10 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 // CreateRelease implements provider.ReleaseManager.
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
 	r, _, err := p.client.Releases.CreateRelease(pidOf(owner, repo), &gitlab.CreateReleaseOptions{
-		TagName:     gitlab.Ptr(opts.TagName),
-		Ref:         gitlab.Ptr(opts.Target),
-		Name:        gitlab.Ptr(opts.Title),
-		Description: gitlab.Ptr(opts.Body),
+		TagName:     new(opts.TagName),
+		Ref:         new(opts.Target),
+		Name:        new(opts.Title),
+		Description: new(opts.Body),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CreateRelease", err)
@@ -135,7 +135,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 		fmtVal = "zip"
 	}
 	data, _, err := p.client.Repositories.Archive(pidOf(owner, repo),
-		&gitlab.ArchiveOptions{Format: gitlab.Ptr(fmtVal), SHA: gitlab.Ptr(ref)},
+		&gitlab.ArchiveOptions{Format: new(fmtVal), SHA: new(ref)},
 		gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "GetArchive", err)

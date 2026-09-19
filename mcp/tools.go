@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,6 +27,31 @@ var toolsets = []toolset{
 	{name: toolsetSearch, enabled: func(c provider.CapabilitySet) bool { return c.Search }, registered: registerSearch},
 }
 
+var knownToolsets = map[string]bool{
+	toolsetCore: true, toolsetCRs: true, toolsetIssues: true,
+	toolsetStatus: true, toolsetSearch: true,
+}
+
+// validCommitStatusStates is the write-side vocabulary for
+// set_commit_status. Read-side states like "running"/"canceled" describe
+// pipeline states on some platforms and have no portable write mapping,
+// so they are rejected at the tool boundary instead of failing deep
+// inside a platform SDK with an obscure 4xx.
+var validCommitStatusStates = map[string]bool{
+	"pending": true, "success": true, "failure": true, "error": true,
+}
+
+// validCRStates / validIssueStates gate the list filters at the tool
+// boundary so a typo surfaces as a readable tool error instead of a
+// platform-side 4xx.
+var validCRStates = map[string]bool{
+	"open": true, "opened": true, "closed": true, "merged": true, "all": true,
+}
+
+var validIssueStates = map[string]bool{
+	"open": true, "closed": true, "all": true,
+}
+
 // --- registration helpers ---
 
 // add mounts one tool. write tools (write=true) are dropped entirely
@@ -44,11 +70,14 @@ func add[In, Out any](s *mcp.Server, st *state, name, title, desc string, write 
 		if err != nil {
 			// Provider failures are tool outcomes, not protocol errors:
 			// surface them as IsError text the model can read and react
-			// to (retry, adjust, report).
+			// to (retry, adjust, report). The structured payload is
+			// zeroed so clients never see a success-shaped body paired
+			// with an error.
+			var zero Out
 			return &mcp.CallToolResult{
 				IsError: true,
 				Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
-			}, out, nil
+			}, zero, nil
 		}
 		return nil, out, nil
 	})
@@ -139,6 +168,9 @@ func registerCore(s *mcp.Server, st *state) {
 	})
 
 	add(s, st, "list_crs", "List change requests", "List pull/merge requests of a repository, optionally trimmed to the given fields to save context.", false, func(ctx context.Context, in listCRsIn) (listCRsOut, error) {
+		if in.State != "" && !validCRStates[in.State] {
+			return listCRsOut{}, fmt.Errorf("invalid state %q (open|opened|closed|merged|all)", in.State)
+		}
 		opts := provider.ListCROptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: 30}
 		if in.State != "" {
 			opts.State = provider.CRState(in.State)
@@ -167,6 +199,10 @@ func registerCore(s *mcp.Server, st *state) {
 
 	add(s, st, "get_commit", "Get commit", "Fetch one commit's metadata, message, and files.", false, func(ctx context.Context, in getCommitIn) (*provider.CommitInfo, error) {
 		return st.p.GetCommit(ctx, in.Owner, in.Repo, in.SHA)
+	})
+
+	add(s, st, "list_commits", "List commits", "List a repository's commits (newest first), optionally on one branch.", false, func(ctx context.Context, in listCommitsIn) ([]*provider.CommitInfo, error) {
+		return st.p.ListCommits(ctx, in.Owner, in.Repo, provider.ListCommitsOptions{Branch: in.Branch, Page: in.Page, PerPage: 30})
 	})
 }
 
@@ -253,6 +289,9 @@ func registerIssues(s *mcp.Server, st *state) {
 	}
 
 	add(s, st, "list_issues", "List issues", "List issues of a repository, optionally trimmed to the given fields.", false, func(ctx context.Context, in listIssuesIn) (listIssuesOut, error) {
+		if in.State != "" && !validIssueStates[in.State] {
+			return listIssuesOut{}, fmt.Errorf("invalid state %q (open|closed|all)", in.State)
+		}
 		opts := provider.ListIssuesOptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: 30}
 		if in.State != "" {
 			opts.State = provider.IssueState(in.State)
@@ -284,6 +323,10 @@ func registerIssues(s *mcp.Server, st *state) {
 	add(s, st, "add_issue_comment", "Comment on issue", "Add a comment to an issue.", true, func(ctx context.Context, in addIssueCommentIn) (*provider.IssueComment, error) {
 		return im.CreateIssueComment(ctx, in.Owner, in.Repo, in.Number, in.Body)
 	})
+
+	add(s, st, "close_issue", "Close issue", "Close an issue.", true, func(ctx context.Context, in closeIssueIn) (*provider.Issue, error) {
+		return im.CloseIssue(ctx, in.Owner, in.Repo, in.Number)
+	})
 }
 
 // --- status ---
@@ -303,13 +346,11 @@ type waitStatusIn struct {
 	Repo           string   `json:"repo"`
 	SHA            string   `json:"sha"`
 	Contexts       []string `json:"contexts,omitempty" jsonschema:"wait only for these status contexts; empty = all"`
-	TimeoutSeconds int      `json:"timeout_seconds,omitempty" jsonschema:"overall wait bound; default 600"`
+	TimeoutSeconds int      `json:"timeout_seconds,omitempty" jsonschema:"overall wait bound in seconds; default 600, negative = wait unboundedly"`
 }
 
 type waitStatusOut struct {
-	State   provider.CommitStatusState `json:"state"`
-	Polled  bool                       `json:"polled"`
-	Message string                     `json:"message,omitempty"`
+	State provider.CommitStatusState `json:"state"`
 }
 
 func registerStatus(s *mcp.Server, st *state) {
@@ -318,7 +359,7 @@ func registerStatus(s *mcp.Server, st *state) {
 		return
 	}
 
-	add(s, st, "get_commit_statuses", "Get commit statuses", "List the CI statuses reported on a commit.", false, func(ctx context.Context, in getCommitIn) ([]*provider.CommitStatus, error) {
+	add(s, st, "get_commit_statuses", "Get commit statuses", "List the CI statuses reported on a commit (full history, newest first; use the first entry per context).", false, func(ctx context.Context, in getCommitIn) ([]*provider.CommitStatus, error) {
 		list, err := csm.ListCommitStatuses(ctx, in.Owner, in.Repo, in.SHA)
 		if err != nil {
 			return nil, err
@@ -331,26 +372,30 @@ func registerStatus(s *mcp.Server, st *state) {
 	})
 
 	add(s, st, "set_commit_status", "Set commit status", "Report a CI status on a commit (e.g. after running checks).", true, func(ctx context.Context, in setStatusIn) (map[string]any, error) {
+		if !validCommitStatusStates[in.State] {
+			return nil, fmt.Errorf("invalid state %q (pending|success|failure|error)", in.State)
+		}
 		err := csm.CreateCommitStatus(ctx, in.Owner, in.Repo, in.SHA, provider.CommitStatusOptions{
 			State: in.State, Context: in.Context,
 			Description: in.Description, TargetURL: in.TargetURL,
 		})
-		return map[string]any{"ok": true}, err
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true}, nil
 	})
 
-	add(s, st, "wait_for_status", "Wait for commit status", "Poll until a commit's combined CI state is terminal and return it. States: pending/running until done, then success/failure/error/canceled.", false, func(ctx context.Context, in waitStatusIn) (waitStatusOut, error) {
+	add(s, st, "wait_for_status", "Wait for commit status", "Poll until a commit's combined CI state is terminal and return it. States: pending/running until done, then success/failure/error/canceled. CI re-runs are folded: only the newest report per context counts.", false, func(ctx context.Context, in waitStatusIn) (waitStatusOut, error) {
 		opts := provider.WaitOptions{Interval: 5 * time.Second}
-		if in.TimeoutSeconds > 0 {
+		if in.TimeoutSeconds != 0 {
 			opts.Timeout = time.Duration(in.TimeoutSeconds) * time.Second
-		} else {
-			opts.Timeout = provider.DefaultWaitTimeout
 		}
 		opts.Contexts = in.Contexts
 		state, err := provider.WaitForCommitStatus(ctx, st.p, in.Owner, in.Repo, in.SHA, opts)
 		if err != nil {
 			return waitStatusOut{}, err
 		}
-		return waitStatusOut{State: state, Polled: true}, nil
+		return waitStatusOut{State: state}, nil
 	})
 }
 
@@ -364,6 +409,40 @@ type searchReposIn struct {
 type searchReposOut struct {
 	Total int                          `json:"total"`
 	Repos []*provider.SearchRepoResult `json:"repos"`
+}
+
+type searchIssuesIn struct {
+	Query string `json:"query" jsonschema:"platform search query"`
+	Page  int    `json:"page,omitempty"`
+}
+
+type searchIssuesOut struct {
+	Total  int                           `json:"total"`
+	Issues []*provider.SearchIssueResult `json:"issues"`
+}
+
+type searchUsersIn struct {
+	Query string `json:"query" jsonschema:"platform search query"`
+	Page  int    `json:"page,omitempty"`
+}
+
+type searchUsersOut struct {
+	Total int                          `json:"total"`
+	Users []*provider.SearchUserResult `json:"users"`
+}
+
+type listCommitsIn struct {
+	Owner string `json:"owner"`
+	Repo  string `json:"repo"`
+	// Branch restricts the listing to one branch; empty = default branch.
+	Branch string `json:"branch,omitempty"`
+	Page   int    `json:"page,omitempty"`
+}
+
+type closeIssueIn struct {
+	Owner  string `json:"owner"`
+	Repo   string `json:"repo"`
+	Number string `json:"number"`
 }
 
 func registerSearch(s *mcp.Server, st *state) {
@@ -382,5 +461,29 @@ func registerSearch(s *mcp.Server, st *state) {
 			t = *total
 		}
 		return searchReposOut{Total: t, Repos: repos}, nil
+	})
+
+	add(s, st, "search_issues", "Search issues", "Search issues and pull/merge requests across repositories by query.", false, func(ctx context.Context, in searchIssuesIn) (searchIssuesOut, error) {
+		issues, total, err := sm.SearchIssues(ctx, provider.SearchIssuesOptions{Query: in.Query, Page: in.Page})
+		if err != nil {
+			return searchIssuesOut{}, err
+		}
+		t := 0
+		if total != nil {
+			t = *total
+		}
+		return searchIssuesOut{Total: t, Issues: issues}, nil
+	})
+
+	add(s, st, "search_users", "Search users", "Search users and organizations by query.", false, func(ctx context.Context, in searchUsersIn) (searchUsersOut, error) {
+		users, total, err := sm.SearchUsers(ctx, provider.SearchUsersOptions{Query: in.Query, Page: in.Page})
+		if err != nil {
+			return searchUsersOut{}, err
+		}
+		t := 0
+		if total != nil {
+			t = *total
+		}
+		return searchUsersOut{Total: t, Users: users}, nil
 	})
 }

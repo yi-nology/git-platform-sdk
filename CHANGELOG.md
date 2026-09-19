@@ -14,15 +14,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   back in the new unified `CommitStatus` value whose `State` is normalized
   into the new `CommitStatusState` vocabulary (pending/running/success/
   failure/error/canceled) via `provider.NormalizeCommitStatusState`;
-  Gitee maps its Checks-API check runs onto the same vocabulary. The
-  commit-status contract suite now also pins the read wire shape with a
-  per-platform `ListResponse` fixture (one GET, decode ≥ 1 status).
+  Gitee maps its Checks-API check runs onto the same vocabulary. Every
+  backend paginates to completion (`backendutil.AllPages`, 100/page) so
+  commits with long CI histories are not truncated to the first page; the
+  commit-status contract suite pins the read wire shape with a
+  per-platform `ListResponse` fixture and asserts the pagination walk
+  (data page + terminal empty page, exactly two requests).
 - **`provider.WaitForCommitStatus`** — the CI-gate polling primitive:
   waits until a commit's combined state is terminal, honoring context
-  cancellation, an overall `Timeout` (`ErrWaitTimedOut` so a red build is
-  never confused with giving up), a per-context filter, and a pluggable
-  poll interval. Combined-state precedence matches GitHub's: error >
-  failure > canceled > pending/running > success.
+  cancellation, an overall `Timeout` (zero = `DefaultWaitTimeout`,
+  negative = unbounded; expiry returns `ErrWaitTimedOut` carrying the
+  last observed combined state so a red build is never confused with
+  giving up), a per-context filter, and a pluggable poll interval.
+  `ErrNotFound` from the read side returns immediately — a wrong SHA is
+  a diagnosis, not a reason to wait. The fold uses the LATEST status per
+  context (`provider.LatestCommitStatuses`, first occurrence in the
+  platforms' newest-first listings), matching GitHub combined-status
+  semantics: CI re-runs append history, and a stale failure or pending
+  must never outvote the newest result. Precedence: error > failure >
+  canceled > pending/running > success.
 - **Batch helpers** (`provider/batch.go`) — `GetFileContents`,
   `GetCRs`, and `SetCommitStatuses` run per-item operations with bounded
   concurrency (default 4, capped at 16), preserve input order, and
@@ -30,15 +40,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`pkg/projection`** — JSON-tag-aware field projection
   (`Project`/`ProjectList`) for trimming unified models to selected
   dotted paths (e.g. `number`, `head.ref`) before feeding automations or
-  LLM prompts. An empty field list is an error by design.
+  LLM prompts. An empty field list is an error by design, and a
+  segment-level wildcard (`labels.*`) is rejected instead of silently
+  dropping the field.
 - **`mcp/` module** — a Model Context Protocol server
   (`mcp/cmd/git-platform-mcp`) exposing the SDK as one AI-agent tool
   surface for all seven platforms: toolsets (core/crs/issues/status/
   search) gated by `Capabilities()`, read-only mode that drops mutating
   tools at registration time, `fields` projections on list tools, and
-  the `wait_for_status` polling primitive. Built on
-  `github.com/modelcontextprotocol/go-sdk` v1.8.0 with in-memory-transport
-  end-to-end tests.
+  the `wait_for_status` polling primitive. Tool-level input validation
+  surfaces readable errors (commit-status verbs, CR/issue state filters)
+  before requests reach a platform; unknown `--toolsets` names fail
+  startup instead of silently shrinking the tool surface. Tools:
+  get_repo, list_repos, get_file, list_branches, list_crs, get_cr,
+  get_cr_files, get_commit, list_commits, create_cr, merge_cr,
+  add_cr_comment, list_issues, get_issue, create_issue, close_issue,
+  add_issue_comment, get_commit_statuses, set_commit_status,
+  wait_for_status, search_repositories, search_issues, search_users.
+  Built on `github.com/modelcontextprotocol/go-sdk` v1.8.0 with
+  in-memory-transport end-to-end tests.
 
 ### Changed
 
@@ -66,6 +86,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and control characters are rejected. Previously a caller-controlled
   URL/ref/pathspec beginning with one of those options could have been
   parsed by git as a flag and escalated to arbitrary command execution.
+- **`gitbackend` config-key injection hardening** — `GetConfig`/`SetConfig`
+  now validate the key shape (`section[.subsection].option`, no empty or
+  dash-prefixed segments), so flags like `--list`, `--global`, or
+  `--file=/etc/passwd` can no longer travel through the key position to
+  dump config, cross scopes, or read arbitrary INI files; `SetConfig`
+  also rejects dash-prefixed values that git's parser could permute into
+  option position. `GetConfig` now maps git's exit code 1 (documented
+  not-found signal) to the new `ErrConfigKeyNotFound` sentinel instead of
+  sniffing localized stderr text.
 
 ## [v0.61.0] - 2026-09-03
 

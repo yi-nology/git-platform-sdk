@@ -15,6 +15,8 @@
 package mcpserver
 
 import (
+	"fmt"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
@@ -26,9 +28,10 @@ const Version = "0.1.0"
 // are enabled, read/write mode is on.
 type Options struct {
 	// Toolsets selects which toolsets to mount. Empty or nil mounts all.
+	// Unknown names make NewServer return an error.
 	Toolsets []string
-	// ReadOnly drops every mutating tool ("mutating" annotations are
-	// still present on the remaining tools' siblings for auditing).
+	// ReadOnly drops every mutating tool at registration time: the model
+	// never sees (and cannot call) the mutations.
 	ReadOnly bool
 	// Name/Version reported in the MCP initialize handshake; defaults
 	// to "git-platform-sdk" / the module version.
@@ -50,8 +53,10 @@ type state struct {
 
 // NewServer builds an MCP server over the given provider. The provider
 // must already be constructed and authenticated (see the cmd package for
-// the flag/environment wiring).
-func NewServer(p provider.Provider, opts Options) *mcp.Server {
+// the flag/environment wiring). Unknown names in opts.Toolsets are an
+// error: a misspelled toolset would otherwise silently shrink the tool
+// surface the model sees.
+func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 	name := opts.Name
 	if name == "" {
 		name = "git-platform-sdk"
@@ -62,6 +67,9 @@ func NewServer(p provider.Provider, opts Options) *mcp.Server {
 	caps := p.Capabilities()
 	selected := map[string]bool{}
 	for _, t := range opts.Toolsets {
+		if !knownToolsets[t] {
+			return nil, fmt.Errorf("unknown toolset %q (known: core, crs, issues, status, search)", t)
+		}
 		selected[t] = true
 	}
 	want := func(set string) bool { return len(selected) == 0 || selected[set] }
@@ -72,5 +80,5 @@ func NewServer(p provider.Provider, opts Options) *mcp.Server {
 		}
 		ts.registered(s, st)
 	}
-	return s
+	return s, nil
 }

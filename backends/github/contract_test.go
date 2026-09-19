@@ -100,10 +100,10 @@ func TestGitHub_Contract(t *testing.T) {
 func githubNonEmptyList() string {
 	repos := []*sdkgithub.Repository{
 		{
-			ID:       sdkgithub.Ptr(int64(1)),
-			FullName: sdkgithub.Ptr("owner/repo"),
-			Name:     sdkgithub.Ptr("repo"),
-			Owner:    &sdkgithub.User{Login: sdkgithub.Ptr("owner")},
+			ID:       new(int64(1)),
+			FullName: new("owner/repo"),
+			Name:     new("repo"),
+			Owner:    &sdkgithub.User{Login: new("owner")},
 		},
 	}
 	b, _ := json.Marshal(repos)

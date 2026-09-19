@@ -26,7 +26,7 @@ func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*pro
 // CreateBranch implements provider.BranchManager.
 func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*provider.PlatformBranch, error) {
 	b, _, err := p.client.Branches.CreateBranch(pidOf(owner, repo),
-		&gitlab.CreateBranchOptions{Branch: gitlab.Ptr(branch), Ref: gitlab.Ptr(ref)},
+		&gitlab.CreateBranchOptions{Branch: new(branch), Ref: new(ref)},
 		gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CreateBranch", err)

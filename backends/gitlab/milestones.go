@@ -35,7 +35,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 		if s == string(provider.MilestoneStateOpen) {
 			s = "active" // GitLab milestones vocabulary
 		}
-		listOpts.State = gitlab.Ptr(s)
+		listOpts.State = new(s)
 	}
 	milestones, _, err := p.client.Milestones.ListMilestones(pidOf(owner, repo), listOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -65,11 +65,11 @@ func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string)
 // CreateMilestone implements provider.MilestoneManager.
 func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*provider.Milestone, error) {
 	createOpts := &gitlab.CreateMilestoneOptions{
-		Title:       gitlab.Ptr(opts.Title),
-		Description: gitlab.Ptr(opts.Description),
+		Title:       new(opts.Title),
+		Description: new(opts.Description),
 	}
 	if opts.DueOn != nil {
-		createOpts.DueDate = gitlab.Ptr(gitlab.ISOTime(*opts.DueOn))
+		createOpts.DueDate = new(gitlab.ISOTime(*opts.DueOn))
 	}
 	ms, _, err := p.client.Milestones.CreateMilestone(pidOf(owner, repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -95,13 +95,13 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 		updateOpts.Description = opts.Description
 	}
 	if opts.DueOn != nil {
-		updateOpts.DueDate = gitlab.Ptr(gitlab.ISOTime(*opts.DueOn))
+		updateOpts.DueDate = new(gitlab.ISOTime(*opts.DueOn))
 	}
 	switch opts.State {
 	case provider.MilestoneStateOpen:
-		updateOpts.StateEvent = gitlab.Ptr("activate")
+		updateOpts.StateEvent = new("activate")
 	case provider.MilestoneStateClosed:
-		updateOpts.StateEvent = gitlab.Ptr("close")
+		updateOpts.StateEvent = new("close")
 	case "":
 	default:
 		return nil, provider.Wrapf(provider.PlatformGitLab, "UpdateMilestone", "unsupported milestone state %q", opts.State)

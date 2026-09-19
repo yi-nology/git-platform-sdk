@@ -6,6 +6,7 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -25,16 +26,16 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
 	}
 	if opts.Branch != "" {
-		listOpts.RefName = gitlab.Ptr(opts.Branch)
+		listOpts.RefName = new(opts.Branch)
 	}
 	if opts.Since != "" {
 		if t, err := time.Parse(time.RFC3339, opts.Since); err == nil {
-			listOpts.Since = gitlab.Ptr(t)
+			listOpts.Since = new(t)
 		}
 	}
 	if opts.Until != "" {
 		if t, err := time.Parse(time.RFC3339, opts.Until); err == nil {
-			listOpts.Until = gitlab.Ptr(t)
+			listOpts.Until = new(t)
 		}
 	}
 	commits, _, err := p.client.Commits.ListCommits(pidOf(owner, repo), listOpts, gitlab.WithContext(ctx))
@@ -51,7 +52,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 // CompareCommits implements provider.CommitManager.
 func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
 	cmp, _, err := p.client.Repositories.Compare(pidOf(owner, repo),
-		&gitlab.CompareOptions{From: gitlab.Ptr(base), To: gitlab.Ptr(head)},
+		&gitlab.CompareOptions{From: new(base), To: new(head)},
 		gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CompareCommits", err)
@@ -76,9 +77,9 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
 	statusOpts := &gitlab.SetCommitStatusOptions{
 		State:       mapCommitState(opts.State),
-		Context:     gitlab.Ptr(opts.Context),
-		Description: gitlab.Ptr(opts.Description),
-		TargetURL:   gitlab.Ptr(opts.TargetURL),
+		Context:     new(opts.Context),
+		Description: new(opts.Description),
+		TargetURL:   new(opts.TargetURL),
 	}
 	_, _, err := p.client.Commits.SetCommitStatus(pidOf(owner, repo), sha, statusOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -89,7 +90,12 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 
 // ListCommitStatuses implements provider.CommitStatusManager.
 func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
-	statuses, _, err := p.client.Commits.GetCommitStatuses(pidOf(owner, repo), sha, nil, gitlab.WithContext(ctx))
+	statuses, err := backendutil.AllPages(func(page int) ([]*gitlab.CommitStatus, error) {
+		list, _, err := p.client.Commits.GetCommitStatuses(pidOf(owner, repo), sha,
+			&gitlab.GetCommitStatusesOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}},
+			gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListCommitStatuses", err)
 	}
