@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
@@ -18,15 +18,34 @@ import (
 
 // ListMilestones implements provider.MilestoneManager. State filters by
 // "open"/"closed" (GitHub also accepts "all"); GitHub defaults to open.
+//
+// Dual pagination mode: opts.Page > 0 means the caller manages paging
+// explicitly and receives exactly that one page (opts.Page/opts.PerPage
+// honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
+// pagination via backendutil.AllPages — fetching 100 per page until an
+// empty page — so every matching milestone is returned.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &github.MilestoneListOptions{
-		State:       opts.State,
-		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
-	}
-	milestones, _, err := p.client.Issues.ListMilestones(ctx, owner, repo, listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListMilestones", err)
+	baseOpts := github.MilestoneListOptions{State: opts.State}
+	var milestones []*github.Milestone
+	if opts.Page > 0 {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		baseOpts.ListOptions = github.ListOptions{Page: page, PerPage: perPage}
+		list, _, err := p.client.Issues.ListMilestones(ctx, owner, repo, &baseOpts)
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitHub, "ListMilestones", err)
+		}
+		milestones = list
+	} else {
+		var err error
+		milestones, err = backendutil.AllPages(func(page int) ([]*github.Milestone, error) {
+			o := baseOpts
+			o.ListOptions = github.ListOptions{Page: page, PerPage: 100}
+			list, _, err := p.client.Issues.ListMilestones(ctx, owner, repo, &o)
+			return list, err
+		})
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitHub, "ListMilestones", err)
+		}
 	}
 	result := make([]provider.Milestone, 0, len(milestones))
 	for _, m := range milestones {

@@ -10,7 +10,10 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// GetCRDiff implements provider.DiffManager.
+// GetCRDiff implements provider.DiffManager. The go-gitee SDK's
+// PullRequests.ListFiles takes no options at all, so there is no
+// pagination parameter to exhaust — the platform returns what it returns
+// in a single response.
 func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "GetCRDiff", number)
 	if err != nil {

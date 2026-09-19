@@ -257,9 +257,26 @@ func searchStubServer(h SearchHarness) (*httptest.Server, *[]recordedRequest) {
 		requests = append(requests, recordedRequest{Method: r.Method, Path: r.URL.RequestURI(), Body: body})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(routeSearchResponse(r, h)))
+		// Page-aware: AllPages-driven backends probe page 2; serve an empty
+		// terminal page (shaped like the fixture) so the loop stops.
+		fixture := routeSearchResponse(r, h)
+		if beyondFirstPage(r) {
+			fixture = emptySearchPageOf(fixture)
+		}
+		_, _ = w.Write([]byte(fixture))
 	}))
 	return srv, &requests
+}
+
+// emptySearchPageOf returns an empty result page shaped like fixture so the
+// AllPages loop terminates: envelope responses (Gitea/Forgejo wrap search
+// hits in {"data":[...]}) need the envelope preserved or the SDK decode
+// fails, bare-array ones take a bare empty array.
+func emptySearchPageOf(fixture string) string {
+	if strings.Contains(fixture, `"data"`) {
+		return `{"ok":true,"data":[]}`
+	}
+	return `[]`
 }
 
 // routeSearchResponse picks the fixture for a search request: the GitLab

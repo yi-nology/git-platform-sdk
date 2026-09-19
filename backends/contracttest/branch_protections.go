@@ -52,6 +52,12 @@ func RunBranchProtectionsSuite(t *testing.T, h BranchProtectionsHarness) {
 			w.Header().Set("Content-Type", "application/json")
 			switch r.Method {
 			case http.MethodGet:
+				// Page-aware: AllPages-driven backends probe page 2; serve an
+				// empty terminal page so the loop stops.
+				if beyondFirstPage(r) {
+					_, _ = w.Write([]byte(`[]`))
+					return
+				}
 				_, _ = w.Write([]byte(h.ListResponse))
 			case http.MethodPost:
 				w.WriteHeader(http.StatusCreated)

@@ -5,12 +5,24 @@ import (
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListBranchProtections implements provider.BranchProtectionManager.
+// ListBranchProtections implements provider.BranchProtectionManager. The
+// provider surface carries no pagination parameters and the SDK's
+// ListBranchProtectionsOptions embeds ListOptions, so the full list is
+// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
+//
+// The forgejo SDK accepts no context parameter (registered platform
+// limitation), so ctx is unused beyond signature conformance.
 func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
-	bps, _, err := p.client.ListBranchProtections(owner, repo, forgejo.ListBranchProtectionsOptions{})
+	bps, err := backendutil.AllPages(func(page int) ([]*forgejo.BranchProtection, error) {
+		list, _, err := p.client.ListBranchProtections(owner, repo, forgejo.ListBranchProtectionsOptions{
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListBranchProtections", err)
 	}

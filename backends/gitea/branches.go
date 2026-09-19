@@ -5,13 +5,19 @@ import (
 
 	gitea "gitea.dev/sdk"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListBranches implements provider.BranchManager.
+// ListBranches implements provider.BranchManager. The provider surface
+// carries no pagination parameters, so the full branch list is fetched by
+// exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
-	branches, _, err := p.client.Repositories.ListRepoBranches(ctx, owner, repo, gitea.ListRepoBranchesOptions{
-		ListOptions: gitea.ListOptions{PageSize: 100},
+	branches, err := backendutil.AllPages(func(page int) ([]*gitea.Branch, error) {
+		list, _, err := p.client.Repositories.ListRepoBranches(ctx, owner, repo, gitea.ListRepoBranchesOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListBranches", err)

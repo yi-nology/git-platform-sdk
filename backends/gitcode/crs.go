@@ -132,7 +132,9 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	return nil
 }
 
-// ListCRComments implements provider.ChangeRequestManager.
+// ListCRComments implements provider.ChangeRequestManager. The SDK's
+// ListIssueComments endpoint exposes no pagination parameters, so the call
+// stays single-shot.
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "ListCRComments", number)
 	if err != nil {
@@ -156,7 +158,9 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	return result, nil
 }
 
-// ListCRCommits implements provider.ChangeRequestManager.
+// ListCRCommits implements provider.ChangeRequestManager. The SDK's
+// ListPullRequestCommits endpoint exposes no pagination parameters, so the
+// call stays single-shot.
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "ListCRCommits", number)
 	if err != nil {

@@ -54,6 +54,12 @@ func RunRepoStatsSuite(t *testing.T, h RepoStatsHarness) {
 	newRSM := func(t *testing.T) provider.RepoStatsManager {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
+			// Page-aware: AllPages-driven backends probe page 2; serve an
+			// empty terminal page so the loop stops.
+			if r.Method == http.MethodGet && beyondFirstPage(r) {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
 			_, _ = w.Write([]byte(h.ForksResponse))
 		}))
 		t.Cleanup(srv.Close)

@@ -3,14 +3,22 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListCollaborators implements provider.CollaboratorManager.
+// ListCollaborators implements provider.CollaboratorManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
-	users, _, err := p.client.Repositories.ListCollaborators(ctx, owner, repo, &github.ListCollaboratorsOptions{})
+	users, err := backendutil.AllPages(func(page int) ([]*github.User, error) {
+		list, _, err := p.client.Repositories.ListCollaborators(ctx, owner, repo, &github.ListCollaboratorsOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListCollaborators", err)
 	}

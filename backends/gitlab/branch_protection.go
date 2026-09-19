@@ -5,12 +5,16 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListBranchProtections implements provider.BranchProtectionManager.
 func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
-	branches, _, err := p.client.ProtectedBranches.ListProtectedBranches(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
+	branches, err := backendutil.AllPages(func(page int) ([]*gitlab.ProtectedBranch, error) {
+		list, _, err := p.client.ProtectedBranches.ListProtectedBranches(pidOf(owner, repo), &gitlab.ListProtectedBranchesOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListBranchProtections", err)
 	}

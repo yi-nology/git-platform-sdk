@@ -6,6 +6,7 @@ import (
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -26,14 +27,35 @@ import (
 // no addressing role.
 
 // ListLabels implements provider.LabelManager.
+//
+// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
+// (工蜂's page-size ceiling is 100); opts.Page > 0 returns exactly that
+// single page and the caller drives pagination itself.
 func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gongfeng.ListLabelsOptions{
-		ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
+	buildOpts := func(page, perPage int) *gongfeng.ListLabelsOptions {
+		return &gongfeng.ListLabelsOptions{
+			ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
+		}
 	}
-	labels, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo), listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListLabels", err)
+	var labels []*gongfeng.Label
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		perPage := opts.PerPage
+		if perPage <= 0 || perPage > provider.MaxPerPage {
+			perPage = provider.MaxPerPage
+		}
+		var err error
+		if labels, _, err = p.client.Labels.ListLabels(ctx, pid(owner, repo), buildOpts(opts.Page, perPage)); err != nil {
+			return nil, provider.Wrap(provider.PlatformTencentCode, "ListLabels", err)
+		}
+	} else {
+		var err error
+		if labels, err = backendutil.AllPages(func(page int) ([]*gongfeng.Label, error) {
+			list, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo), buildOpts(page, provider.MaxPerPage))
+			return list, err
+		}); err != nil {
+			return nil, provider.Wrap(provider.PlatformTencentCode, "ListLabels", err)
+		}
 	}
 	result := make([]*provider.Label, 0, len(labels))
 	for _, l := range labels {

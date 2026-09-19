@@ -4,14 +4,22 @@ import (
 	"context"
 	"io"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListTags implements provider.ReleaseManager.
+// ListTags implements provider.ReleaseManager. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	tags, _, err := p.client.Repositories.ListTags(ctx, owner, repo, nil)
+	tags, err := backendutil.AllPages(func(page int) ([]*github.RepositoryTag, error) {
+		list, _, err := p.client.Repositories.ListTags(ctx, owner, repo, &github.ListOptions{
+			Page: page, PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListTags", err)
 	}
@@ -22,9 +30,16 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 	return result, nil
 }
 
-// ListReleases implements provider.ReleaseManager.
+// ListReleases implements provider.ReleaseManager. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	releases, _, err := p.client.Repositories.ListReleases(ctx, owner, repo, nil)
+	releases, err := backendutil.AllPages(func(page int) ([]*github.RepositoryRelease, error) {
+		list, _, err := p.client.Repositories.ListReleases(ctx, owner, repo, &github.ListOptions{
+			Page: page, PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListReleases", err)
 	}

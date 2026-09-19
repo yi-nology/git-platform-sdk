@@ -5,12 +5,16 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListDeployKeys implements provider.DeploymentKeyManager.
 func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
-	keys, _, err := p.client.DeployKeys.ListProjectDeployKeys(pidOf(owner, repo), &gitlab.ListProjectDeployKeysOptions{}, gitlab.WithContext(ctx))
+	keys, err := backendutil.AllPages(func(page int) ([]*gitlab.ProjectDeployKey, error) {
+		list, _, err := p.client.DeployKeys.ListProjectDeployKeys(pidOf(owner, repo), &gitlab.ListProjectDeployKeysOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListDeployKeys", err)
 	}

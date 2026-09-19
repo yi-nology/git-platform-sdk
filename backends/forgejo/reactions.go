@@ -9,7 +9,10 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListIssueReactions implements provider.ReactionManager.
+// ListIssueReactions implements provider.ReactionManager. The forgejo SDK's
+// GetIssueReactions exposes no pagination parameters (the endpoint is
+// served unpaginated through the SDK), so there is no page to advance and
+// the single response is returned as-is.
 func (p *Provider) ListIssueReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
 	n, err := backendutil.ParseIssueNumber64(provider.PlatformForgejo, "ListIssueReactions", number)
 	if err != nil {
@@ -72,7 +75,10 @@ func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number stri
 	return nil, provider.Wrapf(provider.PlatformForgejo, "ListCRReactions", "forgejo does not support change-request-level reactions; use ListIssueReactions instead")
 }
 
-// ListIssueCommentReactions implements provider.ReactionManager.
+// ListIssueCommentReactions implements provider.ReactionManager. The
+// forgejo SDK's GetIssueCommentReactions exposes no pagination parameters
+// (the endpoint is served unpaginated through the SDK), so there is no
+// page to advance and the single response is returned as-is.
 func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
 	reactions, _, err := p.client.GetIssueCommentReactions(owner, repo, commentID)
 	if err != nil {

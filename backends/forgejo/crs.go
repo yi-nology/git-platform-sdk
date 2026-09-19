@@ -158,13 +158,23 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	return nil
 }
 
-// ListCRComments implements provider.ChangeRequestManager.
+// ListCRComments implements provider.ChangeRequestManager. The provider
+// surface carries no pagination parameters, so the full comment list is
+// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
+//
+// The forgejo SDK accepts no context parameter (registered platform
+// limitation), so ctx is unused beyond signature conformance.
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
 	n, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
-	comments, _, err := p.client.ListIssueComments(owner, repo, n, forgejo.ListIssueCommentOptions{})
+	comments, err := backendutil.AllPages(func(page int) ([]*forgejo.Comment, error) {
+		list, _, err := p.client.ListIssueComments(owner, repo, n, forgejo.ListIssueCommentOptions{
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: backendutil.IssueCommentPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListCRComments", err)
 	}
@@ -179,13 +189,23 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	return result, nil
 }
 
-// ListCRCommits implements provider.ChangeRequestManager.
+// ListCRCommits implements provider.ChangeRequestManager. The provider
+// surface carries no pagination parameters, so the full commit list is
+// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
+//
+// The forgejo SDK accepts no context parameter (registered platform
+// limitation), so ctx is unused beyond signature conformance.
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
 	n, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
-	commits, _, err := p.client.ListPullRequestCommits(owner, repo, n, forgejo.ListPullRequestCommitsOptions{})
+	commits, err := backendutil.AllPages(func(page int) ([]*forgejo.Commit, error) {
+		list, _, err := p.client.ListPullRequestCommits(owner, repo, n, forgejo.ListPullRequestCommitsOptions{
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListCRCommits", err)
 	}

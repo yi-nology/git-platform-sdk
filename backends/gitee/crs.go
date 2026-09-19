@@ -134,17 +134,22 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	return nil
 }
 
-// ListCRComments implements provider.ChangeRequestManager.
+// ListCRComments implements provider.ChangeRequestManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (Gitee's per_page caps at 100; fetch until an empty
+// page).
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
-	listOpts := &gitee.PullRequestCommentListOptions{
-		Page:    gitee.Int(1),
-		PerPage: gitee.Int(100),
-	}
-	comments, _, err := p.client.PullRequests.ListComments(ctx, esc(owner), esc(repo), n, listOpts)
+	comments, err := backendutil.AllPages(func(page int) ([]*gitee.PullRequestComments, error) {
+		list, _, err := p.client.PullRequests.ListComments(ctx, esc(owner), esc(repo), n, &gitee.PullRequestCommentListOptions{
+			Page:    gitee.Int(page),
+			PerPage: gitee.Int(100),
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListCRComments", err)
 	}
@@ -155,7 +160,10 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	return result, nil
 }
 
-// ListCRCommits implements provider.ChangeRequestManager.
+// ListCRCommits implements provider.ChangeRequestManager. The go-gitee
+// SDK's PullRequests.ListCommits takes no options at all, so there is no
+// pagination parameter to exhaust — the platform returns what it returns
+// in a single response.
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "ListCRCommits", number)
 	if err != nil {

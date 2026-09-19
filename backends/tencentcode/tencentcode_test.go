@@ -22,6 +22,17 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeListPage serves v on page 1 and an empty array on page ≥ 2 — the
+// pagination-aware mock shape for list endpoints whose backend walks all
+// pages via backendutil.AllPages (工蜂's query parameter is "page").
+func writeListPage(w http.ResponseWriter, r *http.Request, v any) {
+	if page := r.URL.Query().Get("page"); page != "" && page != "1" {
+		writeJSON(w, []any{})
+		return
+	}
+	writeJSON(w, v)
+}
+
 // stripAPIPrefix removes the /api/v3 prefix that the gongfeng SDK
 // automatically appends to all request paths.
 func stripAPIPrefix(path string) string {
@@ -128,7 +139,7 @@ func TestCreateCR(t *testing.T) {
 func TestListCRs(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Total-Count", "2")
-		writeJSON(w, []map[string]any{
+		writeListPage(w, r, []map[string]any{
 			tcMRResponse(1, "opened", "a", "a", "main"),
 			tcMRResponse(2, "merged", "b", "b", "main"),
 		})
@@ -218,7 +229,7 @@ func TestGetFileContent_Base64(t *testing.T) {
 
 func TestListBranches(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, []map[string]string{{"name": "main"}, {"name": "dev"}})
+		writeListPage(w, r, []map[string]string{{"name": "main"}, {"name": "dev"}})
 	}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
@@ -233,7 +244,7 @@ func TestListBranches(t *testing.T) {
 
 func TestListTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, []map[string]any{
+		writeListPage(w, r, []map[string]any{
 			{"name": "v1.0", "commit": map[string]any{"id": "abc"}},
 		})
 	}))
@@ -733,7 +744,7 @@ func TestListReviews_FiltersSystemNotes(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = stripAPIPrefix(r.URL.Path)
-		writeJSON(w, []any{
+		writeListPage(w, r, []any{
 			tcReviewNoteResponse(1, "looks good", false),
 			tcReviewNoteResponse(2, "milestone removed", true),
 		})

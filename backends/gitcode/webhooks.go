@@ -42,7 +42,8 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 	return nil
 }
 
-// ListWebhooks implements provider.WebhookManager.
+// ListWebhooks implements provider.WebhookManager. The SDK's hooks endpoint
+// exposes no pagination parameters, so the call stays single-shot.
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
 	hooks, err := p.client.ListWebhooks(ctx, owner, repo)
 	if err != nil {

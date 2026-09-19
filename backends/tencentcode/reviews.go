@@ -55,13 +55,19 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 // ListReviews implements provider.ReviewManager by listing the change
 // request's merge-request notes. The collection can mix in 工蜂's system
 // bookkeeping notes ("milestone removed" and the like); those are not
-// reviews and are filtered out.
+// reviews and are filtered out. The endpoint has no caller-facing
+// pagination knobs, so every page is fetched via AllPages (工蜂's
+// page-size ceiling is 100) — the same fetch ListCRComments uses.
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
-	notes, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid(owner, repo), n, nil)
+	notes, err := backendutil.AllPages(func(page int) ([]*gongfeng.Note, error) {
+		list, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid(owner, repo), n,
+			&gongfeng.ListMergeRequestNotesOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListReviews", err)
 	}

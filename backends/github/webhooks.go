@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -43,9 +44,16 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 	return nil
 }
 
-// ListWebhooks implements provider.WebhookManager.
+// ListWebhooks implements provider.WebhookManager. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
-	hooks, _, err := p.client.Repositories.ListHooks(ctx, owner, repo, nil)
+	hooks, err := backendutil.AllPages(func(page int) ([]*github.Hook, error) {
+		list, _, err := p.client.Repositories.ListHooks(ctx, owner, repo, &github.ListOptions{
+			Page: page, PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListWebhooks", err)
 	}

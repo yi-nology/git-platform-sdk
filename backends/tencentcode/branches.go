@@ -4,13 +4,21 @@ import (
 	"context"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListBranches implements provider.BranchManager.
+// ListBranches implements provider.BranchManager. The endpoint has no
+// caller-facing pagination knobs, so every page is fetched via AllPages
+// (工蜂's page-size ceiling is 100).
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
 	pid := owner + "/" + repo
-	branches, _, err := p.client.Branches.ListBranches(ctx, pid, nil)
+	branches, err := backendutil.AllPages(func(page int) ([]*gongfeng.Branch, error) {
+		list, _, err := p.client.Branches.ListBranches(ctx, pid,
+			&gongfeng.ListBranchesOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListBranches", err)
 	}

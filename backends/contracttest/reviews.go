@@ -389,6 +389,12 @@ func reviewStubServer(h ReviewsHarness) (*httptest.Server, *[]recordedRequest) {
 		case r.Method == http.MethodGet && reviewPathID.MatchString(r.URL.Path):
 			_, _ = w.Write([]byte(h.GetResponse))
 		default:
+			// Page-aware list: AllPages-driven backends probe page 2; serve
+			// an empty terminal page so the loop stops.
+			if r.Method == http.MethodGet && beyondFirstPage(r) {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
 			_, _ = w.Write([]byte(h.ListResponse))
 		}
 	}))

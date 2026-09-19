@@ -19,6 +19,17 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeListPage serves v on page 1 and an empty array on page ≥ 2 — the
+// pagination-aware mock shape for list endpoints whose backends walk all
+// pages via backendutil.AllPages.
+func writeListPage(w http.ResponseWriter, r *http.Request, v any) {
+	if page := r.URL.Query().Get("page"); page != "" && page != "1" {
+		writeJSON(w, []any{})
+		return
+	}
+	writeJSON(w, v)
+}
+
 func newTestProvider(t *testing.T, srv *httptest.Server) *gitlab.Provider {
 	t.Helper()
 	p, err := provider.NewProvider(provider.Config{
@@ -147,7 +158,7 @@ func TestListCRs(t *testing.T) {
 
 func TestListBranches(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, []map[string]any{
+		writeListPage(w, r, []map[string]any{
 			{"name": "main"},
 			{"name": "develop"},
 		})
@@ -180,7 +191,7 @@ func TestCreateBranch(t *testing.T) {
 
 func TestListTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, []map[string]any{
+		writeListPage(w, r, []map[string]any{
 			{"name": "v1.0", "commit": map[string]any{"id": "abc123"}},
 		})
 	}))
@@ -197,7 +208,7 @@ func TestListTags(t *testing.T) {
 
 func TestListReleases(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, []map[string]any{
+		writeListPage(w, r, []map[string]any{
 			{
 				"tag_name": "v1.0", "name": "Release 1.0",
 				"description": "first", "released_at": "2024-01-01T00:00:00Z",

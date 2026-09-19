@@ -5,13 +5,19 @@ import (
 
 	gitea "gitea.dev/sdk"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListForks implements provider.RepoStatsManager.
+// ListForks implements provider.RepoStatsManager. The provider surface
+// carries no pagination parameters, so the full fork list is fetched by
+// exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
-	forks, _, err := p.client.Repositories.ListForks(ctx, owner, repo, gitea.ListForksOptions{
-		ListOptions: gitea.ListOptions{Page: 1, PageSize: 50},
+	forks, err := backendutil.AllPages(func(page int) ([]*gitea.Repository, error) {
+		list, _, err := p.client.Repositories.ListForks(ctx, owner, repo, gitea.ListForksOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListForks", err)
@@ -23,10 +29,15 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 	return result, nil
 }
 
-// ListStargazers implements provider.RepoStatsManager.
+// ListStargazers implements provider.RepoStatsManager. The provider surface
+// carries no pagination parameters, so the full stargazer list is fetched
+// by exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
-	stargazers, _, err := p.client.Repositories.ListRepoStargazers(ctx, owner, repo, gitea.ListStargazersOptions{
-		ListOptions: gitea.ListOptions{Page: 1, PageSize: 50},
+	stargazers, err := backendutil.AllPages(func(page int) ([]*gitea.User, error) {
+		list, _, err := p.client.Repositories.ListRepoStargazers(ctx, owner, repo, gitea.ListStargazersOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListStargazers", err)

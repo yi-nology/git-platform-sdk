@@ -5,12 +5,16 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListTags implements provider.ReleaseManager.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	tags, _, err := p.client.Tags.ListTags(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
+	tags, err := backendutil.AllPages(func(page int) ([]*gitlab.Tag, error) {
+		list, _, err := p.client.Tags.ListTags(pidOf(owner, repo), &gitlab.ListTagsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListTags", err)
 	}
@@ -27,7 +31,10 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 
 // ListReleases implements provider.ReleaseManager.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	releases, _, err := p.client.Releases.ListReleases(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
+	releases, err := backendutil.AllPages(func(page int) ([]*gitlab.Release, error) {
+		list, _, err := p.client.Releases.ListReleases(pidOf(owner, repo), &gitlab.ListReleasesOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListReleases", err)
 	}

@@ -6,6 +6,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **List methods without paging parameters now exhaust pagination on all
+  seven backends.** Fourteen provider interface methods — ListBranches,
+  ListBranchProtections, ListCollaborators, ListCRComments, ListCRCommits,
+  all four reaction listings, ListReleases, ListTags, ListWebhooks,
+  ListReviews, ListDeployKeys, ListForks, ListStargazers, and
+  ListContributors — silently returned only the server-default first page
+  (10–30 items depending on platform). Every one now walks the full list
+  via `backendutil.AllPages` (100/page where the platform allows; Gitea/
+  Forgejo use their 50-item MAX_RESPONSE_ITEMS ceiling). Methods whose
+  provider options carry an explicit `Page` field (ListCRs, ListCommits,
+  ListIssues, ListLabels, ListMilestones, ListNotifications, ListRepos,
+  and the search calls) gained dual-mode semantics: `Page == 0` (zero
+  value) fetches everything, `Page > 0` keeps the caller-driven
+  single-page contract. The shared contract suites now serve an empty
+  terminal page on `page ≥ 2` (`beyondFirstPage`) and would fail any
+  backend that regresses to single-page fetching. Endpoints whose SDK
+  exposes no paging parameter at all (Gitee PR commits/files/contributors,
+  Gitea+Forgejo comment reactions) are registered in code comments as
+  first-page-only by platform limitation.
+- **Dependency refresh**: go-github v91 → **v92** (module path migration,
+  22 files), GitLab client-go v3.9 → **v3.12**. Everything else was
+  already current (gitea.dev/sdk v1.2.0, forgejo-sdk v3.0.0, go-gitcode
+  v0.7.2, gongfeng-sdk v0.6.0, go-git v5.19.2, x/crypto v0.57.0,
+  x/oauth2 v0.37.0, x/time v0.16.0; next-bin/go-gitee has no tagged
+  releases — the pseudo-version is the only trackable form).
+
 ### Added
 
 - **`CommitStatusManager.ListCommitStatuses`** — the read side of the

@@ -7,18 +7,25 @@ import (
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListReviews implements provider.ReviewManager.
+// ListReviews implements provider.ReviewManager. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
-	reviews, _, err := p.client.PullRequests.ListReviews(ctx, owner, repo, n, nil)
+	reviews, err := backendutil.AllPages(func(page int) ([]*github.PullRequestReview, error) {
+		list, _, err := p.client.PullRequests.ListReviews(ctx, owner, repo, n, &github.ListOptions{
+			Page: page, PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListReviews", err)
 	}

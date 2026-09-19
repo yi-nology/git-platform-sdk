@@ -8,11 +8,11 @@ require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
 	gitea.dev/sdk v1.2.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/google/go-github/v91 v91.0.0
+	github.com/google/go-github/v92 v92.0.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/yi-nology/go-gitcode v0.7.2
-	gitlab.com/gitlab-org/api/client-go/v3 v3.9.0
+	gitlab.com/gitlab-org/api/client-go/v3 v3.12.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.37.0
 )

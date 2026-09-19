@@ -43,6 +43,12 @@ type Provider struct {
 	labelIDs *backendutil.IDCache
 }
 
+// listPageSize is the per-page size used by AllPages-driven list fetches in
+// this backend. Forgejo's API clamps responses to the server's
+// MAX_RESPONSE_ITEMS setting (stock default 50), so requesting more is
+// silently trimmed; AllPages terminates on the first empty page either way.
+const listPageSize = 50
+
 // New builds a Forgejo Provider from the given config.
 func New(cfg provider.Config) (provider.Provider, error) {
 	logger := cfg.Logger

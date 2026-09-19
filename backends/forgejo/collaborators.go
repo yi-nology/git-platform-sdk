@@ -5,12 +5,23 @@ import (
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListCollaborators implements provider.CollaboratorManager.
+// ListCollaborators implements provider.CollaboratorManager. The provider
+// surface carries no pagination parameters, so the full collaborator list
+// is fetched by exhausting the endpoint's pagination (backendutil.AllPages).
+//
+// The forgejo SDK accepts no context parameter (registered platform
+// limitation), so ctx is unused beyond signature conformance.
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
-	users, _, err := p.client.ListCollaborators(owner, repo, forgejo.ListCollaboratorsOptions{})
+	users, err := backendutil.AllPages(func(page int) ([]*forgejo.User, error) {
+		list, _, err := p.client.ListCollaborators(owner, repo, forgejo.ListCollaboratorsOptions{
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListCollaborators", err)
 	}

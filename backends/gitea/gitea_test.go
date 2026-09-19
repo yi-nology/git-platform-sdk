@@ -133,6 +133,12 @@ func TestListCRs_MergedDetected(t *testing.T) {
 
 func TestListBranches(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Page-aware: ListBranches exhausts pagination, so page 2 must be
+		// the empty terminal page.
+		if page := r.URL.Query().Get("page"); page != "" && page != "1" {
+			writeJSON(w, []*giteasdk.Branch{})
+			return
+		}
 		writeJSON(w, []*giteasdk.Branch{{Name: "main"}, {Name: "dev"}})
 	}))
 	defer srv.Close()

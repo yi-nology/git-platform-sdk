@@ -39,7 +39,10 @@ func (p *Provider) ListIssueReactions(ctx context.Context, owner, repo, number s
 	if err != nil {
 		return nil, err
 	}
-	emojis, _, err := p.client.AwardEmoji.ListIssueAwardEmoji(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
+	emojis, err := backendutil.AllPages(func(page int) ([]*gitlab.AwardEmoji, error) {
+		list, _, err := p.client.AwardEmoji.ListIssueAwardEmoji(pidOf(owner, repo), n, &gitlab.ListAwardEmojiOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListIssueReactions", err)
 	}
@@ -76,7 +79,10 @@ func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number stri
 	if err != nil {
 		return nil, err
 	}
-	emojis, _, err := p.client.AwardEmoji.ListMergeRequestAwardEmoji(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
+	emojis, err := backendutil.AllPages(func(page int) ([]*gitlab.AwardEmoji, error) {
+		list, _, err := p.client.AwardEmoji.ListMergeRequestAwardEmoji(pidOf(owner, repo), n, &gitlab.ListAwardEmojiOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListCRReactions", err)
 	}

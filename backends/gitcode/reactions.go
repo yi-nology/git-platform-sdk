@@ -9,13 +9,17 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 )
 
-// ListIssueReactions implements provider.ReactionManager.
+// ListIssueReactions implements provider.ReactionManager. The endpoint has
+// no caller-facing pagination knobs, so every page is fetched via AllPages
+// (GitCode's page-size ceiling is 100).
 func (p *Provider) ListIssueReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
 	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "ListIssueReactions", number)
 	if err != nil {
 		return nil, err
 	}
-	reactions, err := p.client.ListIssueReactions(ctx, owner, repo, n, listOpts())
+	reactions, err := backendutil.AllPages(func(page int) ([]*gitcode.Reaction, error) {
+		return p.client.ListIssueReactions(ctx, owner, repo, n, gitcode.ListOptions{Page: page, PerPage: 100})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListIssueReactions", err)
 	}
@@ -44,9 +48,13 @@ func (p *Provider) RemoveIssueReaction(ctx context.Context, owner, repo, number 
 	return provider.Wrap(provider.PlatformGitCode, "RemoveIssueReaction", p.client.DeleteIssueReaction(ctx, owner, repo, n, reactionID))
 }
 
-// ListIssueCommentReactions implements provider.ReactionManager.
+// ListIssueCommentReactions implements provider.ReactionManager. The
+// endpoint has no caller-facing pagination knobs, so every page is fetched
+// via AllPages (GitCode's page-size ceiling is 100).
 func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
-	reactions, err := p.client.ListIssueCommentReactions(ctx, owner, repo, commentID, listOpts())
+	reactions, err := backendutil.AllPages(func(page int) ([]*gitcode.Reaction, error) {
+		return p.client.ListIssueCommentReactions(ctx, owner, repo, commentID, gitcode.ListOptions{Page: page, PerPage: 100})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListIssueCommentReactions", err)
 	}
@@ -67,9 +75,13 @@ func (p *Provider) RemoveIssueCommentReaction(ctx context.Context, owner, repo s
 	return provider.Wrap(provider.PlatformGitCode, "RemoveIssueCommentReaction", p.client.DeleteIssueCommentReaction(ctx, owner, repo, commentID, reactionID))
 }
 
-// ListCRCommentReactions implements provider.ReactionManager.
+// ListCRCommentReactions implements provider.ReactionManager. The endpoint
+// has no caller-facing pagination knobs, so every page is fetched via
+// AllPages (GitCode's page-size ceiling is 100).
 func (p *Provider) ListCRCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
-	reactions, err := p.client.ListPullRequestCommentReactions(ctx, owner, repo, commentID, listOpts())
+	reactions, err := backendutil.AllPages(func(page int) ([]*gitcode.Reaction, error) {
+		return p.client.ListPullRequestCommentReactions(ctx, owner, repo, commentID, gitcode.ListOptions{Page: page, PerPage: 100})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListCRCommentReactions", err)
 	}
@@ -89,8 +101,6 @@ func (p *Provider) AddCRCommentReaction(ctx context.Context, owner, repo string,
 func (p *Provider) RemoveCRCommentReaction(ctx context.Context, owner, repo string, commentID, reactionID int64) error {
 	return provider.Wrap(provider.PlatformGitCode, "RemoveCRCommentReaction", p.client.DeletePullRequestCommentReaction(ctx, owner, repo, commentID, reactionID))
 }
-
-func listOpts() gitcode.ListOptions { return gitcode.ListOptions{PerPage: 100} }
 
 // ListCRReactions implements provider.ReactionManager. On GitCode, PRs share
 // the issue reaction API.

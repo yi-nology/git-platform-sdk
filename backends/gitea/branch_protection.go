@@ -5,12 +5,21 @@ import (
 
 	gitea "gitea.dev/sdk"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListBranchProtections implements provider.BranchProtectionManager.
+// ListBranchProtections implements provider.BranchProtectionManager. The
+// provider surface carries no pagination parameters and the SDK's
+// ListBranchProtectionsOptions embeds ListOptions, so the full list is
+// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
-	bps, _, err := p.client.Repositories.ListBranchProtections(ctx, owner, repo, gitea.ListBranchProtectionsOptions{})
+	bps, err := backendutil.AllPages(func(page int) ([]*gitea.BranchProtection, error) {
+		list, _, err := p.client.Repositories.ListBranchProtections(ctx, owner, repo, gitea.ListBranchProtectionsOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListBranchProtections", err)
 	}

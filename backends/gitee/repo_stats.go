@@ -6,12 +6,22 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListForks implements provider.RepoStatsManager.
+// ListForks implements provider.RepoStatsManager. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (Gitee's per_page caps at 100; fetch until an empty
+// page).
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
-	forks, _, err := p.client.Repositories.ListForks(ctx, esc(owner), esc(repo), nil)
+	forks, err := backendutil.AllPages(func(page int) ([]*gitee.Project, error) {
+		list, _, err := p.client.Repositories.ListForks(ctx, esc(owner), esc(repo), &gitee.ListForksOptions{
+			Page:    gitee.Int(page),
+			PerPage: gitee.Int(100),
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListForks", err)
 	}
@@ -49,7 +59,10 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 	return result, nil
 }
 
-// ListContributors implements provider.RepoStatsManager.
+// ListContributors implements provider.RepoStatsManager. The go-gitee
+// SDK's ListContributorsOptions carries no page/per_page fields, so there
+// is no pagination parameter to exhaust — the platform returns what it
+// returns in a single response.
 func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*provider.Contributor, error) {
 	contributors, _, err := p.client.Repositories.ListContributors(ctx, esc(owner), esc(repo), nil)
 	if err != nil {

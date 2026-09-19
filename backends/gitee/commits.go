@@ -5,6 +5,7 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -18,24 +19,48 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 }
 
 // ListCommits implements provider.CommitManager.
+//
+// Dual pagination mode: opts.Page > 0 means the caller manages paging
+// explicitly and receives exactly that one page (opts.Page/opts.PerPage
+// honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
+// pagination via backendutil.AllPages — fetching 100 per page until an
+// empty page — so every matching commit is returned. In full-fetch mode
+// opts.PerPage only sizes the underlying requests and defaults to Gitee's
+// per_page maximum of 100.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gitee.CommitListOptions{
-		Page:    gitee.Int(page),
-		PerPage: gitee.Int(perPage),
-	}
+	baseOpts := gitee.CommitListOptions{}
 	if opts.Branch != "" {
-		listOpts.SHA = gitee.String(opts.Branch)
+		baseOpts.SHA = gitee.String(opts.Branch)
 	}
 	if opts.Since != "" {
-		listOpts.Since = gitee.String(opts.Since)
+		baseOpts.Since = gitee.String(opts.Since)
 	}
 	if opts.Until != "" {
-		listOpts.Until = gitee.String(opts.Until)
+		baseOpts.Until = gitee.String(opts.Until)
 	}
-	commits, _, err := p.client.Repositories.ListCommits(ctx, esc(owner), esc(repo), listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+
+	var commits []*gitee.RepoCommit
+	if opts.Page > 0 {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		baseOpts.Page = gitee.Int(page)
+		baseOpts.PerPage = gitee.Int(perPage)
+		list, _, err := p.client.Repositories.ListCommits(ctx, esc(owner), esc(repo), &baseOpts)
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+		}
+		commits = list
+	} else {
+		var err error
+		commits, err = backendutil.AllPages(func(page int) ([]*gitee.RepoCommit, error) {
+			o := baseOpts
+			o.Page = gitee.Int(page)
+			o.PerPage = gitee.Int(100)
+			list, _, err := p.client.Repositories.ListCommits(ctx, esc(owner), esc(repo), &o)
+			return list, err
+		})
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+		}
 	}
 	result := make([]*provider.CommitInfo, 0, len(commits))
 	for _, c := range commits {

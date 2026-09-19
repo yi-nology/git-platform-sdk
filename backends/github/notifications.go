@@ -4,23 +4,53 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListNotifications implements provider.NotificationManager.
-func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	listOpts := &github.NotificationListOptions{
-		All: opts.All,
-	}
+// notificationBaseOpts builds the shared (pagination-free) notification
+// filter options.
+func notificationBaseOpts(opts provider.ListNotificationsOptions) github.NotificationListOptions {
+	base := github.NotificationListOptions{All: opts.All}
 	if opts.Since != "" {
 		if t, err := time.Parse(time.RFC3339, opts.Since); err == nil {
-			listOpts.Since = t
+			base.Since = t
 		}
 	}
-	threads, _, err := p.client.Activity.ListNotifications(ctx, listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListNotifications", err)
+	return base
+}
+
+// ListNotifications implements provider.NotificationManager.
+//
+// Dual pagination mode: opts.Page > 0 means the caller manages paging
+// explicitly and receives exactly that one page (opts.Page/opts.PerPage
+// honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
+// pagination via backendutil.AllPages — fetching 100 per page until an
+// empty page — so every matching notification is returned.
+func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+	base := notificationBaseOpts(opts)
+	var threads []*github.Notification
+	if opts.Page > 0 {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		base.ListOptions = github.ListOptions{Page: page, PerPage: perPage}
+		list, _, err := p.client.Activity.ListNotifications(ctx, &base)
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitHub, "ListNotifications", err)
+		}
+		threads = list
+	} else {
+		var err error
+		threads, err = backendutil.AllPages(func(page int) ([]*github.Notification, error) {
+			o := base
+			o.ListOptions = github.ListOptions{Page: page, PerPage: 100}
+			list, _, err := p.client.Activity.ListNotifications(ctx, &o)
+			return list, err
+		})
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitHub, "ListNotifications", err)
+		}
 	}
 	result := make([]*provider.Notification, 0, len(threads))
 	for _, t := range threads {
@@ -30,18 +60,32 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 }
 
 // ListRepoNotifications implements provider.NotificationManager.
+//
+// Dual pagination mode, mirroring ListNotifications: opts.Page > 0 returns
+// exactly that one caller-managed page; opts.Page == 0 exhausts pagination
+// via backendutil.AllPages.
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	listOpts := &github.NotificationListOptions{
-		All: opts.All,
-	}
-	if opts.Since != "" {
-		if t, err := time.Parse(time.RFC3339, opts.Since); err == nil {
-			listOpts.Since = t
+	base := notificationBaseOpts(opts)
+	var threads []*github.Notification
+	if opts.Page > 0 {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		base.ListOptions = github.ListOptions{Page: page, PerPage: perPage}
+		list, _, err := p.client.Activity.ListRepositoryNotifications(ctx, owner, repo, &base)
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitHub, "ListRepoNotifications", err)
 		}
-	}
-	threads, _, err := p.client.Activity.ListRepositoryNotifications(ctx, owner, repo, listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListRepoNotifications", err)
+		threads = list
+	} else {
+		var err error
+		threads, err = backendutil.AllPages(func(page int) ([]*github.Notification, error) {
+			o := base
+			o.ListOptions = github.ListOptions{Page: page, PerPage: 100}
+			list, _, err := p.client.Activity.ListRepositoryNotifications(ctx, owner, repo, &o)
+			return list, err
+		})
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitHub, "ListRepoNotifications", err)
+		}
 	}
 	result := make([]*provider.Notification, 0, len(threads))
 	for _, t := range threads {

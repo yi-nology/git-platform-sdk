@@ -19,13 +19,37 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 }
 
 // ListCommits implements provider.CommitManager.
+//
+// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
+// (GitCode's page-size ceiling is 100), so the caller gets the complete
+// commit history; opts.Page > 0 returns exactly that single page and the
+// caller drives pagination itself (opts.PerPage is used as given, falling
+// back to the SDK's default when unset).
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
-	commits, err := p.client.ListCommits(ctx, owner, repo, gitcode.ListCommitsOptions{
-		ListOptions: gitcode.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
-		Branch:      opts.Branch,
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListCommits", err)
+	fetch := func(page, perPage int) ([]*gitcode.Commit, error) {
+		return p.client.ListCommits(ctx, owner, repo, gitcode.ListCommitsOptions{
+			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
+			Branch:      opts.Branch,
+		})
+	}
+	var commits []*gitcode.Commit
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		perPage := opts.PerPage
+		if perPage <= 0 || perPage > provider.MaxPerPage {
+			perPage = provider.MaxPerPage
+		}
+		var err error
+		if commits, err = fetch(opts.Page, perPage); err != nil {
+			return nil, provider.Wrap(provider.PlatformGitCode, "ListCommits", err)
+		}
+	} else {
+		var err error
+		if commits, err = backendutil.AllPages(func(page int) ([]*gitcode.Commit, error) {
+			return fetch(page, provider.MaxPerPage)
+		}); err != nil {
+			return nil, provider.Wrap(provider.PlatformGitCode, "ListCommits", err)
+		}
 	}
 	result := make([]*provider.CommitInfo, 0, len(commits))
 	for _, c := range commits {

@@ -5,14 +5,18 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListBranches implements provider.BranchManager.
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
-	branches, _, err := p.client.Branches.ListBranches(pidOf(owner, repo),
-		&gitlab.ListBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}},
-		gitlab.WithContext(ctx))
+	branches, err := backendutil.AllPages(func(page int) ([]*gitlab.Branch, error) {
+		list, _, err := p.client.Branches.ListBranches(pidOf(owner, repo),
+			&gitlab.ListBranchesOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}},
+			gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListBranches", err)
 	}
