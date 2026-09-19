@@ -13,6 +13,7 @@ import (
 	"time"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -53,10 +54,16 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 	return nil
 }
 
-// ListWebhooks implements provider.WebhookManager.
+// ListWebhooks implements provider.WebhookManager. The endpoint has no
+// caller-facing pagination knobs, so every page is fetched via AllPages
+// (工蜂's page-size ceiling is 100).
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
 	pid := owner + "/" + repo
-	hooks, _, err := p.client.Webhooks.ListWebhooks(ctx, pid, nil)
+	hooks, err := backendutil.AllPages(func(page int) ([]*gongfeng.Webhook, error) {
+		list, _, err := p.client.Webhooks.ListWebhooks(ctx, pid,
+			&gongfeng.ListWebhooksOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListWebhooks", err)
 	}

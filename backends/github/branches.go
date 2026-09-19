@@ -4,15 +4,22 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListBranches implements provider.BranchManager.
+// ListBranches implements provider.BranchManager. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until the platform returns an empty
+// page) instead of silently truncating at the first page.
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
-	branches, _, err := p.client.Repositories.ListBranches(ctx, owner, repo, &github.BranchListOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	branches, err := backendutil.AllPages(func(page int) ([]*github.Branch, error) {
+		list, _, err := p.client.Repositories.ListBranches(ctx, owner, repo, &github.BranchListOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListBranches", err)
@@ -28,7 +35,9 @@ func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*pro
 func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*provider.PlatformBranch, error) {
 	sha := ref
 	if !isCommitSHA(ref) {
-		commits, err := p.ListCommits(ctx, owner, repo, provider.ListCommitsOptions{Branch: ref, PerPage: 1})
+		// Page: 1 pins the dual-mode ListCommits to a single explicit page —
+		// only the branch tip is needed, not the full history.
+		commits, err := p.ListCommits(ctx, owner, repo, provider.ListCommitsOptions{Branch: ref, Page: 1, PerPage: 1})
 		if err != nil {
 			return nil, fmt.Errorf("github: resolve ref %q: %w", ref, err)
 		}

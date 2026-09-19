@@ -5,26 +5,51 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListRepos implements provider.RepoManager.
+//
+// Dual pagination mode: opts.Page > 0 means the caller manages paging
+// explicitly and receives exactly that one page (opts.Page/opts.PerPage
+// honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
+// pagination via backendutil.AllPages — fetching 100 per page until an
+// empty page — so every repository is returned. In full-fetch mode
+// opts.PerPage only sizes the underlying requests and defaults to Gitee's
+// per_page maximum of 100. Both shapes apply to the authenticated-user
+// list and the by-user list alike.
 func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gitee.RepositoryListOptions{
-		Page:    gitee.Int(page),
-		PerPage: gitee.Int(perPage),
-	}
 	var repos []*gitee.Project
 	var err error
-	if opts.Owner != "" {
-		userOpts := &gitee.RepositoryListByUserOptions{
-			Page:    gitee.Int(page),
-			PerPage: gitee.Int(perPage),
+	if opts.Page > 0 {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		if opts.Owner != "" {
+			repos, _, err = p.client.Repositories.ListByUser(ctx, opts.Owner, &gitee.RepositoryListByUserOptions{
+				Page:    gitee.Int(page),
+				PerPage: gitee.Int(perPage),
+			})
+		} else {
+			repos, _, err = p.client.Repositories.List(ctx, &gitee.RepositoryListOptions{
+				Page:    gitee.Int(page),
+				PerPage: gitee.Int(perPage),
+			})
 		}
-		repos, _, err = p.client.Repositories.ListByUser(ctx, opts.Owner, userOpts)
 	} else {
-		repos, _, err = p.client.Repositories.List(ctx, listOpts)
+		repos, err = backendutil.AllPages(func(page int) ([]*gitee.Project, error) {
+			if opts.Owner != "" {
+				list, _, err := p.client.Repositories.ListByUser(ctx, opts.Owner, &gitee.RepositoryListByUserOptions{
+					Page:    gitee.Int(page),
+					PerPage: gitee.Int(100),
+				})
+				return list, err
+			}
+			list, _, err := p.client.Repositories.List(ctx, &gitee.RepositoryListOptions{
+				Page:    gitee.Int(page),
+				PerPage: gitee.Int(100),
+			})
+			return list, err
+		})
 	}
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListRepos", err)

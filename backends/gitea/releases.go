@@ -5,12 +5,20 @@ import (
 
 	gitea "gitea.dev/sdk"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListTags implements provider.ReleaseManager.
+// ListTags implements provider.ReleaseManager. The provider surface carries
+// no pagination parameters, so the full tag list is fetched by exhausting
+// the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	tags, _, err := p.client.Repositories.ListRepoTags(ctx, owner, repo, gitea.ListRepoTagsOptions{})
+	tags, err := backendutil.AllPages(func(page int) ([]*gitea.Tag, error) {
+		list, _, err := p.client.Repositories.ListRepoTags(ctx, owner, repo, gitea.ListRepoTagsOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListTags", err)
 	}
@@ -25,9 +33,16 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 	return result, nil
 }
 
-// ListReleases implements provider.ReleaseManager.
+// ListReleases implements provider.ReleaseManager. The provider surface
+// carries no pagination parameters, so the full release list is fetched by
+// exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	releases, _, err := p.client.Releases.ListReleases(ctx, owner, repo, gitea.ListReleasesOptions{})
+	releases, err := backendutil.AllPages(func(page int) ([]*gitea.Release, error) {
+		list, _, err := p.client.Releases.ListReleases(ctx, owner, repo, gitea.ListReleasesOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListReleases", err)
 	}

@@ -183,7 +183,10 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	if err != nil {
 		return nil, err
 	}
-	notes, _, err := p.client.Notes.ListMergeRequestNotes(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
+	notes, err := backendutil.AllPages(func(page int) ([]*gitlab.Note, error) {
+		list, _, err := p.client.Notes.ListMergeRequestNotes(pidOf(owner, repo), n, &gitlab.ListMergeRequestNotesOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListCRComments", err)
 	}
@@ -210,7 +213,10 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 	if err != nil {
 		return nil, err
 	}
-	commits, _, err := p.client.MergeRequests.GetMergeRequestCommits(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
+	commits, err := backendutil.AllPages(func(page int) ([]*gitlab.Commit, error) {
+		list, _, err := p.client.MergeRequests.GetMergeRequestCommits(pidOf(owner, repo), n, &gitlab.GetMergeRequestCommitsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListCRCommits", err)
 	}

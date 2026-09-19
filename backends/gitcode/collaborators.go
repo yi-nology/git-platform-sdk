@@ -5,12 +5,17 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListCollaborators implements provider.CollaboratorManager.
+// ListCollaborators implements provider.CollaboratorManager. The endpoint has
+// no caller-facing pagination knobs, so every page is fetched via AllPages
+// (GitCode's page-size ceiling is 100).
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
-	collaborators, err := p.client.ListCollaborators(ctx, owner, repo, gitcode.ListOptions{})
+	collaborators, err := backendutil.AllPages(func(page int) ([]*gitcode.Collaborator, error) {
+		return p.client.ListCollaborators(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListCollaborators", err)
 	}

@@ -5,12 +5,22 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListCollaborators implements provider.CollaboratorManager.
+// ListCollaborators implements provider.CollaboratorManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (Gitee's per_page caps at 100; fetch until an empty
+// page).
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
-	members, _, err := p.client.Repositories.ListCollaborators(ctx, esc(owner), esc(repo), nil)
+	members, err := backendutil.AllPages(func(page int) ([]*gitee.ProjectMember, error) {
+		list, _, err := p.client.Repositories.ListCollaborators(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+			Page:    page,
+			PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListCollaborators", err)
 	}

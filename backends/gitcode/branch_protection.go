@@ -8,7 +8,9 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListBranchProtections implements provider.BranchProtectionManager.
+// ListBranchProtections implements provider.BranchProtectionManager. The
+// SDK's protect-branches endpoint exposes no pagination parameters, so the
+// call stays single-shot.
 func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
 	rules, err := p.client.ListBranchProtections(ctx, owner, repo)
 	if err != nil {

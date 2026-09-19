@@ -313,6 +313,18 @@ func stubHandler(h Harness) http.HandlerFunc {
 	}
 }
 
+// beyondFirstPage reports whether the request explicitly asks for a page
+// after the first. Backends whose list methods have no provider-side paging
+// exhaust the endpoint's pagination (backendutil.AllPages): they probe page
+// 2 after a non-empty page 1, and mocks use this to serve an empty terminal
+// page so the loop stops instead of grinding to the 50-page safety cap.
+// Requests without a page parameter (SDKs that omit paging when unset)
+// always count as first-page.
+func beyondFirstPage(r *http.Request) bool {
+	page := r.URL.Query().Get("page")
+	return page != "" && page != "1"
+}
+
 // VersionProxy returns a test server that responds to /api/v1/version with
 // versionBody and reverse-proxies every other path to baseURL. Gitea/Forgejo
 // SDKs require the version endpoint at client init; this wrapper lets the

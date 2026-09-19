@@ -14,6 +14,7 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -54,7 +55,10 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 
 // ListWebhooks implements provider.WebhookManager.
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
-	hooks, _, err := p.client.Projects.ListProjectHooks(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
+	hooks, err := backendutil.AllPages(func(page int) ([]*gitlab.ProjectHook, error) {
+		list, _, err := p.client.Projects.ListProjectHooks(pidOf(owner, repo), &gitlab.ListProjectHooksOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListWebhooks", err)
 	}

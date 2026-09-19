@@ -5,12 +5,19 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListTags implements provider.ReleaseManager.
+// ListTags implements provider.ReleaseManager. The endpoint has no
+// caller-facing pagination knobs, so every page is fetched via AllPages
+// (GitCode's page-size ceiling is 100) through the SDK's paginated
+// ListTagsWithOptions rather than the hard-coded per_page=100 single-shot
+// ListTags helper.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	tags, err := p.client.ListTags(ctx, owner, repo)
+	tags, err := backendutil.AllPages(func(page int) ([]*gitcode.Tag, error) {
+		return p.client.ListTagsWithOptions(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListTags", err)
 	}
@@ -22,7 +29,10 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 	return result, nil
 }
 
-// ListReleases implements provider.ReleaseManager.
+// ListReleases implements provider.ReleaseManager. The SDK's ListReleases
+// endpoint exposes no page parameter (it hard-codes per_page=100), so the
+// call stays single-shot; GitCode's page-size ceiling bounds what one call
+// can return.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
 	releases, err := p.client.ListReleases(ctx, owner, repo)
 	if err != nil {

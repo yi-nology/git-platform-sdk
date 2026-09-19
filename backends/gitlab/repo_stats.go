@@ -5,12 +5,16 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListForks implements provider.RepoStatsManager.
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
-	forks, _, err := p.client.Projects.ListProjectForks(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
+	forks, err := backendutil.AllPages(func(page int) ([]*gitlab.Project, error) {
+		list, _, err := p.client.Projects.ListProjectForks(pidOf(owner, repo), &gitlab.ListProjectsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListForks", err)
 	}
@@ -31,7 +35,10 @@ func (p *Provider) ListStargazers(_ context.Context, _, _ string) ([]*provider.C
 
 // ListContributors implements provider.RepoStatsManager.
 func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*provider.Contributor, error) {
-	contributors, _, err := p.client.Repositories.Contributors(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
+	contributors, err := backendutil.AllPages(func(page int) ([]*gitlab.Contributor, error) {
+		list, _, err := p.client.Repositories.Contributors(pidOf(owner, repo), &gitlab.ListContributorsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListContributors", err)
 	}

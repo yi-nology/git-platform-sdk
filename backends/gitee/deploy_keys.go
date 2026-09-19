@@ -4,12 +4,22 @@ import (
 	"context"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListDeployKeys implements provider.DeploymentKeyManager.
+// ListDeployKeys implements provider.DeploymentKeyManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (Gitee's per_page caps at 100; fetch until an empty
+// page).
 func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
-	keys, _, err := p.client.Repositories.ListKeys(ctx, esc(owner), esc(repo), &gitee.ListOptions{})
+	keys, err := backendutil.AllPages(func(page int) ([]*gitee.SSHKey, error) {
+		list, _, err := p.client.Repositories.ListKeys(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+			Page: page, PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListDeployKeys", err)
 	}

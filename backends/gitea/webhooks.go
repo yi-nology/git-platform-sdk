@@ -16,6 +16,7 @@ import (
 
 	gitea "gitea.dev/sdk"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -46,9 +47,16 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 	return nil
 }
 
-// ListWebhooks implements provider.WebhookManager.
+// ListWebhooks implements provider.WebhookManager. The provider surface
+// carries no pagination parameters, so the full hook list is fetched by
+// exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
-	hooks, _, err := p.client.Hooks.ListRepoHooks(ctx, owner, repo, gitea.ListHooksOptions{})
+	hooks, err := backendutil.AllPages(func(page int) ([]*gitea.Hook, error) {
+		list, _, err := p.client.Hooks.ListRepoHooks(ctx, owner, repo, gitea.ListHooksOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListWebhooks", err)
 	}

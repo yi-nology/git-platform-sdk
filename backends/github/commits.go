@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -20,27 +20,50 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 }
 
 // ListCommits implements provider.CommitManager.
+//
+// Dual pagination mode: opts.Page > 0 means the caller manages paging
+// explicitly and receives exactly that one page (opts.Page/opts.PerPage
+// honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
+// pagination via backendutil.AllPages — fetching 100 per page until an
+// empty page — so every matching commit is returned. In full-fetch mode
+// opts.PerPage only sizes the underlying requests and defaults to the
+// platform maximum of 100.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &github.CommitsListOptions{
-		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
-	}
+	baseOpts := github.CommitsListOptions{}
 	if opts.Branch != "" {
-		listOpts.SHA = opts.Branch
+		baseOpts.SHA = opts.Branch
 	}
 	if opts.Since != "" {
 		if t, err := time.Parse(time.RFC3339, opts.Since); err == nil {
-			listOpts.Since = t
+			baseOpts.Since = t
 		}
 	}
 	if opts.Until != "" {
 		if t, err := time.Parse(time.RFC3339, opts.Until); err == nil {
-			listOpts.Until = t
+			baseOpts.Until = t
 		}
 	}
-	commits, _, err := p.client.Repositories.ListCommits(ctx, owner, repo, listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListCommits", err)
+
+	var commits []*github.RepositoryCommit
+	if opts.Page > 0 {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		baseOpts.ListOptions = github.ListOptions{Page: page, PerPage: perPage}
+		list, _, err := p.client.Repositories.ListCommits(ctx, owner, repo, &baseOpts)
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitHub, "ListCommits", err)
+		}
+		commits = list
+	} else {
+		var err error
+		commits, err = backendutil.AllPages(func(page int) ([]*github.RepositoryCommit, error) {
+			o := baseOpts
+			o.ListOptions = github.ListOptions{Page: page, PerPage: 100}
+			list, _, err := p.client.Repositories.ListCommits(ctx, owner, repo, &o)
+			return list, err
+		})
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitHub, "ListCommits", err)
+		}
 	}
 	result := make([]*provider.CommitInfo, 0, len(commits))
 	for _, c := range commits {

@@ -11,13 +11,20 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListReviews implements provider.ReviewManager.
+// ListReviews implements provider.ReviewManager. The provider surface
+// carries no pagination parameters, so the full review list is fetched by
+// exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
 	index, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
-	reviews, _, err := p.client.PullRequests.ListPullReviews(ctx, owner, repo, index, gitea.ListPullReviewsOptions{})
+	reviews, err := backendutil.AllPages(func(page int) ([]*gitea.PullReview, error) {
+		list, _, err := p.client.PullRequests.ListPullReviews(ctx, owner, repo, index, gitea.ListPullReviewsOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListReviews", err)
 	}

@@ -5,12 +5,17 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListForks implements provider.RepoStatsManager.
+// ListForks implements provider.RepoStatsManager. The endpoint has no
+// caller-facing pagination knobs, so every page is fetched via AllPages
+// (GitCode's page-size ceiling is 100).
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
-	forks, err := p.client.ListForks(ctx, owner, repo, gitcode.ListOptions{})
+	forks, err := backendutil.AllPages(func(page int) ([]*gitcode.Repository, error) {
+		return p.client.ListForks(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListForks", err)
 	}
@@ -21,9 +26,13 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 	return result, nil
 }
 
-// ListStargazers implements provider.RepoStatsManager.
+// ListStargazers implements provider.RepoStatsManager. The endpoint has no
+// caller-facing pagination knobs, so every page is fetched via AllPages
+// (GitCode's page-size ceiling is 100).
 func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
-	stargazers, err := p.client.ListStargazers(ctx, owner, repo, gitcode.ListOptions{})
+	stargazers, err := backendutil.AllPages(func(page int) ([]*gitcode.User, error) {
+		return p.client.ListStargazers(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListStargazers", err)
 	}
@@ -40,7 +49,9 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 	return result, nil
 }
 
-// ListContributors implements provider.RepoStatsManager.
+// ListContributors implements provider.RepoStatsManager. The SDK's
+// ListContributors endpoint exposes no page parameter (it hard-codes
+// per_page=100), so the call stays single-shot.
 func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*provider.Contributor, error) {
 	contributors, err := p.client.ListContributors(ctx, owner, repo)
 	if err != nil {

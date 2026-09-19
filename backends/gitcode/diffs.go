@@ -33,7 +33,9 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 	return diff, nil
 }
 
-// GetCRFiles implements provider.DiffManager.
+// GetCRFiles implements provider.DiffManager. The SDK's
+// ListPullRequestFiles endpoint exposes no pagination parameters, so the
+// call stays single-shot.
 func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*provider.ChangedFile, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "GetCRFiles", number)
 	if err != nil {

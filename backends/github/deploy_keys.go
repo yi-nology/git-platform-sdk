@@ -3,14 +3,22 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListDeployKeys implements provider.DeploymentKeyManager.
+// ListDeployKeys implements provider.DeploymentKeyManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
-	keys, _, err := p.client.Repositories.ListKeys(ctx, owner, repo, &github.ListOptions{})
+	keys, err := backendutil.AllPages(func(page int) ([]*github.Key, error) {
+		list, _, err := p.client.Repositories.ListKeys(ctx, owner, repo, &github.ListOptions{
+			Page: page, PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListDeployKeys", err)
 	}

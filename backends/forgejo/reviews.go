@@ -11,13 +11,23 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListReviews implements provider.ReviewManager.
+// ListReviews implements provider.ReviewManager. The provider surface
+// carries no pagination parameters, so the full review list is fetched by
+// exhausting the endpoint's pagination (backendutil.AllPages).
+//
+// The forgejo SDK accepts no context parameter (registered platform
+// limitation), so ctx is unused beyond signature conformance.
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
 	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
-	reviews, _, err := p.client.ListPullReviews(owner, repo, index, forgejo.ListPullReviewsOptions{})
+	reviews, err := backendutil.AllPages(func(page int) ([]*forgejo.PullReview, error) {
+		list, _, err := p.client.ListPullReviews(owner, repo, index, forgejo.ListPullReviewsOptions{
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListReviews", err)
 	}

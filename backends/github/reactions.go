@@ -5,17 +5,24 @@ import (
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListIssueReactions implements provider.ReactionManager.
+// ListIssueReactions implements provider.ReactionManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListIssueReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
 	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "ListIssueReactions", number)
 	if err != nil {
 		return nil, err
 	}
-	reactions, _, err := p.client.Reactions.ListIssueReactions(ctx, owner, repo, n, nil)
+	reactions, err := backendutil.AllPages(func(page int) ([]*github.Reaction, error) {
+		list, _, err := p.client.Reactions.ListIssueReactions(ctx, owner, repo, n, &github.ListReactionOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListIssueReactions", err)
 	}
@@ -46,22 +53,36 @@ func (p *Provider) RemoveIssueReaction(ctx context.Context, owner, repo, number 
 }
 
 // ListCRReactions implements provider.ReactionManager.
-// On GitHub, PRs share the issue reactions API.
+// On GitHub, PRs share the issue reactions API. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number string) ([]*provider.Reaction, error) {
 	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "ListCRReactions", number)
 	if err != nil {
 		return nil, err
 	}
-	reactions, _, err := p.client.Reactions.ListIssueReactions(ctx, owner, repo, n, nil)
+	reactions, err := backendutil.AllPages(func(page int) ([]*github.Reaction, error) {
+		list, _, err := p.client.Reactions.ListIssueReactions(ctx, owner, repo, n, &github.ListReactionOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRReactions", err)
 	}
 	return convertReactions(reactions), nil
 }
 
-// ListIssueCommentReactions implements provider.ReactionManager.
+// ListIssueCommentReactions implements provider.ReactionManager. The
+// provider interface exposes no paging parameters, so pagination is
+// exhausted via backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
-	reactions, _, err := p.client.Reactions.ListIssueCommentReactions(ctx, owner, repo, commentID, nil)
+	reactions, err := backendutil.AllPages(func(page int) ([]*github.Reaction, error) {
+		list, _, err := p.client.Reactions.ListIssueCommentReactions(ctx, owner, repo, commentID, &github.ListReactionOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListIssueCommentReactions", err)
 	}
@@ -83,9 +104,16 @@ func (p *Provider) RemoveIssueCommentReaction(ctx context.Context, owner, repo s
 	return provider.Wrap(provider.PlatformGitHub, "RemoveIssueCommentReaction", err)
 }
 
-// ListCRCommentReactions implements provider.ReactionManager.
+// ListCRCommentReactions implements provider.ReactionManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListCRCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
-	reactions, _, err := p.client.Reactions.ListPullRequestCommentReactions(ctx, owner, repo, commentID, nil)
+	reactions, err := backendutil.AllPages(func(page int) ([]*github.Reaction, error) {
+		list, _, err := p.client.Reactions.ListPullRequestCommentReactions(ctx, owner, repo, commentID, &github.ListReactionOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRCommentReactions", err)
 	}

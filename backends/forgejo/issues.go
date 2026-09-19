@@ -14,9 +14,13 @@ import (
 
 // ListIssues implements provider.IssueManager. The forgejo SDK accepts no
 // context (same as its other services).
+//
+// Dual-mode pagination: with opts.Page == 0 the full issue list is fetched
+// by exhausting the endpoint's pagination (backendutil.AllPages); with
+// opts.Page > 0 exactly one caller-driven page is fetched (the caller pages
+// itself through NormalizePageOpts-normalized values).
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := forgejo.ListIssueOption{ListOptions: forgejo.ListOptions{Page: page, PageSize: perPage}}
+	listOpts := forgejo.ListIssueOption{}
 	// Unset, the endpoint returns PRs mixed in with the issues.
 	listOpts.Type = forgejo.IssueTypeIssue
 	if opts.State != "" {
@@ -28,9 +32,25 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	if opts.Assignee != "" {
 		listOpts.AssignedBy = opts.Assignee
 	}
-	issues, _, err := p.client.ListRepoIssues(opts.Owner, opts.Repo, listOpts)
-	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformForgejo, "ListIssues", err)
+	var issues []*forgejo.Issue
+	if opts.Page == 0 {
+		full, err := backendutil.AllPages(func(page int) ([]*forgejo.Issue, error) {
+			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: listPageSize}
+			list, _, err := p.client.ListRepoIssues(opts.Owner, opts.Repo, listOpts)
+			return list, err
+		})
+		if err != nil {
+			return nil, 0, provider.Wrap(provider.PlatformForgejo, "ListIssues", err)
+		}
+		issues = full
+	} else {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
+		page1, _, err := p.client.ListRepoIssues(opts.Owner, opts.Repo, listOpts)
+		if err != nil {
+			return nil, 0, provider.Wrap(provider.PlatformForgejo, "ListIssues", err)
+		}
+		issues = page1
 	}
 	result := make([]*provider.Issue, 0, len(issues))
 	for _, i := range issues {

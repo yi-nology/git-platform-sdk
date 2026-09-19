@@ -8,7 +8,9 @@ import (
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListBranches implements provider.BranchManager.
+// ListBranches implements provider.BranchManager. The SDK's ListBranches
+// endpoint exposes no page parameter (it hard-codes per_page=100), so the
+// call stays single-shot.
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
 	branches, err := p.client.ListBranches(ctx, owner, repo)
 	if err != nil {

@@ -174,13 +174,20 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	return nil
 }
 
-// ListCRComments implements provider.ChangeRequestManager.
+// ListCRComments implements provider.ChangeRequestManager. The provider
+// surface carries no pagination parameters, so the full comment list is
+// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
 	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
-	comments, _, err := p.client.Issues.ListIssueComments(ctx, owner, repo, n, gitea.ListIssueCommentOptions{})
+	comments, err := backendutil.AllPages(func(page int) ([]*gitea.Comment, error) {
+		list, _, err := p.client.Issues.ListIssueComments(ctx, owner, repo, n, gitea.ListIssueCommentOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: backendutil.IssueCommentPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListCRComments", err)
 	}
@@ -195,13 +202,20 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	return result, nil
 }
 
-// ListCRCommits implements provider.ChangeRequestManager.
+// ListCRCommits implements provider.ChangeRequestManager. The provider
+// surface carries no pagination parameters, so the full commit list is
+// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
 	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
-	commits, _, err := p.client.PullRequests.ListPullRequestCommits(ctx, owner, repo, n, gitea.ListPullRequestCommitsOptions{})
+	commits, err := backendutil.AllPages(func(page int) ([]*gitea.Commit, error) {
+		list, _, err := p.client.PullRequests.ListPullRequestCommits(ctx, owner, repo, n, gitea.ListPullRequestCommitsOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListCRCommits", err)
 	}

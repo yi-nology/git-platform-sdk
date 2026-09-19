@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 
 	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 
@@ -153,13 +153,20 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	return nil
 }
 
-// ListCRComments implements provider.ChangeRequestManager.
+// ListCRComments implements provider.ChangeRequestManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
-	comments, _, err := p.client.PullRequests.ListComments(ctx, owner, repo, n, nil)
+	comments, err := backendutil.AllPages(func(page int) ([]*github.PullRequestComment, error) {
+		list, _, err := p.client.PullRequests.ListComments(ctx, owner, repo, n, &github.PullRequestListCommentsOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRComments", err)
 	}
@@ -179,13 +186,20 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	return result, nil
 }
 
-// ListCRCommits implements provider.ChangeRequestManager.
+// ListCRCommits implements provider.ChangeRequestManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
-	commits, _, err := p.client.PullRequests.ListCommits(ctx, owner, repo, n, nil)
+	commits, err := backendutil.AllPages(func(page int) ([]*github.RepositoryCommit, error) {
+		list, _, err := p.client.PullRequests.ListCommits(ctx, owner, repo, n, &github.ListOptions{
+			Page: page, PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRCommits", err)
 	}

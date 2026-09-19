@@ -20,24 +20,48 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 }
 
 // ListCommits implements provider.CommitManager.
+//
+// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
+// (工蜂's page-size ceiling is 100), so the caller gets the complete
+// history; opts.Page > 0 returns exactly that single page and the caller
+// drives pagination itself (opts.PerPage is used as given, falling back to
+// the platform maximum when unset).
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
 	pid := owner + "/" + repo
-	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gongfeng.ListCommitsOptions{
-		ListOptions: gongfeng.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
+	buildOpts := func(page, perPage int) *gongfeng.ListCommitsOptions {
+		listOpts := &gongfeng.ListCommitsOptions{
+			ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
+		}
+		if opts.Branch != "" {
+			listOpts.RefName = gongfeng.Ptr(opts.Branch)
+		}
+		if opts.Since != "" {
+			listOpts.Since = gongfeng.Ptr(opts.Since)
+		}
+		if opts.Until != "" {
+			listOpts.Until = gongfeng.Ptr(opts.Until)
+		}
+		return listOpts
 	}
-	if opts.Branch != "" {
-		listOpts.RefName = gongfeng.Ptr(opts.Branch)
-	}
-	if opts.Since != "" {
-		listOpts.Since = gongfeng.Ptr(opts.Since)
-	}
-	if opts.Until != "" {
-		listOpts.Until = gongfeng.Ptr(opts.Until)
-	}
-	commits, _, err := p.client.Commits.ListCommits(ctx, pid, listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
+	var commits []*gongfeng.Commit
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		perPage := opts.PerPage
+		if perPage <= 0 || perPage > provider.MaxPerPage {
+			perPage = provider.MaxPerPage
+		}
+		var err error
+		if commits, _, err = p.client.Commits.ListCommits(ctx, pid, buildOpts(opts.Page, perPage)); err != nil {
+			return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
+		}
+	} else {
+		var err error
+		if commits, err = backendutil.AllPages(func(page int) ([]*gongfeng.Commit, error) {
+			list, _, err := p.client.Commits.ListCommits(ctx, pid, buildOpts(page, provider.MaxPerPage))
+			return list, err
+		}); err != nil {
+			return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
+		}
 	}
 	result := make([]*provider.CommitInfo, 0, len(commits))
 	for _, c := range commits {

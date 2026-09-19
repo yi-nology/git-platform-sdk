@@ -26,14 +26,35 @@ import (
 //     expose pagination only, so all states are listed.
 
 // ListMilestones implements provider.MilestoneManager.
+//
+// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
+// (工蜂's page-size ceiling is 100); opts.Page > 0 returns exactly that
+// single page and the caller drives pagination itself.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gongfeng.ListMilestonesOptions{
-		ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
+	buildOpts := func(page, perPage int) *gongfeng.ListMilestonesOptions {
+		return &gongfeng.ListMilestonesOptions{
+			ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
+		}
 	}
-	milestones, _, err := p.client.Milestones.ListMilestones(ctx, pid(owner, repo), listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListMilestones", err)
+	var milestones []*gongfeng.Milestone
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		perPage := opts.PerPage
+		if perPage <= 0 || perPage > provider.MaxPerPage {
+			perPage = provider.MaxPerPage
+		}
+		var err error
+		if milestones, _, err = p.client.Milestones.ListMilestones(ctx, pid(owner, repo), buildOpts(opts.Page, perPage)); err != nil {
+			return nil, provider.Wrap(provider.PlatformTencentCode, "ListMilestones", err)
+		}
+	} else {
+		var err error
+		if milestones, err = backendutil.AllPages(func(page int) ([]*gongfeng.Milestone, error) {
+			list, _, err := p.client.Milestones.ListMilestones(ctx, pid(owner, repo), buildOpts(page, provider.MaxPerPage))
+			return list, err
+		}); err != nil {
+			return nil, provider.Wrap(provider.PlatformTencentCode, "ListMilestones", err)
+		}
 	}
 	result := make([]provider.Milestone, 0, len(milestones))
 	for _, ms := range milestones {

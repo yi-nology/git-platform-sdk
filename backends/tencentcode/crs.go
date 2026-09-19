@@ -43,22 +43,56 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 }
 
 // ListCRs implements provider.ChangeRequestManager.
+//
+// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
+// (工蜂's page-size ceiling is 100); opts.Page > 0 returns exactly that
+// single page and the caller drives pagination itself.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
 	pid := opts.Owner + "/" + opts.Repo
-	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gongfeng.ListMergeRequestsOptions{
-		ListOptions: gongfeng.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
+	buildOpts := func(page, perPage int) *gongfeng.ListMergeRequestsOptions {
+		listOpts := &gongfeng.ListMergeRequestsOptions{
+			ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
+		}
+		if opts.State != "" {
+			listOpts.State = gongfeng.Ptr(string(opts.State))
+		}
+		return listOpts
 	}
-	if opts.State != "" {
-		listOpts.State = gongfeng.Ptr(string(opts.State))
-	}
-	mrs, resp, err := p.client.MergeRequests.ListMergeRequests(ctx, pid, listOpts)
-	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
+	var (
+		mrs      []*gongfeng.MergeRequest
+		resp     *gongfeng.Response
+		allPages bool
+	)
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only. The
+		// page response still carries the platform total, so it is kept.
+		perPage := opts.PerPage
+		if perPage <= 0 || perPage > provider.MaxPerPage {
+			perPage = provider.MaxPerPage
+		}
+		list, r, err := p.client.MergeRequests.ListMergeRequests(ctx, pid, buildOpts(opts.Page, perPage))
+		if err != nil {
+			return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
+		}
+		mrs, resp = list, r
+	} else {
+		allPages = true
+		var err error
+		if mrs, err = backendutil.AllPages(func(page int) ([]*gongfeng.MergeRequest, error) {
+			list, _, err := p.client.MergeRequests.ListMergeRequests(ctx, pid, buildOpts(page, provider.MaxPerPage))
+			return list, err
+		}); err != nil {
+			return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
+		}
 	}
 	crs := make([]*provider.ChangeRequest, 0, len(mrs))
 	for _, mr := range mrs {
 		crs = append(crs, convertMR(mr))
+	}
+	if allPages {
+		// Merged pages carry no single authoritative total; the merged
+		// size is the complete count by construction.
+		return crs, len(crs), nil
 	}
 	return crs, extractTotalCount(resp, len(crs)), nil
 }
@@ -154,14 +188,20 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	return provider.Wrap(provider.PlatformTencentCode, "UpdateCRLabels", provider.ErrNotImplemented)
 }
 
-// ListCRComments implements provider.ChangeRequestManager.
+// ListCRComments implements provider.ChangeRequestManager. The endpoint has
+// no caller-facing pagination knobs, so every page is fetched via AllPages
+// (工蜂's page-size ceiling is 100).
 func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
 	pid := owner + "/" + repo
-	notes, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid, n, nil)
+	notes, err := backendutil.AllPages(func(page int) ([]*gongfeng.Note, error) {
+		list, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid, n,
+			&gongfeng.ListMergeRequestNotesOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCRComments", err)
 	}
@@ -181,14 +221,20 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 	return result, nil
 }
 
-// ListCRCommits implements provider.ChangeRequestManager.
+// ListCRCommits implements provider.ChangeRequestManager. The endpoint has
+// no caller-facing pagination knobs, so every page is fetched via AllPages
+// (工蜂's page-size ceiling is 100).
 func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
 	pid := owner + "/" + repo
-	commits, _, err := p.client.MergeRequests.ListMergeRequestCommits(ctx, pid, n, nil)
+	commits, err := backendutil.AllPages(func(page int) ([]*gongfeng.Commit, error) {
+		list, _, err := p.client.MergeRequests.ListMergeRequestCommits(ctx, pid, n,
+			&gongfeng.ListMergeRequestCommitsOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCRCommits", err)
 	}

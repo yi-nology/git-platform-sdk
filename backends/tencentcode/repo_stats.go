@@ -3,6 +3,9 @@ package tencentcode
 import (
 	"context"
 
+	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -14,9 +17,15 @@ func (p *Provider) ListForks(_ context.Context, _, _ string) ([]*provider.Platfo
 	return nil, provider.Wrapf(provider.PlatformTencentCode, "ListForks", "not supported on this platform")
 }
 
-// ListStargazers implements provider.RepoStatsManager.
+// ListStargazers implements provider.RepoStatsManager. The endpoint has no
+// caller-facing pagination knobs, so every page is fetched via AllPages
+// (工蜂's page-size ceiling is 100).
 func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
-	stars, _, err := p.client.Projects.ListProjectStars(ctx, pid(owner, repo), nil)
+	stars, err := backendutil.AllPages(func(page int) ([]*gongfeng.ProjectStar, error) {
+		list, _, err := p.client.Projects.ListProjectStars(ctx, pid(owner, repo),
+			&gongfeng.ListProjectStarsOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListStargazers", err)
 	}

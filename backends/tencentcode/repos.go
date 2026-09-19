@@ -4,13 +4,20 @@ import (
 	"context"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListRepos implements provider.RepoManager.
+//
+// Dual-mode pagination on the authenticated-user project list: opts.Page
+// == 0 fetches every page via AllPages (工蜂's page-size ceiling is 100);
+// opts.Page > 0 returns exactly that single page and the caller drives
+// pagination itself. The Owner branch is unaffected — it resolves the
+// group's projects through GetGroup, whose response embeds the project
+// list without pagination.
 func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
-	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
-
 	if opts.Owner != "" {
 		// Get group projects via GetGroup (which returns embedded projects).
 		group, _, err := p.client.Groups.GetGroup(ctx, opts.Owner)
@@ -24,12 +31,30 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		return repos, nil
 	}
 
-	listOpts := &gongfeng.ListProjectsOptions{
-		ListOptions: gongfeng.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
+	buildOpts := func(page, perPage int) *gongfeng.ListProjectsOptions {
+		return &gongfeng.ListProjectsOptions{
+			ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
+		}
 	}
-	projects, _, err := p.client.Projects.ListProjects(ctx, listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListRepos", err)
+	var projects []*gongfeng.Project
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		perPage := opts.PerPage
+		if perPage <= 0 || perPage > provider.MaxPerPage {
+			perPage = provider.MaxPerPage
+		}
+		var err error
+		if projects, _, err = p.client.Projects.ListProjects(ctx, buildOpts(opts.Page, perPage)); err != nil {
+			return nil, provider.Wrap(provider.PlatformTencentCode, "ListRepos", err)
+		}
+	} else {
+		var err error
+		if projects, err = backendutil.AllPages(func(page int) ([]*gongfeng.Project, error) {
+			list, _, err := p.client.Projects.ListProjects(ctx, buildOpts(page, provider.MaxPerPage))
+			return list, err
+		}); err != nil {
+			return nil, provider.Wrap(provider.PlatformTencentCode, "ListRepos", err)
+		}
 	}
 	repos := make([]*provider.PlatformRepo, 0, len(projects))
 	for _, proj := range projects {

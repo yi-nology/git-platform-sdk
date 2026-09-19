@@ -3,22 +3,48 @@ package gitcode
 import (
 	"context"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
 )
 
-// SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	searchOpts := gitcode.SearchRepositoriesOptions{
-		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
-		Query:       opts.Query,
-		Sort:        opts.Sort,
-		Order:       opts.Order,
+// searchPerPage normalizes a caller-supplied per-page value for GitCode's
+// search endpoints (page-size ceiling 100).
+func searchPerPage(perPage int) int {
+	if perPage <= 0 || perPage > provider.MaxPerPage {
+		return provider.MaxPerPage
 	}
-	results, err := p.client.SearchRepositories(ctx, searchOpts)
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchRepos", err)
+	return perPage
+}
+
+// SearchRepos implements provider.SearchManager.
+//
+// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages;
+// opts.Page > 0 returns exactly that single page and the caller drives
+// pagination itself.
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
+	buildOpts := func(page, perPage int) gitcode.SearchRepositoriesOptions {
+		return gitcode.SearchRepositoriesOptions{
+			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
+			Query:       opts.Query,
+			Sort:        opts.Sort,
+			Order:       opts.Order,
+		}
+	}
+	var results []*gitcode.SearchRepositoryResult
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		var err error
+		if results, err = p.client.SearchRepositories(ctx, buildOpts(opts.Page, searchPerPage(opts.PerPage))); err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchRepos", err)
+		}
+	} else {
+		var err error
+		if results, err = backendutil.AllPages(func(page int) ([]*gitcode.SearchRepositoryResult, error) {
+			return p.client.SearchRepositories(ctx, buildOpts(page, provider.MaxPerPage))
+		}); err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchRepos", err)
+		}
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(results))
 	for _, r := range results {
@@ -36,19 +62,34 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 }
 
 // SearchIssues implements provider.SearchManager.
+//
+// Dual-mode pagination, mirroring SearchRepos: opts.Page == 0 fetches every
+// page via AllPages; opts.Page > 0 returns exactly that single page.
 func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	searchOpts := gitcode.SearchIssuesOptions{
-		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
-		Query:       opts.Query,
-		Sort:        opts.Sort,
-		Order:       opts.Order,
-		Repo:        opts.Repo,
-		State:       opts.State,
+	buildOpts := func(page, perPage int) gitcode.SearchIssuesOptions {
+		return gitcode.SearchIssuesOptions{
+			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
+			Query:       opts.Query,
+			Sort:        opts.Sort,
+			Order:       opts.Order,
+			Repo:        opts.Repo,
+			State:       opts.State,
+		}
 	}
-	results, err := p.client.SearchIssues(ctx, searchOpts)
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchIssues", err)
+	var results []*gitcode.SearchIssueResult
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		var err error
+		if results, err = p.client.SearchIssues(ctx, buildOpts(opts.Page, searchPerPage(opts.PerPage))); err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchIssues", err)
+		}
+	} else {
+		var err error
+		if results, err = backendutil.AllPages(func(page int) ([]*gitcode.SearchIssueResult, error) {
+			return p.client.SearchIssues(ctx, buildOpts(page, provider.MaxPerPage))
+		}); err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchIssues", err)
+		}
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(results))
 	for _, r := range results {
@@ -71,17 +112,32 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 }
 
 // SearchUsers implements provider.SearchManager.
+//
+// Dual-mode pagination, mirroring SearchRepos: opts.Page == 0 fetches every
+// page via AllPages; opts.Page > 0 returns exactly that single page.
 func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	searchOpts := gitcode.SearchUsersOptions{
-		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
-		Query:       opts.Query,
-		Sort:        opts.Sort,
-		Order:       opts.Order,
+	buildOpts := func(page, perPage int) gitcode.SearchUsersOptions {
+		return gitcode.SearchUsersOptions{
+			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
+			Query:       opts.Query,
+			Sort:        opts.Sort,
+			Order:       opts.Order,
+		}
 	}
-	results, err := p.client.SearchUsers(ctx, searchOpts)
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchUsers", err)
+	var results []*gitcode.SearchUserResult
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		var err error
+		if results, err = p.client.SearchUsers(ctx, buildOpts(opts.Page, searchPerPage(opts.PerPage))); err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchUsers", err)
+		}
+	} else {
+		var err error
+		if results, err = backendutil.AllPages(func(page int) ([]*gitcode.SearchUserResult, error) {
+			return p.client.SearchUsers(ctx, buildOpts(page, provider.MaxPerPage))
+		}); err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchUsers", err)
+		}
 	}
 	out := make([]*provider.SearchUserResult, 0, len(results))
 	for _, r := range results {

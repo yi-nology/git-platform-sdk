@@ -5,13 +5,21 @@ import (
 	"context"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListTags implements provider.ReleaseManager.
+// ListTags implements provider.ReleaseManager. The endpoint has no
+// caller-facing pagination knobs, so every page is fetched via AllPages
+// (工蜂's page-size ceiling is 100).
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
 	pid := owner + "/" + repo
-	tags, _, err := p.client.Tags.ListTags(ctx, pid, nil)
+	tags, err := backendutil.AllPages(func(page int) ([]*gongfeng.Tag, error) {
+		list, _, err := p.client.Tags.ListTags(ctx, pid,
+			&gongfeng.ListTagsOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListTags", err)
 	}
@@ -22,10 +30,16 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 	return result, nil
 }
 
-// ListReleases implements provider.ReleaseManager.
+// ListReleases implements provider.ReleaseManager. The endpoint has no
+// caller-facing pagination knobs, so every page is fetched via AllPages
+// (工蜂's page-size ceiling is 100).
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
 	pid := owner + "/" + repo
-	releases, _, err := p.client.Releases.ListReleases(ctx, pid, nil)
+	releases, err := backendutil.AllPages(func(page int) ([]*gongfeng.Release, error) {
+		list, _, err := p.client.Releases.ListReleases(ctx, pid,
+			&gongfeng.ListReleasesOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListReleases", err)
 	}

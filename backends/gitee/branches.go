@@ -7,12 +7,22 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListBranches implements provider.BranchManager.
+// ListBranches implements provider.BranchManager. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (Gitee's per_page caps at 100; fetch until an empty
+// page).
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
-	branches, _, err := p.client.Repositories.ListBranches(ctx, esc(owner), esc(repo), nil)
+	branches, err := backendutil.AllPages(func(page int) ([]*gitee.Branch, error) {
+		list, _, err := p.client.Repositories.ListBranches(ctx, esc(owner), esc(repo), &gitee.ListBranchesOptions{
+			Page:    gitee.Int(page),
+			PerPage: gitee.Int(100),
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListBranches", err)
 	}

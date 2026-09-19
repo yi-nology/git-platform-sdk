@@ -14,23 +14,44 @@ import (
 )
 
 // ListIssues implements provider.IssueManager.
+//
+// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
+// (GitCode's page-size ceiling is 100); opts.Page > 0 returns exactly that
+// single page and the caller drives pagination itself.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := gitcode.ListIssuesOptions{
-		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
+	buildOpts := func(page, perPage int) gitcode.ListIssuesOptions {
+		listOpts := gitcode.ListIssuesOptions{
+			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
+		}
+		if opts.State != "" {
+			listOpts.State = gitcode.IssueState(opts.State)
+		}
+		if opts.Assignee != "" {
+			listOpts.Assignee = opts.Assignee
+		}
+		if opts.Labels != "" {
+			listOpts.Labels = opts.Labels
+		}
+		return listOpts
 	}
-	if opts.State != "" {
-		listOpts.State = gitcode.IssueState(opts.State)
-	}
-	if opts.Assignee != "" {
-		listOpts.Assignee = opts.Assignee
-	}
-	if opts.Labels != "" {
-		listOpts.Labels = opts.Labels
-	}
-	issues, err := p.client.ListIssues(ctx, opts.Owner, opts.Repo, listOpts)
-	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
+	var issues []*gitcode.Issue
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only.
+		perPage := opts.PerPage
+		if perPage <= 0 || perPage > provider.MaxPerPage {
+			perPage = provider.MaxPerPage
+		}
+		var err error
+		if issues, err = p.client.ListIssues(ctx, opts.Owner, opts.Repo, buildOpts(opts.Page, perPage)); err != nil {
+			return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
+		}
+	} else {
+		var err error
+		if issues, err = backendutil.AllPages(func(page int) ([]*gitcode.Issue, error) {
+			return p.client.ListIssues(ctx, opts.Owner, opts.Repo, buildOpts(page, provider.MaxPerPage))
+		}); err != nil {
+			return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
+		}
 	}
 	result := make([]*provider.Issue, 0, len(issues))
 	for _, i := range issues {

@@ -5,19 +5,39 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
 // ListLabels implements provider.LabelManager.
+//
+// Dual pagination mode: opts.Page > 0 means the caller manages paging
+// explicitly and receives exactly that one page (opts.Page/opts.PerPage
+// honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
+// pagination via backendutil.AllPages — fetching 100 per page until an
+// empty page — so every label is returned.
 func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gitee.ListOptions{
-		Page:    page,
-		PerPage: perPage,
-	}
-	labels, _, err := p.client.Labels.List(ctx, esc(owner), esc(repo), listOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListLabels", err)
+	var labels []*gitee.Label
+	if opts.Page > 0 {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		list, _, err := p.client.Labels.List(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+			Page: page, PerPage: perPage,
+		})
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitee, "ListLabels", err)
+		}
+		labels = list
+	} else {
+		var err error
+		labels, err = backendutil.AllPages(func(page int) ([]*gitee.Label, error) {
+			list, _, err := p.client.Labels.List(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+				Page: page, PerPage: 100,
+			})
+			return list, err
+		})
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitee, "ListLabels", err)
+		}
 	}
 	result := make([]*provider.Label, 0, len(labels))
 	for _, l := range labels {

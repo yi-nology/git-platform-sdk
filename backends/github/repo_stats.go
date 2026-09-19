@@ -3,12 +3,22 @@ package github
 import (
 	"context"
 
+	"github.com/google/go-github/v92/github"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
-// ListForks implements provider.RepoStatsManager.
+// ListForks implements provider.RepoStatsManager. The provider interface
+// exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
-	forks, _, err := p.client.Repositories.ListForks(ctx, owner, repo, nil)
+	forks, err := backendutil.AllPages(func(page int) ([]*github.Repository, error) {
+		list, _, err := p.client.Repositories.ListForks(ctx, owner, repo, &github.RepositoryListForksOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListForks", err)
 	}
@@ -19,9 +29,16 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 	return result, nil
 }
 
-// ListStargazers implements provider.RepoStatsManager.
+// ListStargazers implements provider.RepoStatsManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
-	stargazers, _, err := p.client.Activity.ListStargazers(ctx, owner, repo, nil)
+	stargazers, err := backendutil.AllPages(func(page int) ([]*github.Stargazer, error) {
+		list, _, err := p.client.Activity.ListStargazers(ctx, owner, repo, &github.ListOptions{
+			Page: page, PerPage: 100,
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListStargazers", err)
 	}
@@ -34,9 +51,16 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 	return result, nil
 }
 
-// ListContributors implements provider.RepoStatsManager.
+// ListContributors implements provider.RepoStatsManager. The provider
+// interface exposes no paging parameters, so pagination is exhausted via
+// backendutil.AllPages (100 per page until an empty page).
 func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*provider.Contributor, error) {
-	contributors, _, err := p.client.Repositories.ListContributors(ctx, owner, repo, nil)
+	contributors, err := backendutil.AllPages(func(page int) ([]*github.Contributor, error) {
+		list, _, err := p.client.Repositories.ListContributors(ctx, owner, repo, &github.ListContributorsOptions{
+			ListOptions: github.ListOptions{Page: page, PerPage: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListContributors", err)
 	}

@@ -35,28 +35,62 @@ import (
 // pass through as filters (open→opened per 工蜂's vocabulary; inbound
 // convertIssue maps back); the Assignee filter is not carried (registered
 // above — the endpoint takes no assignee filter).
+//
+// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
+// (工蜂's page-size ceiling is 100); opts.Page > 0 returns exactly that
+// single page and the caller drives pagination itself.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gongfeng.ListIssuesOptions{
-		ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
-	}
-	if opts.State != "" {
-		s := string(opts.State)
-		if s == string(provider.IssueStateOpen) {
-			s = "opened" // 工蜂's issues API vocabulary; inbound convertIssue maps back
+	buildOpts := func(page, perPage int) *gongfeng.ListIssuesOptions {
+		listOpts := &gongfeng.ListIssuesOptions{
+			ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
 		}
-		listOpts.State = gongfeng.Ptr(s)
+		if opts.State != "" {
+			s := string(opts.State)
+			if s == string(provider.IssueStateOpen) {
+				s = "opened" // 工蜂's issues API vocabulary; inbound convertIssue maps back
+			}
+			listOpts.State = gongfeng.Ptr(s)
+		}
+		if opts.Labels != "" {
+			listOpts.Labels = gongfeng.Ptr(opts.Labels) // csv filter, passed through
+		}
+		return listOpts
 	}
-	if opts.Labels != "" {
-		listOpts.Labels = gongfeng.Ptr(opts.Labels) // csv filter, passed through
-	}
-	issues, resp, err := p.client.Issues.ListIssues(ctx, pid(opts.Owner, opts.Repo), listOpts)
-	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListIssues", err)
+	var (
+		issues   []*gongfeng.Issue
+		resp     *gongfeng.Response
+		allPages bool
+	)
+	if opts.Page > 0 {
+		// Caller-driven pagination: serve the requested page only. The
+		// page response still carries the platform total, so it is kept.
+		perPage := opts.PerPage
+		if perPage <= 0 || perPage > provider.MaxPerPage {
+			perPage = provider.MaxPerPage
+		}
+		list, r, err := p.client.Issues.ListIssues(ctx, pid(opts.Owner, opts.Repo), buildOpts(opts.Page, perPage))
+		if err != nil {
+			return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListIssues", err)
+		}
+		issues, resp = list, r
+	} else {
+		allPages = true
+		var err error
+		if issues, err = backendutil.AllPages(func(page int) ([]*gongfeng.Issue, error) {
+			list, _, err := p.client.Issues.ListIssues(ctx, pid(opts.Owner, opts.Repo), buildOpts(page, provider.MaxPerPage))
+			return list, err
+		}); err != nil {
+			return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListIssues", err)
+		}
 	}
 	result := make([]*provider.Issue, 0, len(issues))
 	for _, i := range issues {
 		result = append(result, convertIssue(i))
+	}
+	if allPages {
+		// Merged pages carry no single authoritative total; the merged
+		// size is the complete count by construction.
+		return result, len(result), nil
 	}
 	return result, extractTotalCount(resp, len(result)), nil
 }

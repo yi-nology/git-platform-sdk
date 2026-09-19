@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	sdkgithub "github.com/google/go-github/v91/github"
+	sdkgithub "github.com/google/go-github/v92/github"
 
 	ghbackend "github.com/yi-nology/git-platform-sdk/backends/github"
 	"github.com/yi-nology/git-platform-sdk/provider"
@@ -250,9 +250,20 @@ func TestParseWebhookEvent_Push(t *testing.T) {
 	}
 }
 
+// writeListPage serves v on page 1 and an empty array on page ≥ 2 — the
+// pagination-aware mock shape for list endpoints whose backend walks all
+// pages via backendutil.AllPages.
+func writeListPage(w http.ResponseWriter, r *http.Request, v any) {
+	if page := r.URL.Query().Get("page"); page != "" && page != "1" {
+		_ = json.NewEncoder(w).Encode([]any{})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(v)
+}
+
 func TestListBranches(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]*sdkgithub.Branch{
+		writeListPage(w, r, []*sdkgithub.Branch{
 			{Name: new("main")},
 			{Name: new("dev")},
 		})
@@ -289,7 +300,7 @@ func TestCreateBranch_WithCommitSHA(t *testing.T) {
 
 func TestListTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]*sdkgithub.RepositoryTag{
+		writeListPage(w, r, []*sdkgithub.RepositoryTag{
 			{Name: new("v1.0"), Commit: &sdkgithub.Commit{SHA: new("abc")}},
 		})
 	}))

@@ -6,6 +6,7 @@ import (
 
 	gitea "gitea.dev/sdk"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -29,16 +30,36 @@ import (
 //     takes no per-call context (as with the rest of this backend).
 
 // SearchRepos implements provider.SearchManager.
+//
+// Dual-mode pagination: with opts.Page == 0 the full result set is fetched
+// by exhausting the endpoint's pagination (backendutil.AllPages); with
+// opts.Page > 0 exactly one caller-driven page is fetched (the caller
+// pages itself through NormalizePageOpts-normalized values).
 func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	repos, _, err := p.client.Repositories.SearchRepos(ctx, gitea.SearchRepoOptions{
-		Keyword:     opts.Query,
-		Sort:        opts.Sort,
-		Order:       opts.Order,
-		ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
-	})
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchRepos", err)
+	baseOpts := gitea.SearchRepoOptions{
+		Keyword: opts.Query,
+		Sort:    opts.Sort,
+		Order:   opts.Order,
+	}
+	var repos []*gitea.Repository
+	if opts.Page == 0 {
+		full, err := backendutil.AllPages(func(page int) ([]*gitea.Repository, error) {
+			baseOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: listPageSize}
+			list, _, err := p.client.Repositories.SearchRepos(ctx, baseOpts)
+			return list, err
+		})
+		if err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchRepos", err)
+		}
+		repos = full
+	} else {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		baseOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
+		page1, _, err := p.client.Repositories.SearchRepos(ctx, baseOpts)
+		if err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchRepos", err)
+		}
+		repos = page1
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(repos))
 	for _, r := range repos {
@@ -58,27 +79,50 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 // SearchIssues implements provider.SearchManager. Repo routes to the
 // server-side repo-scoped listing (ListRepoIssues); without it the global
 // keyword search runs.
+//
+// Dual-mode pagination: with opts.Page == 0 the full result set is fetched
+// by exhausting the endpoint's pagination (backendutil.AllPages); with
+// opts.Page > 0 exactly one caller-driven page is fetched (the caller
+// pages itself through NormalizePageOpts-normalized values).
 func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := gitea.ListIssueOption{
-		KeyWord:     opts.Query,
-		State:       gitea.StateType(opts.State),
-		Type:        gitea.IssueTypeIssue,
-		ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
+		KeyWord: opts.Query,
+		State:   gitea.StateType(opts.State),
+		Type:    gitea.IssueTypeIssue,
 	}
-	var issues []*gitea.Issue
-	var err error
+	var repoOwner, repoName string
 	if opts.Repo != "" {
-		owner, repo := provider.SplitFullName(opts.Repo)
-		if owner == "" || repo == "" {
+		repoOwner, repoName = provider.SplitFullName(opts.Repo)
+		if repoOwner == "" || repoName == "" {
 			return nil, nil, provider.Wrapf(provider.PlatformGitea, "SearchIssues", "invalid repo %q, want owner/name", opts.Repo)
 		}
-		issues, _, err = p.client.Issues.ListRepoIssues(ctx, owner, repo, listOpts)
-	} else {
-		issues, _, err = p.client.Issues.ListIssues(ctx, listOpts)
 	}
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchIssues", err)
+	fetch := func() ([]*gitea.Issue, error) {
+		if repoName != "" {
+			list, _, err := p.client.Issues.ListRepoIssues(ctx, repoOwner, repoName, listOpts)
+			return list, err
+		}
+		list, _, err := p.client.Issues.ListIssues(ctx, listOpts)
+		return list, err
+	}
+	var issues []*gitea.Issue
+	if opts.Page == 0 {
+		full, err := backendutil.AllPages(func(page int) ([]*gitea.Issue, error) {
+			listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: listPageSize}
+			return fetch()
+		})
+		if err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchIssues", err)
+		}
+		issues = full
+	} else {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
+		page1, err := fetch()
+		if err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchIssues", err)
+		}
+		issues = page1
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(issues))
 	for _, i := range issues {
@@ -101,14 +145,32 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 }
 
 // SearchUsers implements provider.SearchManager.
+//
+// Dual-mode pagination: with opts.Page == 0 the full result set is fetched
+// by exhausting the endpoint's pagination (backendutil.AllPages); with
+// opts.Page > 0 exactly one caller-driven page is fetched (the caller
+// pages itself through NormalizePageOpts-normalized values).
 func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	users, _, err := p.client.Users.SearchUsers(ctx, gitea.SearchUsersOption{
-		KeyWord:     opts.Query,
-		ListOptions: gitea.ListOptions{Page: page, PageSize: perPage},
-	})
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchUsers", err)
+	baseOpts := gitea.SearchUsersOption{KeyWord: opts.Query}
+	var users []*gitea.User
+	if opts.Page == 0 {
+		full, err := backendutil.AllPages(func(page int) ([]*gitea.User, error) {
+			baseOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: listPageSize}
+			list, _, err := p.client.Users.SearchUsers(ctx, baseOpts)
+			return list, err
+		})
+		if err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchUsers", err)
+		}
+		users = full
+	} else {
+		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+		baseOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
+		page1, _, err := p.client.Users.SearchUsers(ctx, baseOpts)
+		if err != nil {
+			return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchUsers", err)
+		}
+		users = page1
 	}
 	out := make([]*provider.SearchUserResult, 0, len(users))
 	for _, u := range users {

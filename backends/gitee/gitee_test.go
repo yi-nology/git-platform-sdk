@@ -62,6 +62,13 @@ func TestBasePath_NoDoubledV5Prefix(t *testing.T) {
 				mu.Unlock()
 				w.Header().Set("Content-Type", "application/json")
 				if strings.HasSuffix(r.URL.Path, "/branches") || strings.HasSuffix(r.URL.Path, "/user/repos") {
+					// Pagination-aware: these list endpoints now walk all
+					// pages via backendutil.AllPages, so page ≥ 2 must be
+					// empty or the mock loops to the 50-page cap.
+					if page := r.URL.Query().Get("page"); page != "" && page != "1" {
+						_, _ = w.Write([]byte(`[]`))
+						return
+					}
 					_, _ = w.Write([]byte(`[{"name":"main"}]`))
 					return
 				}
@@ -90,8 +97,11 @@ func TestBasePath_NoDoubledV5Prefix(t *testing.T) {
 
 			mu.Lock()
 			defer mu.Unlock()
-			if len(paths) != 3 {
-				t.Fatalf("expected 3 recorded requests, got %d: %v", len(paths), paths)
+			// 5 requests: ListBranches and ListRepos (zero-page opts → full
+			// fetch) each make a data page plus an empty terminal-page probe
+			// via backendutil.AllPages, plus the single GetRepo.
+			if len(paths) != 5 {
+				t.Fatalf("expected 5 recorded requests, got %d: %v", len(paths), paths)
 			}
 			for _, path := range paths {
 				if strings.Count(path, "/v5") != 1 {
