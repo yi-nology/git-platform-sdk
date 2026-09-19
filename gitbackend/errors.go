@@ -21,6 +21,7 @@ var (
 	ErrNotAGitRepo       = errors.New("not a git repository")
 	ErrInvalidGitArg     = errors.New("invalid git argument")
 	ErrConfigKeyNotFound = errors.New("config key not found")
+	ErrStashUnsupported  = errors.New("stash requires the native git backend")
 )
 
 // GitError is a structured error from a git operation.

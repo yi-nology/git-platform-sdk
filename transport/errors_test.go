@@ -7,32 +7,32 @@ import (
 )
 
 func TestError_Is(t *testing.T) {
-	a := &Error{Method: "GET", Path: "/x", StatusCode: 404}
-	b := &Error{Method: "GET", Path: "/x", StatusCode: 404}
+	a := &Error{Method: "GET", Path: "/x", statusCode: 404}
+	b := &Error{Method: "GET", Path: "/x", statusCode: 404}
 	if !errors.Is(a, b) {
 		t.Error("expected identical errors to be Is-equal")
 	}
 	// Different status codes should NOT be Is-equal even with same method/path
-	c := &Error{Method: "GET", Path: "/x", StatusCode: 500}
+	c := &Error{Method: "GET", Path: "/x", statusCode: 500}
 	if errors.Is(a, c) {
 		t.Error("expected different status codes to not match")
 	}
 	// Same status, different path should still match (status-based identity)
-	d := &Error{Method: "POST", Path: "/y", StatusCode: 404}
+	d := &Error{Method: "POST", Path: "/y", statusCode: 404}
 	if !errors.Is(a, d) {
 		t.Error("expected same status code to match regardless of method/path")
 	}
 }
 
 func TestError_IsStatusCode(t *testing.T) {
-	e := &Error{StatusCode: 404}
-	if !errors.Is(e, &Error{StatusCode: 404, Method: "GET", Path: "/x"}) {
+	e := &Error{statusCode: 404}
+	if !errors.Is(e, &Error{statusCode: 404, Method: "GET", Path: "/x"}) {
 		t.Error("expected same status code to match via Is")
 	}
 }
 
 func TestError_IsStatus(t *testing.T) {
-	e := &Error{StatusCode: 502}
+	e := &Error{statusCode: 502}
 	if !e.IsStatus(502) {
 		t.Error("expected IsStatus(502) true")
 	}
@@ -42,8 +42,8 @@ func TestError_IsStatus(t *testing.T) {
 }
 
 func TestError_StatusClasses(t *testing.T) {
-	client := &Error{StatusCode: 404}
-	server := &Error{StatusCode: 503}
+	client := &Error{statusCode: 404}
+	server := &Error{statusCode: 503}
 	if !client.IsClientError() {
 		t.Error("expected 404 to be client error")
 	}
@@ -56,11 +56,11 @@ func TestError_StatusClasses(t *testing.T) {
 }
 
 func TestError_IsStatusClass(t *testing.T) {
-	e := &Error{StatusCode: 599}
+	e := &Error{statusCode: 599}
 	if !e.IsStatusClass(http.StatusInternalServerError) {
 		t.Error("599 should be 5xx")
 	}
-	e2 := &Error{StatusCode: 200}
+	e2 := &Error{statusCode: 200}
 	if e2.IsStatusClass(http.StatusInternalServerError) {
 		t.Error("200 should not be 5xx")
 	}
@@ -68,8 +68,8 @@ func TestError_IsStatusClass(t *testing.T) {
 
 func TestNewStatusError(t *testing.T) {
 	e := NewStatusError("POST", "/x", 500, []byte("oops")).(*Error)
-	if e.StatusCode != 500 {
-		t.Errorf("expected 500, got %d", e.StatusCode)
+	if e.StatusCode() != 500 {
+		t.Errorf("expected 500, got %d", e.StatusCode())
 	}
 	if string(e.Body) != "oops" {
 		t.Errorf("expected body 'oops', got %q", e.Body)
@@ -101,4 +101,25 @@ func containsString(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// statusCoder mirrors the interface provider.Wrap uses to short-circuit status
+// extraction; *Error must satisfy it without reflection.
+type statusCoder interface{ StatusCode() int }
+
+// Compile-time check: *transport.Error implements statusCoder.
+var _ statusCoder = (*Error)(nil)
+
+// TestError_StatusCodeMethod locks the statusCoder fix: *Error exposes its
+// status via a StatusCode() method so interface-based consumers (provider.Wrap)
+// match it directly instead of falling back to reflection.
+func TestError_StatusCodeMethod(t *testing.T) {
+	e := NewStatusError("GET", "/x", 429, []byte("slow down")).(*Error)
+	if got := e.StatusCode(); got != 429 {
+		t.Errorf("expected 429 from StatusCode(), got %d", got)
+	}
+	var sc statusCoder = e
+	if got := sc.StatusCode(); got != 429 {
+		t.Errorf("expected 429 via statusCoder interface, got %d", got)
+	}
 }

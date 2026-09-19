@@ -77,12 +77,20 @@ func (b *GoGitBackend) Diff(ctx context.Context, repoPath string, opts DiffOptio
 	}
 
 	// Diff between two commits
-	fromCommit, err := repo.CommitObject(plumbing.NewHash(opts.From))
+	fromHash, err := resolveRev(repo, opts.From)
+	if err != nil {
+		return "", newGitError("Diff", repoPath, "", err)
+	}
+	fromCommit, err := repo.CommitObject(fromHash)
 	if err != nil {
 		return "", newGitError("Diff", repoPath, "", err)
 	}
 
-	toCommit, err := repo.CommitObject(plumbing.NewHash(opts.To))
+	toHash, err := resolveRev(repo, opts.To)
+	if err != nil {
+		return "", newGitError("Diff", repoPath, "", err)
+	}
+	toCommit, err := repo.CommitObject(toHash)
 	if err != nil {
 		return "", newGitError("Diff", repoPath, "", err)
 	}
@@ -164,11 +172,19 @@ func (b *GoGitBackend) MergeBase(ctx context.Context, repoPath, a, other string)
 	if err != nil {
 		return "", newGitError("MergeBase", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
-	commitA, err := repo.CommitObject(plumbing.NewHash(a))
+	hashA, err := resolveRev(repo, a)
 	if err != nil {
 		return "", newGitError("MergeBase", repoPath, "", err)
 	}
-	commitB, err := repo.CommitObject(plumbing.NewHash(other))
+	commitA, err := repo.CommitObject(hashA)
+	if err != nil {
+		return "", newGitError("MergeBase", repoPath, "", err)
+	}
+	hashB, err := resolveRev(repo, other)
+	if err != nil {
+		return "", newGitError("MergeBase", repoPath, "", err)
+	}
+	commitB, err := repo.CommitObject(hashB)
 	if err != nil {
 		return "", newGitError("MergeBase", repoPath, "", err)
 	}

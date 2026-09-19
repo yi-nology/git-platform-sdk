@@ -211,7 +211,18 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) {
 		}
 	case AuthSSH:
 		if auth.SSHKey != "" {
-			sshCmd := fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", auth.SSHKey)
+			// %q keeps a caller-supplied key path from being interpreted by
+			// the shell GIT_SSH_COMMAND runs under (spaces, $, backticks).
+			sshCmd := fmt.Sprintf("ssh -i %q -o BatchMode=yes", auth.SSHKey)
+			if auth.InsecureSkipTLS {
+				// Explicit opt-out: accept any host key, keep no record.
+				sshCmd += " -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+			} else {
+				// Secure default: verify against the user's known_hosts and
+				// auto-accept new hosts on first use (MITM on a known host
+				// still fails hard).
+				sshCmd += " -o StrictHostKeyChecking=accept-new"
+			}
 			cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
 		}
 	}

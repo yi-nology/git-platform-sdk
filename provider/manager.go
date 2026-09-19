@@ -256,7 +256,11 @@ func (m *Manager) Cleanup() {
 
 // StartJanitor launches a background goroutine that calls Cleanup every
 // interval until ctx is cancelled or Stop is called. Calling StartJanitor
-// more than once without an intervening Stop is a no-op.
+// more than once without an intervening Stop (or without the previous
+// goroutine having exited) is a no-op. When the goroutine exits on its own
+// — e.g. because ctx was cancelled — it resets the janitor state, so a
+// subsequent StartJanitor with a fresh ctx launches a new goroutine instead
+// of being mistaken for "already running".
 func (m *Manager) StartJanitor(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
@@ -272,6 +276,21 @@ func (m *Manager) StartJanitor(ctx context.Context, interval time.Duration) {
 	m.janitorDone = doneCh
 	go func(stop, done chan struct{}) {
 		defer close(done)
+		// Reset the janitor state before signalling exit so StartJanitor can
+		// relaunch after this goroutine dies (e.g. via ctx cancellation).
+		// Runs before close(done): once done is closed, the state is already
+		// cleared. Stop() may have cleared the fields already; the identity
+		// checks keep that case a no-op.
+		defer func() {
+			m.janitorMu.Lock()
+			defer m.janitorMu.Unlock()
+			if m.janitorStop == stop {
+				m.janitorStop = nil
+			}
+			if m.janitorDone == done {
+				m.janitorDone = nil
+			}
+		}()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {

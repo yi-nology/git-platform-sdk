@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,8 +25,14 @@ func (b *GoGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to
 		return nil, newGitError("GetCommitsBetween", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	fromHash := plumbing.NewHash(from)
-	toHash := plumbing.NewHash(to)
+	fromHash, err := resolveRev(repo, from)
+	if err != nil {
+		return nil, newGitError("GetCommitsBetween", repoPath, "", err)
+	}
+	toHash, err := resolveRev(repo, to)
+	if err != nil {
+		return nil, newGitError("GetCommitsBetween", repoPath, "", err)
+	}
 
 	commitIter, err := repo.Log(&git.LogOptions{From: toHash})
 	if err != nil {
@@ -69,25 +76,32 @@ func (b *GoGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, desce
 	return ancestorCommit.IsAncestor(descendantCommit)
 }
 
-// resolveRef resolves a branch name, full ref, or commit hash to a plumbing.Hash.
-func resolveRef(repo *git.Repository, ref string) (plumbing.Hash, error) {
-	// Try as a local branch
-	branchRef, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+ref), true)
-	if err == nil {
-		return branchRef.Hash(), nil
+// errCannotResolveRev marks a revision that resolves to nothing. Callers wrap
+// it (with op/path) in a GitError; matching via errors.Is keeps the cause
+// recognizable through the wrap.
+var errCannotResolveRev = errors.New("cannot resolve rev")
+
+// resolveRev is the single entry point every gogit operation must use to turn
+// a user-provided revision (branch name, tag, HEAD, rev expression, short or
+// full hash) into a commit hash.
+//
+// It first delegates to repo.ResolveRevision, which understands branch/tag
+// names, HEAD and rev expressions. Only when that fails does it fall back to
+// plumbing.NewHash — which blindly hex-decodes ANY string (branch names
+// included) into a zero-valued or partial hash, so the fallback accepts a
+// hash only when it is non-zero AND actually names a commit. A revision that
+// resolves to nothing is an error, never ZeroHash: callers used to receive a
+// zero hash for branch names and silently walked the wrong history.
+func resolveRev(repo *git.Repository, rev string) (plumbing.Hash, error) {
+	if hash, err := repo.ResolveRevision(plumbing.Revision(rev)); err == nil && hash != nil && !hash.IsZero() {
+		return *hash, nil
 	}
-	// Try as a full reference
-	fullRef, err := repo.Reference(plumbing.ReferenceName(ref), true)
-	if err == nil {
-		return fullRef.Hash(), nil
+	if hash := plumbing.NewHash(rev); !hash.IsZero() {
+		if _, err := repo.CommitObject(hash); err == nil {
+			return hash, nil
+		}
 	}
-	// Try as a commit hash
-	hash := plumbing.NewHash(ref)
-	_, err = repo.CommitObject(hash)
-	if err == nil {
-		return hash, nil
-	}
-	return plumbing.ZeroHash, fmt.Errorf("reference not found: %s", ref)
+	return plumbing.ZeroHash, fmt.Errorf("%w: %q", errCannotResolveRev, rev)
 }
 
 // applyChangesToWorktree computes the diff between baseTree and sourceTree and
@@ -385,7 +399,7 @@ func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error 
 		return newGitError("Rebase", repoPath, "", err)
 	}
 
-	ontoHash, err := resolveRef(repo, onto)
+	ontoHash, err := resolveRev(repo, onto)
 	if err != nil {
 		return newGitError("Rebase", repoPath, "", ErrBranchNotFound)
 	}
@@ -470,6 +484,18 @@ func (b *GoGitBackend) RebaseAbort(ctx context.Context, repoPath string) error {
 	// Restore original HEAD
 	ref := plumbing.NewHashReference(plumbing.ReferenceName(headName), plumbing.NewHash(origHead))
 	if err := repo.Storer.SetReference(ref); err != nil {
+		return newGitError("RebaseAbort", repoPath, "", err)
+	}
+
+	// Hard-reset worktree and index back to the original HEAD too. Restoring
+	// only the branch ref used to leave the half-rebased (often conflicted)
+	// worktree in place, so the next commit polluted the restored branch with
+	// leftover rebase state.
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("RebaseAbort", repoPath, "", err)
+	}
+	if err := wt.Reset(&git.ResetOptions{Commit: plumbing.NewHash(origHead), Mode: git.HardReset}); err != nil {
 		return newGitError("RebaseAbort", repoPath, "", err)
 	}
 

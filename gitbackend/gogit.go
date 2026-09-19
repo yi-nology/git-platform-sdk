@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-git/v5/config"
@@ -11,6 +12,7 @@ import (
 	xhttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	xssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type GoGitBackend struct {
@@ -25,44 +27,80 @@ func NewGoGitBackend(opts Options) *GoGitBackend {
 	return &GoGitBackend{logger: logger}
 }
 
-func (b *GoGitBackend) buildTransportAuth(auth AuthConfig) transport.AuthMethod {
+// buildTransportAuth maps AuthConfig onto a go-git AuthMethod. SSH key parse
+// failures and host-key setup problems are returned as errors wrapping
+// ErrAuthFailed — silently falling back to anonymous auth used to surface as
+// a misleading "authentication required" instead of the real cause.
+func (b *GoGitBackend) buildTransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
 	switch auth.Type {
 	case AuthHTTPBasic:
 		return &xhttp.BasicAuth{
 			Username: auth.Username,
 			Password: auth.Password,
-		}
+		}, nil
 	case AuthHTTPToken:
 		return &xhttp.TokenAuth{
 			Token: auth.Token,
-		}
+		}, nil
 	case AuthSSH:
+		authFail := func(err error) (transport.AuthMethod, error) {
+			return nil, fmt.Errorf("%w: %v", ErrAuthFailed, err)
+		}
+		hk, err := hostKeyCallback(auth.InsecureSkipTLS)
+		if err != nil {
+			return authFail(err)
+		}
 		// Try SSHKeyContent first (for DB-stored keys)
 		if auth.SSHKeyContent != "" {
 			signer, err := xssh.NewPublicKeys("git", []byte(auth.SSHKeyContent), auth.Passphrase)
-			if err == nil {
-				signer.HostKeyCallback = insecureHostKeyCallback()
-				return signer
+			if err != nil {
+				return authFail(fmt.Errorf("parse SSH key from SSHKeyContent: %w", err))
 			}
+			signer.HostKeyCallback = hk
+			return signer, nil
 		}
 		// Fall back to SSHKey file path
 		if auth.SSHKey != "" {
 			if _, err := os.Stat(auth.SSHKey); err == nil {
 				signer, err := xssh.NewPublicKeysFromFile("git", auth.SSHKey, auth.Passphrase)
-				if err == nil {
-					signer.HostKeyCallback = insecureHostKeyCallback()
-					return signer
+				if err != nil {
+					return authFail(fmt.Errorf("parse SSH key %s: %w", auth.SSHKey, err))
 				}
+				signer.HostKeyCallback = hk
+				return signer, nil
 			}
+			return authFail(fmt.Errorf("SSH key file %s not found", auth.SSHKey))
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-func insecureHostKeyCallback() ssh.HostKeyCallback {
-	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		return nil
+// hostKeyCallback returns the SSH host-key verification strategy:
+//
+//   - InsecureSkipTLS: accept any host key (explicit opt-out);
+//   - otherwise: verify against ~/.ssh/known_hosts. A missing known_hosts
+//     file is an error with an actionable message — first-use MITM is the
+//     exact threat host-key verification exists for, so unknown hosts are
+//     never silently trusted.
+func hostKeyCallback(insecure bool) (ssh.HostKeyCallback, error) {
+	if insecure {
+		return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			return nil
+		}, nil
 	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve home dir for known_hosts: %w", err)
+	}
+	kh := filepath.Join(home, ".ssh", "known_hosts")
+	if _, err := os.Stat(kh); err != nil {
+		return nil, fmt.Errorf("ssh host key verification: %s not found; add the host key (ssh-keyscan host >> %s) or set InsecureSkipTLS", kh, kh)
+	}
+	cb, err := knownhosts.New(kh)
+	if err != nil {
+		return nil, fmt.Errorf("load %s: %w", kh, err)
+	}
+	return cb, nil
 }
 
 // buildFetchRefSpecs builds the refspecs for a fetch operation.

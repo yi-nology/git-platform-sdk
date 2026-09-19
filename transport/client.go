@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -332,11 +333,13 @@ func (c *Client) buildRequest(ctx context.Context, req *Request) (*http.Request,
 // roundTripRequest applies hooks/auth on a request that was not built by
 // buildRequest. It is used by the round-tripper path so that third-party SDK
 // requests still receive auth/hooks without going through buildRequest.
-func (c *Client) roundTripRequest(req *http.Request) {
+// A rejecting request hook aborts the request: the error is returned to the
+// caller (matching the Client.do path) rather than silently discarded.
+func (c *Client) roundTripRequest(req *http.Request) error {
 	if c.Auth != nil {
 		c.Auth.Apply(req)
 	}
-	_ = c.Hooks.ExecuteRequest(req.Context(), req)
+	return c.Hooks.ExecuteRequest(req.Context(), req)
 }
 
 // encodeBody returns the io.Reader for the request body, the content-type
@@ -429,51 +432,79 @@ func (c *Client) RoundTripper() http.RoundTripper {
 
 // NewRetryingRoundTripper wraps rt in retry/backoff. The returned RoundTripper
 // can be plugged into any http.Client; retries fire on 429, 5xx, and the
-// configured retry list.
+// configured retry list, but only for idempotent methods
+// {GET, HEAD, PUT, DELETE, OPTIONS} — non-idempotent requests (POST, PATCH,
+// ...) are retried exclusively on errors proving the request never reached
+// the network, unless RetryConfig.RetryWrite is set.
 func (c *Client) NewRetryingRoundTripper() http.RoundTripper {
 	return &retryingRoundTripper{inner: c.RoundTripper(), cfg: c.Retry, logger: c.log()}
 }
 
+// clientRoundTripper adapts a Client into an http.RoundTripper. It must be
+// created via Client.RoundTripper.
 type clientRoundTripper struct {
 	client *Client
+
+	// once guards the one-time derivation of the base transport. The previous
+	// implementation rewrote rt.client.Transport from inside RoundTrip to
+	// install a ResponseHeaderTimeout, racing with concurrent readers of the
+	// shared Client (go test -race caught it under parallel requests).
+	once      sync.Once
+	transport http.RoundTripper
+}
+
+// baseTransport resolves the underlying RoundTripper exactly once. When the
+// configured transport is a *http.Transport without a ResponseHeaderTimeout,
+// a clone carrying the client timeout is used so that a stalled (but
+// established) connection cannot hang the header wait forever —
+// http.Client.Timeout does not apply on the raw Transport.RoundTrip path.
+// The derived value is stored on the clientRoundTripper itself; the shared
+// Client is never mutated, so RoundTrip only reads client state.
+func (rt *clientRoundTripper) baseTransport() http.RoundTripper {
+	rt.once.Do(func() {
+		timeout := rt.client.Timeout
+		if timeout <= 0 {
+			timeout = DefaultTimeout
+		}
+		tr := rt.client.httpClient().Transport
+		ht, ok := tr.(*http.Transport)
+		if !ok || ht.ResponseHeaderTimeout > 0 {
+			rt.transport = tr
+			return
+		}
+		ht = ht.Clone()
+		ht.ResponseHeaderTimeout = timeout
+		rt.transport = ht
+	})
+	return rt.transport
 }
 
 // RoundTrip implements http.RoundTripper.
+//
+// The request context is used as-is: it is NOT re-wrapped in a client-timeout
+// deadline. A previous implementation wrapped the context in
+// context.WithTimeout and deferred the cancel, which fired the moment
+// RoundTrip returned — while resp.Body was still bound to that context, so
+// large or slow response bodies were truncated with "context canceled" once
+// the caller read them. The header-wait stall protection now lives in
+// baseTransport (ResponseHeaderTimeout); overall request bounds remain the
+// caller's context responsibility.
 func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
-	// http.Client.Timeout only fires inside Client.Do; calling Transport.RoundTrip
-	// directly (as below) bypasses it, so a stalled server connection would block
-	// the caller for the full caller deadline — or forever when the caller set
-	// none (the gitea/forgejo SDK methods discard the ctx they are handed).
-	// Cap the request context at the client timeout unless an earlier deadline
-	// is already set.
-	timeout := rt.client.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	if dl, ok := ctx.Deadline(); !ok || time.Until(dl) > timeout {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-		req = req.WithContext(ctx)
-	}
-	// Belt and braces: also bound response-header wait on the raw transport so a
-	// stalled (but established) connection aborts even if the context deadline
-	// above is somehow not propagated.
-	if ht, ok := rt.client.httpClient().Transport.(*http.Transport); ok && ht.ResponseHeaderTimeout <= 0 {
-		ht = ht.Clone()
-		ht.ResponseHeaderTimeout = timeout
-		rt.client.Transport = ht
-	}
+	tr := rt.baseTransport()
 	// Proactive rate limiting.
 	if rt.client.Limiter != nil {
 		if err := rt.client.Limiter.WaitContext(ctx); err != nil {
 			return nil, err
 		}
 	}
-	rt.client.roundTripRequest(req)
+	if err := rt.client.roundTripRequest(req); err != nil {
+		// A rejecting request hook must abort the request instead of being
+		// silently swallowed (same semantics as the Client.do path).
+		return nil, err
+	}
 	start := time.Now()
-	resp, err := rt.client.httpClient().Transport.RoundTrip(req)
+	resp, err := tr.RoundTrip(req)
 	duration := time.Since(start)
 	// Update rate limiter state from response headers.
 	if resp != nil && rt.client.Limiter != nil {
@@ -560,9 +591,14 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 				"attempt", attempt,
 				"err", err,
 			)
+			if !rt.cfg.canRetryNetworkError(req, err) {
+				// Non-idempotent request whose outcome is ambiguous or already
+				// executed: replaying it could duplicate a side effect.
+				return nil, err
+			}
 			continue
 		}
-		if !rt.cfg.ShouldRetry(resp.StatusCode) {
+		if !rt.cfg.canRetryStatus(req, resp.StatusCode) {
 			return resp, nil
 		}
 		// Buffer the body before closing so the final response returned to

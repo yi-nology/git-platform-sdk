@@ -70,6 +70,71 @@ func TestBatchContextCancellationFailsRemaining(t *testing.T) {
 	}
 }
 
+// gatingFakeProvider's GetFileContent blocks until release is closed, so a
+// batch item can hold a concurrency slot for as long as the test wants.
+type gatingFakeProvider struct {
+	Provider
+	started chan struct{} // signaled (once) when a call is in flight
+	release chan struct{} // closed to let in-flight calls finish
+}
+
+func (p gatingFakeProvider) Platform() Platform { return PlatformGitHub }
+
+func (p gatingFakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
+	select {
+	case p.started <- struct{}{}:
+	default:
+	}
+	<-p.release
+	return "content:" + path, nil
+}
+
+// TestBatchCancellationInterruptsSemaphoreAcquisition verifies that the loop
+// waiting on a busy semaphore is woken by cancellation: with Concurrency 1
+// and one in-flight item, canceling must mark the queued items as canceled
+// instead of leaving them to run after the in-flight item releases its slot.
+func TestBatchCancellationInterruptsSemaphoreAcquisition(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := gatingFakeProvider{
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+
+	paths := []string{"first", "second", "third"}
+	done := make(chan []BatchResult[string], 1)
+	go func() {
+		done <- GetFileContents(ctx, p, "o", "r", "", paths, BatchOptions{Concurrency: 1})
+	}()
+
+	// Wait until "first" holds the only semaphore slot.
+	<-p.started
+	// Let the loop reach (and block on) the semaphore acquisition for "second".
+	time.Sleep(20 * time.Millisecond)
+
+	cancel()
+	// Release the in-flight item so the batch can return; the queued items
+	// must already have been marked canceled by the cancellation above.
+	close(p.release)
+
+	select {
+	case results := <-done:
+		if results[0].Err != nil || results[0].Value != "content:first" {
+			t.Fatalf("first = %+v, want in-flight item to succeed", results[0])
+		}
+		for i, want := range []string{"second", "third"} {
+			r := results[i+1]
+			if !errors.Is(r.Err, context.Canceled) {
+				t.Fatalf("%s: err = %v, want context.Canceled", want, r.Err)
+			}
+			if r.Value != "" {
+				t.Fatalf("%s: value = %q, want empty (item must not run after cancel)", want, r.Value)
+			}
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("batch did not return after cancellation")
+	}
+}
+
 // notImplementedProvider satisfies Provider via nil-embedding but has no
 // CommitStatusManager (an optional capability, not part of Provider).
 type notImplementedProvider struct{ Provider }

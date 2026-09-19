@@ -89,6 +89,58 @@ func TestDetectPlatform_HTTPS_GitLab(t *testing.T) {
 	}
 }
 
+func TestDetectPlatform_HTTPS_TrailingSlash(t *testing.T) {
+	tests := []string{
+		"https://github.com/owner/repo/",
+		"https://github.com/owner/repo.git/",
+		"http://github.com/owner/repo/",
+	}
+	for _, url := range tests {
+		r, err := DetectPlatform(url)
+		if err != nil {
+			t.Fatalf("%s: %v", url, err)
+		}
+		if r.Owner != "owner" || r.Repo != "repo" {
+			t.Errorf("%s: owner=%q repo=%q, want owner/repo (no trailing \"/\")", url, r.Owner, r.Repo)
+		}
+	}
+}
+
+func TestDetectPlatform_SSHProtocol_TrailingSlash(t *testing.T) {
+	r, err := DetectPlatform("ssh://git@github.com:22/owner/repo/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Owner != "owner" || r.Repo != "repo" {
+		t.Errorf("owner=%q repo=%q, want owner/repo", r.Owner, r.Repo)
+	}
+}
+
+func TestDetectPlatform_GitLabSubgroup_OwnerRepoSplit(t *testing.T) {
+	// Documented semantics: first path segment -> Owner, remainder -> Repo
+	// (Repo may itself contain slashes for GitLab subgroups).
+	r, err := DetectPlatform("https://gitlab.com/group/sub/repo.git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Owner != "group" {
+		t.Errorf("owner = %q, want %q", r.Owner, "group")
+	}
+	if r.Repo != "sub/repo" {
+		t.Errorf("repo = %q, want %q", r.Repo, "sub/repo")
+	}
+}
+
+func TestDetectPlatform_SSH_TrailingSlash(t *testing.T) {
+	r, err := DetectPlatform("git@github.com:owner/repo/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Owner != "owner" || r.Repo != "repo" {
+		t.Errorf("owner=%q repo=%q, want owner/repo", r.Owner, r.Repo)
+	}
+}
+
 func TestDetectPlatform_HTTP_SelfHosted_Unrecognized(t *testing.T) {
 	_, err := DetectPlatform("http://gitlab.local/group/repo.git")
 	if err == nil {
@@ -147,6 +199,111 @@ func TestClassifyHost_Unrecognized(t *testing.T) {
 	}
 	if !IsPlatformNotSupported(err) {
 		t.Errorf("expected ErrPlatformNotSupported, got %v", err)
+	}
+}
+
+func TestClassifyHost_SelfHostedDomainsNotMisrouted(t *testing.T) {
+	// These hostnames merely *contain* a known public domain; substring
+	// matching used to route them to the public-cloud BaseURL.
+	tests := []struct {
+		host   string
+		needle string // the public domain it used to trip on
+	}{
+		{"gitlab.company.com", "gitlab.com"},
+		{"gitlab.corp.example.com", "gitlab.com"},
+		{"gitee.com.cn", "gitee.com"},
+		{"mygithub.com", "github.com"},
+		{"github.com.evil.io", "github.com"},
+		{"xcode.tencent.com", "code.tencent.com"},
+		{"gitea.com.ru", "gitea.com"},
+		{"gitcode.company.cn", "gitcode.com"},
+	}
+	for _, tc := range tests {
+		platform, baseURL, err := classifyHost(tc.host)
+		if err == nil {
+			t.Errorf("%s: expected error, got platform=%s baseURL=%s", tc.host, platform, baseURL)
+			continue
+		}
+		if !IsPlatformNotSupported(err) {
+			t.Errorf("%s: expected ErrPlatformNotSupported, got %v", tc.host, err)
+		}
+	}
+}
+
+func TestClassifyHost_KnownHostsExactAndSubdomain(t *testing.T) {
+	tests := []struct {
+		host     string
+		platform Platform
+		baseURL  string
+	}{
+		{"github.com", PlatformGitHub, "https://api.github.com"},
+		{"www.github.com", PlatformGitHub, "https://api.github.com"},
+		{"gitlab.com", PlatformGitLab, "https://gitlab.com/api/v4"},
+		{"code.tencent.com", PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
+		{"git.code.tencent.com", PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
+		{"codeberg.org", PlatformForgejo, "https://codeberg.org"},
+		{"gitea.com", PlatformGitea, "https://gitea.com/api/v1"},
+		{"gitee.com", PlatformGitee, "https://gitee.com/api/v5"},
+		{"gitcode.com", PlatformGitCode, "https://api.gitcode.com/api/v5"},
+	}
+	for _, tc := range tests {
+		platform, baseURL, err := classifyHost(tc.host)
+		if err != nil {
+			t.Errorf("%s: unexpected error %v", tc.host, err)
+			continue
+		}
+		if platform != tc.platform || baseURL != tc.baseURL {
+			t.Errorf("%s: got (%s, %s), want (%s, %s)", tc.host, platform, baseURL, tc.platform, tc.baseURL)
+		}
+	}
+}
+
+func TestClassifyHost_PortIsStripped(t *testing.T) {
+	tests := []struct {
+		host     string
+		platform Platform
+	}{
+		{"github.com:8443", PlatformGitHub},
+		{"gitlab.com:8443", PlatformGitLab},
+		{"gitee.com:8080", PlatformGitee},
+	}
+	for _, tc := range tests {
+		platform, _, err := classifyHost(tc.host)
+		if err != nil {
+			t.Errorf("%s: unexpected error %v", tc.host, err)
+			continue
+		}
+		if platform != tc.platform {
+			t.Errorf("%s: got %s, want %s", tc.host, platform, tc.platform)
+		}
+	}
+}
+
+func TestDetectPlatform_SelfHostedLookalikeDomains(t *testing.T) {
+	tests := []string{
+		"https://gitlab.company.com/group/repo.git",
+		"git@gitlab.company.com:group/repo.git",
+		"ssh://git@gitlab.company.com:2224/group/repo.git",
+		"https://gitee.com.cn/owner/repo.git",
+	}
+	for _, url := range tests {
+		_, err := DetectPlatform(url)
+		if !IsPlatformNotSupported(err) {
+			t.Errorf("%s: expected ErrPlatformNotSupported, got %v", url, err)
+		}
+	}
+}
+
+func TestDetectPlatform_HTTPS_WithPort(t *testing.T) {
+	r, err := DetectPlatform("https://github.com:8443/owner/repo.git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Platform != PlatformGitHub {
+		t.Errorf("expected GitHub, got %s", r.Platform)
+	}
+	if r.Owner != "owner" || r.Repo != "repo" {
+		t.Errorf("owner=%s repo=%s", r.Owner, r.Repo)
 	}
 }
 

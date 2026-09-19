@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -243,30 +244,43 @@ func TestGoGit_Tags(t *testing.T) {
 func TestBuildTransportAuth(t *testing.T) {
 	b := newTestGoGitBackend(t)
 
-	if got := b.buildTransportAuth(AuthConfig{Type: AuthNone}); got != nil {
-		t.Errorf("AuthNone: expected nil auth, got %T", got)
+	if got, err := b.buildTransportAuth(AuthConfig{Type: AuthNone}); got != nil || err != nil {
+		t.Errorf("AuthNone: expected (nil, nil), got %T, %v", got, err)
 	}
-	basic := b.buildTransportAuth(AuthConfig{Type: AuthHTTPBasic, Username: "u", Password: "p"})
+	basic, err := b.buildTransportAuth(AuthConfig{Type: AuthHTTPBasic, Username: "u", Password: "p"})
+	if err != nil {
+		t.Fatalf("AuthHTTPBasic: unexpected error %v", err)
+	}
 	if ba, ok := basic.(*xhttp.BasicAuth); !ok || ba.Username != "u" || ba.Password != "p" {
 		t.Errorf("AuthHTTPBasic: unexpected %T %+v", basic, basic)
 	}
 
-	// Invalid key content and missing key files must collapse to nil, not
-	// panic or error the operation.
-	if got := b.buildTransportAuth(AuthConfig{Type: AuthSSH, SSHKeyContent: "not a key"}); got != nil {
-		t.Errorf("invalid SSHKeyContent: expected nil, got %T", got)
+	// Invalid key content and missing key files must surface the real cause
+	// wrapped in ErrAuthFailed — silently falling back to anonymous auth
+	// used to masquerade as "authentication required".
+	if _, err := b.buildTransportAuth(AuthConfig{Type: AuthSSH, SSHKeyContent: "not a key"}); !errors.Is(err, ErrAuthFailed) {
+		t.Errorf("invalid SSHKeyContent: err = %v, want ErrAuthFailed", err)
 	}
-	if got := b.buildTransportAuth(AuthConfig{Type: AuthSSH, SSHKey: "/nonexistent/id_ed25519"}); got != nil {
-		t.Errorf("missing SSHKey file: expected nil, got %T", got)
+	if _, err := b.buildTransportAuth(AuthConfig{Type: AuthSSH, SSHKey: "/nonexistent/id_ed25519"}); !errors.Is(err, ErrAuthFailed) {
+		t.Errorf("missing SSHKey file: err = %v, want ErrAuthFailed", err)
 	}
 }
 
 func TestInsecureHostKeyCallbackAcceptsAnyHost(t *testing.T) {
 	// The callback backs SkipTLS-style SSH against self-hosted forges: it
 	// must accept an arbitrary-looking host key without consulting known
-	// hosts.
-	cb := insecureHostKeyCallback()
+	// hosts — but only when the caller explicitly asked for insecure mode.
+	cb, err := hostKeyCallback(true)
+	if err != nil {
+		t.Fatalf("hostKeyCallback(insecure): %v", err)
+	}
 	if err := cb("git.example.com:22", nil, nil); err != nil {
 		t.Errorf("expected the insecure callback to accept any host key, got %v", err)
+	}
+
+	// Secure default: a missing known_hosts file must fail loudly instead
+	// of silently trusting unknown hosts.
+	if _, err := hostKeyCallback(false); err == nil {
+		t.Skip("this environment has ~/.ssh/known_hosts; nothing to assert")
 	}
 }

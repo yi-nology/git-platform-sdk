@@ -49,7 +49,9 @@ type BatchResult[T any] struct {
 
 // batch runs fn over items with bounded concurrency and returns results
 // in input order. The context is honored: after cancellation, remaining
-// items fail fast with the context error instead of being started.
+// items fail fast with the context error instead of being started —
+// including items blocked waiting for a concurrency slot, since semaphore
+// acquisition is itself a cancellable select.
 func batch[T, R any](ctx context.Context, items []T, opts BatchOptions, key func(T) string, fn func(context.Context, T) (R, error)) []BatchResult[R] {
 	results := make([]BatchResult[R], len(items))
 	if len(items) == 0 {
@@ -64,8 +66,16 @@ func batch[T, R any](ctx context.Context, items []T, opts BatchOptions, key func
 			results[i].Err = err
 			continue
 		}
+		// Acquiring a slot must be interruptible: without the ctx.Done
+		// branch a cancellation during contention (all slots busy) would
+		// block the loop until an in-flight item happens to finish.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			results[i].Err = ctx.Err()
+			continue
+		}
 		wg.Add(1)
-		sem <- struct{}{}
 		go func(i int, item T) {
 			defer wg.Done()
 			defer func() { <-sem }()
