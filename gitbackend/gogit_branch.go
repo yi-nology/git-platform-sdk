@@ -61,7 +61,16 @@ func (b *GoGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref s
 		}
 	}
 
-	newRef := plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branch), hash)
+	newRefName := plumbing.ReferenceName("refs/heads/" + branch)
+
+	// Refuse to clobber: SetReference would silently MOVE an existing branch
+	// pointer, so probe for the ref first and fail with the same sentinel the
+	// native backend reports.
+	if _, err := repo.Reference(newRefName, true); err == nil {
+		return newGitError("CreateBranch", repoPath, "", ErrBranchExists)
+	}
+
+	newRef := plumbing.NewHashReference(newRefName, hash)
 	err = repo.Storer.SetReference(newRef)
 	if err != nil {
 		return newGitError("CreateBranch", repoPath, "", err)

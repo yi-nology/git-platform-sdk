@@ -157,6 +157,130 @@ func TestWrap_WithStatusCoder(t *testing.T) {
 	}
 }
 
+// TestWrap_PreservesOriginalCause verifies that classification no longer
+// discards the platform's original error: the sentinel (via Is), the
+// StatusError wrapper, and the raw SDK error must all remain matchable, and
+// the message must retain the original detail.
+func TestWrap_PreservesOriginalCause(t *testing.T) {
+	orig := fmt.Errorf("GET /api/v4/projects/42: project not found")
+	wrapped := WrapStatusError(orig, 404)
+	err := Wrap(PlatformGitLab, "GetRepo", wrapped)
+
+	var pe *ProviderError
+	if !errors.As(err, &pe) {
+		t.Fatal("expected *ProviderError")
+	}
+	if pe.StatusCode != 404 {
+		t.Errorf("expected status 404, got %d", pe.StatusCode)
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Error("expected classification sentinel ErrNotFound to still match")
+	}
+	if !errors.Is(err, wrapped) {
+		t.Error("expected the StatusError wrapper to remain in the chain")
+	}
+	if !errors.Is(err, orig) {
+		t.Error("expected the original raw error to remain in the chain")
+	}
+	if !containsSubstr(err.Error(), "GET /api/v4/projects/42: project not found") {
+		t.Errorf("expected original detail in message, got %q", err.Error())
+	}
+	if !containsSubstr(err.Error(), "HTTP 404") {
+		t.Errorf("expected status in message, got %q", err.Error())
+	}
+}
+
+func TestWrap_PreservesOriginalCause_5xx(t *testing.T) {
+	orig := fmt.Errorf("connection reset by peer mid-response")
+	err := Wrap(PlatformGitHub, "ListRepos", &sdkStatusError{StatusCode: 502, msg: "upstream blew up", inner: orig})
+
+	var pe *ProviderError
+	if !errors.As(err, &pe) {
+		t.Fatal("expected *ProviderError")
+	}
+	if pe.StatusCode != 502 {
+		t.Errorf("expected status 502, got %d", pe.StatusCode)
+	}
+	if !errors.Is(err, orig) {
+		t.Error("expected original cause preserved for 5xx classification")
+	}
+	if !containsSubstr(err.Error(), "connection reset by peer") {
+		t.Errorf("expected original detail in message, got %q", err.Error())
+	}
+}
+
+// sdkStatusError mimics a third-party SDK error: no StatusCode method, only
+// an exported StatusCode int field plus a nested cause, so it exercises the
+// reflection path in Wrap (same shape as e.g. gitlab client-go's
+// ErrorResponse).
+type sdkStatusError struct {
+	StatusCode int
+	msg        string
+	inner      error
+}
+
+func (e *sdkStatusError) Error() string {
+	return fmt.Sprintf("sdk: HTTP %d: %s: %v", e.StatusCode, e.msg, e.inner)
+}
+func (e *sdkStatusError) Unwrap() error { return e.inner }
+
+// TestWrap_StringMessage_NotMistakenForStatus: "merge with 500 files" used to
+// be parsed as HTTP 500 ("with " prefix); it must now stay unclassified.
+func TestWrap_StringMessage_NotMistakenForStatus(t *testing.T) {
+	msgs := []string{
+		"merge with 500 files",
+		"merged 404 changes",
+		"operation completed with 403 steps",
+	}
+	for _, msg := range msgs {
+		err := Wrap(PlatformGitHub, "Merge", fmt.Errorf("%s", msg))
+		var pe *ProviderError
+		if !errors.As(err, &pe) {
+			t.Fatalf("%q: expected *ProviderError", msg)
+		}
+		if pe.StatusCode != 0 {
+			t.Errorf("%q: StatusCode = %d, want 0 (plain prose is not an HTTP status)", msg, pe.StatusCode)
+		}
+		if pe.IsServerError() || IsNotFound(pe) || IsForbidden(pe) {
+			t.Errorf("%q: must not be classified as an HTTP failure", msg)
+		}
+		if !containsSubstr(err.Error(), msg) {
+			t.Errorf("%q: message not preserved, got %q", msg, err.Error())
+		}
+	}
+}
+
+func TestParseStatusFromString(t *testing.T) {
+	tests := []struct {
+		msg  string
+		code int
+		ok   bool
+	}{
+		{"returned 404", 404, true},
+		{"Returned 404 Not Found", 404, true}, // case-insensitive
+		{"HTTP 502 Bad Gateway", 502, true},
+		{"status 422 Unprocessable", 422, true},
+		{"request failed: returned 503", 503, true},
+		// Whitelist: only classifiable codes are extracted.
+		{"returned 200", 0, false},
+		{"status 302 Found", 0, false},
+		{"returned 100", 0, false},
+		{"returned 599", 0, false},
+		// "with " prefix removed: prose must not yield a status.
+		{"merge with 500 files", 0, false},
+		{"with 404 items", 0, false},
+		{"Merge conflict: branch contains with 429 commits", 0, false},
+		{"nothing here at all", 0, false},
+		{"", 0, false},
+	}
+	for _, tc := range tests {
+		code, ok := parseStatusFromString(tc.msg)
+		if code != tc.code || ok != tc.ok {
+			t.Errorf("parseStatusFromString(%q) = (%d, %v), want (%d, %v)", tc.msg, code, ok, tc.code, tc.ok)
+		}
+	}
+}
+
 func TestWrapf(t *testing.T) {
 	err := Wrapf(PlatformGitHub, "GetRepo", "%s/%s", "owner", "repo")
 	if !errors.Is(err, err) {

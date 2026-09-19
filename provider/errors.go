@@ -77,8 +77,13 @@ func (e *ProviderError) IsClientError() bool { return e.StatusCode >= 400 && e.S
 func (e *ProviderError) IsServerError() bool { return e.StatusCode >= 500 && e.StatusCode < 600 }
 
 // Wrap creates a ProviderError from a raw error, classifying it when the
-// cause is a transport error with a known status code. Use this in platform
-// implementations to convert transport errors into the unified shape.
+// cause is a transport error with a known status code. The original error
+// chain is always preserved: Cause stays rooted at the raw error (with the
+// classification sentinel wrapped in front via %w), so errors.Is matches
+// both the sentinel (ErrNotFound & co.) and any error from the original
+// chain, and the Error() message retains the platform's original detail.
+// Use this in platform implementations to convert transport errors into the
+// unified shape.
 func Wrap(platform Platform, op string, err error) error {
 	if err == nil {
 		return nil
@@ -90,22 +95,18 @@ func Wrap(platform Platform, op string, err error) error {
 	// Walk the cause chain looking for an HTTP status code. The check order
 	// prioritizes cheap interface checks before falling back to reflection.
 	for cur := err; cur != nil; {
-		// Fast path: statusCoder interface (covers transport.Error and StatusError).
+		// Fast path: anything implementing StatusCode() int. Covers
+		// *StatusError in this package and transport.Error.
 		if sc, ok := cur.(statusCoder); ok {
 			pe.StatusCode = sc.StatusCode()
-			pe.Cause = classifyStatusCode(pe.StatusCode)
+			pe.Cause = fmt.Errorf("%w: %w", classifyStatusCode(pe.StatusCode), err)
 			break
 		}
-		// Fast path: explicit StatusError type.
-		if se, ok := cur.(*StatusError); ok {
-			pe.StatusCode = se.Status
-			pe.Cause = classifyStatusCode(se.Status)
-			break
-		}
-		// Slow path: reflection-based detection for third-party SDK errors.
+		// Slow path: reflection-based detection for third-party SDK errors
+		// (StatusCode / *http.Response fields, then message parsing).
 		if code, ok := httpStatusFromError(cur); ok {
 			pe.StatusCode = code
-			pe.Cause = classifyStatusCode(code)
+			pe.Cause = fmt.Errorf("%w: %w", classifyStatusCode(code), err)
 			break
 		}
 		cur = errors.Unwrap(cur)
@@ -165,8 +166,9 @@ func WrapStatusError(err error, statusCode int) error {
 	return &StatusError{Status: statusCode, Cause: err}
 }
 
-// statusCoder is the interface implemented by transport.Error. We avoid
-// importing transport here to keep the provider package dependency-free.
+// statusCoder is the interface implemented by *StatusError in this package
+// and by transport.Error. We avoid importing transport here to keep the
+// provider package dependency-free.
 type statusCoder interface {
 	StatusCode() int
 }
@@ -176,11 +178,13 @@ type statusCoder interface {
 // as a last resort for third-party SDK errors.
 //
 // Priority order:
-//  1. statusCoder interface (transport.Error, StatusError)
-//  2. StatusError type (explicit wrapping by backends)
-//  3. Reflection: StatusCode int field (gitlab client-go ErrorResponse)
+//  1. statusCoder interface (*StatusError, transport.Error)
+//  2. Reflection: StatusCode() method on the concrete type
+//  3. Reflection: StatusCode int field (gitlab client-go ErrorResponse,
+//     transport.Error's field)
 //  4. Reflection: *http.Response field (go-github ErrorResponse)
-//  5. String parsing: "returned NNN", "HTTP NNN", "status NNN"
+//  5. String parsing: "returned NNN", "HTTP NNN", "status NNN" restricted
+//     to classifiableStatuses
 //
 // Backends should prefer WrapStatusError or Wrap/New with explicit status
 // codes over relying on the reflection path.
@@ -244,15 +248,19 @@ func statusCodeFromMethod(v reflect.Value) (int, bool) {
 	return c, ok
 }
 
-// parseStatusFromString extracts a 3-digit HTTP status code from an error
-// message. Recognizes the patterns:
+// parseStatusFromString extracts an HTTP status code from an error message.
+// Recognizes the patterns:
 //   - "returned 404"
 //   - "HTTP 404"
 //   - "status 404"
 //
+// There is deliberately no "with " prefix, and only codes in
+// classifiableStatuses are accepted: free-form text such as "merge with 500
+// files" or "merged 200 commits" must not be mistaken for an HTTP status.
+//
 // Returns (0, false) when no status code is found.
 func parseStatusFromString(msg string) (int, bool) {
-	for _, prefix := range []string{"returned ", "HTTP ", "status ", "with "} {
+	for _, prefix := range []string{"returned ", "HTTP ", "status "} {
 		idx := indexOfCaseInsensitive(msg, prefix)
 		if idx < 0 {
 			continue
@@ -269,12 +277,31 @@ func parseStatusFromString(msg string) (int, bool) {
 			num = num*10 + int(c-'0')
 			found = true
 		}
-		if found && num >= 100 && num <= 599 {
+		if found && classifiableStatus(num) {
 			return num, true
 		}
 	}
 	return 0, false
 }
+
+// classifiableStatuses are the only codes trusted when recovered from
+// free-form error text via parseStatusFromString. Codes recovered
+// structurally (statusCoder interface, reflection on fields, *http.Response)
+// are not restricted by this set.
+var classifiableStatuses = map[int]bool{
+	http.StatusUnauthorized:        true, // 401
+	http.StatusForbidden:           true, // 403
+	http.StatusNotFound:            true, // 404
+	http.StatusConflict:            true, // 409
+	http.StatusUnprocessableEntity: true, // 422
+	http.StatusTooManyRequests:     true, // 429
+	http.StatusInternalServerError: true, // 500
+	http.StatusBadGateway:          true, // 502
+	http.StatusServiceUnavailable:  true, // 503
+	http.StatusGatewayTimeout:      true, // 504
+}
+
+func classifiableStatus(code int) bool { return classifiableStatuses[code] }
 
 func indexOfCaseInsensitive(s, sub string) int {
 	if sub == "" {

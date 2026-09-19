@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -138,6 +139,64 @@ func TestGoGit_CheckoutRef(t *testing.T) {
 	}
 	if got := headHash(t, repo); got != old {
 		t.Errorf("expected HEAD at the checked-out commit %s, got %s", old, got)
+	}
+}
+
+// TestGoGit_CheckoutRef_AttachesToBranch verifies a branch name checks out
+// ATTACHED (HEAD follows the branch), matching the native backend's
+// `git checkout <branch>` semantics. CheckoutRef used to detach
+// unconditionally, so a branch checkout silently drifted off the branch.
+func TestGoGit_CheckoutRef_AttachesToBranch(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	main := currentBranch(t, repo)
+	gitOutput(t, repo, "branch", "feature")
+	commitFile(t, repo, "on-main.txt", "main work", "main work")
+
+	attached := func() bool {
+		t.Helper()
+		return exec.Command("git", "-C", repo, "symbolic-ref", "-q", "HEAD").Run() == nil
+	}
+
+	if err := b.CheckoutRef(context.Background(), repo, "feature"); err != nil {
+		t.Fatalf("CheckoutRef(feature): %v", err)
+	}
+	if !attached() {
+		t.Fatal("expected HEAD attached after CheckoutRef with a branch name")
+	}
+	if got := currentBranch(t, repo); got != "feature" {
+		t.Errorf("expected HEAD on feature, got %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "on-main.txt")); !os.IsNotExist(err) {
+		t.Errorf("expected the feature worktree without main-side files, stat err = %v", err)
+	}
+
+	if err := b.CheckoutRef(context.Background(), repo, main); err != nil {
+		t.Fatalf("CheckoutRef(%s): %v", main, err)
+	}
+	if got := currentBranch(t, repo); got != main {
+		t.Errorf("expected HEAD back on %s, got %q", main, got)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "on-main.txt")); err != nil {
+		t.Errorf("expected on-main.txt back on %s: %v", main, err)
+	}
+}
+
+// TestGoGit_CheckoutDetached_AlwaysDetaches verifies the explicit detached
+// variant pins HEAD to the commit even when given a branch name.
+func TestGoGit_CheckoutDetached_AlwaysDetaches(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	main := currentBranch(t, repo)
+
+	if err := b.CheckoutDetached(context.Background(), repo, main); err != nil {
+		t.Fatalf("CheckoutDetached: %v", err)
+	}
+	if err := exec.Command("git", "-C", repo, "symbolic-ref", "-q", "HEAD").Run(); err == nil {
+		t.Error("expected HEAD detached after CheckoutDetached, found it attached")
+	}
+	if got := headHash(t, repo); got != gitOutput(t, repo, "rev-parse", main) {
+		t.Errorf("expected HEAD at %s's tip, got %s", main, got)
 	}
 }
 

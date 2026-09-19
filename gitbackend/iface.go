@@ -123,6 +123,12 @@ type FileOps interface {
 }
 
 // StashOps covers the stash list and stash lifecycle.
+//
+// Backend support: the native backend implements stash via git's own
+// refs/stash reflog. The go-git backend returns ErrStashUnsupported for
+// every stash operation — its storage layer cannot represent the stash
+// reflog, and earlier workarounds wrote reference names native git
+// rejects (see gogit_stash_config.go).
 type StashOps interface {
 	// StashList lists the stash entries.
 	StashList(ctx context.Context, repoPath string) ([]StashEntry, error)

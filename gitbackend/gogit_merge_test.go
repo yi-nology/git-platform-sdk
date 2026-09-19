@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -176,7 +177,7 @@ func TestGoGit_CherryPick(t *testing.T) {
 	}
 }
 
-func TestResolveRef(t *testing.T) {
+func TestResolveRev(t *testing.T) {
 	repo := createTestRepo(t)
 	gogitRepo, err := git.PlainOpen(repo)
 	if err != nil {
@@ -186,16 +187,26 @@ func TestResolveRef(t *testing.T) {
 	want := headHash(t, repo)
 
 	for _, ref := range []string{main, "refs/heads/" + main, want} {
-		got, err := resolveRef(gogitRepo, ref)
+		got, err := resolveRev(gogitRepo, ref)
 		if err != nil {
-			t.Errorf("resolveRef(%q): %v", ref, err)
+			t.Errorf("resolveRev(%q): %v", ref, err)
 			continue
 		}
 		if got.String() != want {
-			t.Errorf("resolveRef(%q) = %s, want %s", ref, got, want)
+			t.Errorf("resolveRev(%q) = %s, want %s", ref, got, want)
 		}
 	}
-	if _, err := resolveRef(gogitRepo, "no-such-ref"); err == nil {
-		t.Error("expected an error for an unresolvable ref")
+	// Unresolvable revs are errors — never a zero hash that callers would
+	// silently act on.
+	for _, ref := range []string{"no-such-ref", strings.Repeat("0", 40)} {
+		if _, err := resolveRev(gogitRepo, ref); err == nil || !errors.Is(err, errCannotResolveRev) {
+			t.Errorf("resolveRev(%q): expected a cannot-resolve error, got %v", ref, err)
+		}
+	}
+	// A tree hash is not a commit: the fallback must reject it too instead of
+	// handing back a hash no caller can log or diff.
+	treeHash := gitOutput(t, repo, "rev-parse", "HEAD^{tree}")
+	if _, err := resolveRev(gogitRepo, treeHash); err == nil || !errors.Is(err, errCannotResolveRev) {
+		t.Errorf("resolveRev(tree hash): expected a cannot-resolve error, got %v", err)
 	}
 }

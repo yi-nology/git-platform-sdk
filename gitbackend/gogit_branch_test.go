@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -148,6 +149,29 @@ func TestGoGit_GetBranchSyncInfo_AheadAndBehind(t *testing.T) {
 	_, _, err = b.GetBranchSyncInfo(context.Background(), clone, "missing", "origin/"+main)
 	if err == nil || !IsNotFound(err) {
 		t.Errorf("missing branch: expected a NotFound error, got %v", err)
+	}
+}
+
+// TestGoGit_CreateBranch_ExistsKeepsRef mirrors the native backend: creating
+// a branch that already exists must fail with ErrBranchExists and leave the
+// existing pointer alone (SetReference would have silently reset it).
+func TestGoGit_CreateBranch_ExistsKeepsRef(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	ctx := context.Background()
+	initHash := headHash(t, repo)
+
+	if err := b.CreateBranch(ctx, repo, "feature", "HEAD"); err != nil {
+		t.Fatalf("CreateBranch: %v", err)
+	}
+	commitFile(t, repo, "later.txt", "later", "advance main") // a reset would now be visible
+
+	err := b.CreateBranch(ctx, repo, "feature", "HEAD")
+	if err == nil || !errors.Is(err, ErrBranchExists) {
+		t.Fatalf("expected ErrBranchExists for the existing branch, got %v", err)
+	}
+	if got := gitOutput(t, repo, "rev-parse", "feature"); got != initHash {
+		t.Errorf("existing branch pointer moved from %s to %s", initHash, got)
 	}
 }
 

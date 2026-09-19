@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -136,8 +138,8 @@ func TestClient_StatusError(t *testing.T) {
 	if !errors.As(err, &se) {
 		t.Fatalf("expected *Error, got %T", err)
 	}
-	if se.StatusCode != 404 {
-		t.Errorf("expected 404, got %d", se.StatusCode)
+	if se.StatusCode() != 404 {
+		t.Errorf("expected 404, got %d", se.StatusCode())
 	}
 	if string(se.Body) != "not found" {
 		t.Errorf("expected body 'not found', got %q", se.Body)
@@ -287,6 +289,160 @@ func TestRetryingRoundTripper_NetworkErrorReturnsError(t *testing.T) {
 	}
 	if resp != nil {
 		t.Errorf("expected nil response on transport error, got %+v", resp)
+	}
+}
+
+// TestClient_RoundTripper_ConcurrentUseDoesNotMutateClient locks the data-race
+// fix: clientRoundTripper must derive its ResponseHeaderTimeout-carrying
+// transport once at first use (sync.Once, stored on the round tripper) instead
+// of writing rt.client.Transport from inside RoundTrip. Run with -race this
+// used to report a write/write + read/write race on Client.Transport; the
+// postcondition below also pins that the shared Client is never mutated.
+func TestClient_RoundTripper_ConcurrentUseDoesNotMutateClient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	base := &http.Transport{} // ResponseHeaderTimeout == 0: previously triggered the rewrite
+	c := NewClient(srv.URL, None{})
+	c.Transport = base
+	rt := c.RoundTripper()
+	hc := &http.Client{Transport: rt}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req, err := http.NewRequest(http.MethodGet, srv.URL+"/x", nil)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			resp, err := hc.Do(req)
+			if err != nil {
+				t.Errorf("round trip: %v", err)
+				return
+			}
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+		}()
+	}
+	wg.Wait()
+
+	if c.Transport != http.RoundTripper(base) {
+		t.Fatalf("shared Client.Transport must not be mutated, got %T", c.Transport)
+	}
+	if base.ResponseHeaderTimeout != 0 {
+		t.Errorf("the caller's transport must not be mutated, got ResponseHeaderTimeout=%v", base.ResponseHeaderTimeout)
+	}
+}
+
+// TestClient_RoundTripper_LargeBodyNotTruncated guards the context fix: the
+// RoundTripper path must not wrap the request context in
+// context.WithTimeout + defer cancel(), because the cancel fired the moment
+// RoundTrip returned — while resp.Body was still bound to that context — and
+// truncated every response whose body arrived after the headers. The server
+// here sends headers first (Flush) and the payload only after RoundTrip has
+// returned, so a stale cancel would deterministically kill the read below.
+func TestClient_RoundTripper_LargeBodyNotTruncated(t *testing.T) {
+	const chunk = 64 * 1024
+	const chunks = 16 // 1 MiB total, well beyond any read-ahead buffering
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(chunk*chunks))
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush() // RoundTrip returns once these headers arrive
+		}
+		<-release
+		for i := 0; i < chunks; i++ {
+			if _, err := w.Write(make([]byte, chunk)); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, None{})
+	hc := &http.Client{Transport: c.RoundTripper()}
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/big", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// RoundTrip has returned. A previous implementation cancelled the request
+	// context exactly here; give that stale cancel time to take effect before
+	// the body is written, then read the full payload.
+	close(release)
+	time.Sleep(50 * time.Millisecond)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("response body read must not be truncated: %v", err)
+	}
+	if int64(len(body)) != chunk*chunks {
+		t.Fatalf("expected %d bytes, got %d", chunk*chunks, len(body))
+	}
+}
+
+// TestClient_RoundTripper_StalledHeaderAbortsByResponseHeaderTimeout verifies
+// the stall protection that replaces the removed context wrapping: a server
+// that never sends headers must abort after the client timeout via
+// ResponseHeaderTimeout instead of hanging forever.
+func TestClient_RoundTripper_StalledHeaderAbortsByResponseHeaderTimeout(t *testing.T) {
+	stall := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-stall // stall: no headers, no body
+	}))
+	// Defers run LIFO: close(stall) runs before srv.Close(), unblocking the
+	// handler so Close does not wait on the stalled connection.
+	defer srv.Close()
+	defer close(stall)
+
+	c := NewClient(srv.URL, None{})
+	c.Timeout = 150 * time.Millisecond
+	hc := &http.Client{Transport: c.RoundTripper()}
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/stall", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if _, err := hc.Do(req); err == nil {
+		t.Fatal("expected an error from the stalled header wait")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("expected the ResponseHeaderTimeout to abort quickly, took %v", elapsed)
+	}
+}
+
+// TestHooks_RoundTripperRequestErrorAborts locks the hook fix on the
+// RoundTripper path: a rejecting request hook must surface its error instead
+// of being silently discarded (same semantics as the Client.do path).
+func TestHooks_RoundTripperRequestErrorAborts(t *testing.T) {
+	wantErr := errors.New("hook rejected")
+	hooks := &Hooks{}
+	hooks.AddRequest(func(ctx context.Context, req *http.Request) error { return wantErr })
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("server should not be hit")
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, None{})
+	c.Hooks = hooks
+	hc := &http.Client{Transport: c.RoundTripper()}
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = hc.Do(req)
+	if !errors.Is(err, wantErr) {
+		t.Errorf("expected hook error to abort the request, got %v", err)
 	}
 }
 

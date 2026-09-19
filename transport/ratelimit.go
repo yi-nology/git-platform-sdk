@@ -83,45 +83,67 @@ func (rl *RateLimiter) Wait() {
 // cancelled. It returns ctx.Err() if the context is done before the wait
 // completes. It considers both the configured RPS cap and the adaptive
 // throttling based on remaining quota.
+//
+// The lock is only held to compute the wait duration and to reserve a local
+// quota slot; the actual sleep happens outside the critical section, so a
+// long adaptive wait does not block other waiters, UpdateFromResponse calls,
+// or state inspection.
 func (rl *RateLimiter) WaitContext(ctx context.Context) error {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	// 1. RPS-based pacing via the token bucket.
+	// 1. RPS-based pacing via the token bucket. rate.Limiter is
+	// concurrency-safe and does its own waiting, so no lock is held here.
 	if rl.limiter != nil {
 		if err := rl.limiter.Wait(ctx); err != nil {
 			return err
 		}
 	}
 
+	rl.mu.Lock()
 	now := time.Now()
 
-	// 2. Minimum delay
+	// 2. Minimum delay between consecutive requests.
+	var delay time.Duration
 	if rl.minDelay > 0 {
 		if elapsed := now.Sub(rl.lastReq); elapsed < rl.minDelay {
-			delay := rl.minDelay - elapsed
-			if err := rl.sleep(ctx, delay); err != nil {
-				return err
+			if d := rl.minDelay - elapsed; d > delay {
+				delay = d
 			}
-			now = time.Now()
 		}
 	}
 
-	// 3. Adaptive throttle based on remaining quota
-	if rl.remaining > 0 && rl.remaining <= rl.threshold && !rl.resetAt.IsZero() {
+	// 3. Adaptive throttle based on remaining quota. remaining == 0 (quota
+	// exhausted) throttles too — it waits for the reset window — which the
+	// previous `remaining > 0` guard got backwards.
+	// Each waiter consumes a local reservation by decrementing remaining, so
+	// concurrent waiters target progressively later slots instead of all
+	// sleeping for the same duration and firing at once (thundering herd).
+	// The value is re-synced from real response headers by UpdateFromResponse.
+	if rem := max(rl.remaining, 0); rem <= rl.threshold && !rl.resetAt.IsZero() {
 		timeUntilReset := time.Until(rl.resetAt)
 		if timeUntilReset > 0 {
-			delay := timeUntilReset / time.Duration(rl.remaining+1)
-			if delay > time.Second {
-				if err := rl.sleep(ctx, delay); err != nil {
-					return err
+			if d := timeUntilReset / time.Duration(rem+1); d > time.Second {
+				if d > delay {
+					delay = d
 				}
-				now = time.Now()
+				rl.remaining--
 			}
 		}
 	}
 
-	rl.lastReq = now
+	// Reserve the slot: the request will effectively fire at now+delay, so
+	// lastReq is advanced by the same amount to keep spacing correct for the
+	// next waiter. The reservation is kept even if the sleep below is
+	// cancelled — a cancelled caller should not hand its slot to a burst.
+	rl.lastReq = now.Add(delay)
+	rl.mu.Unlock()
+
+	if delay > 0 {
+		// Sleep outside the critical section: adaptive delays can reach the
+		// whole quota-reset window (tens of minutes), and holding the lock
+		// for them would stall every other request and state update.
+		if err := rl.sleep(ctx, delay); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

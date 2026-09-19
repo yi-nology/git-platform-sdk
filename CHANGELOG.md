@@ -6,6 +6,108 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **SSH host keys are now verified by both git backends.** The native
+  backend defaulted to `StrictHostKeyChecking=no` and the go-git backend
+  accepted any host key unconditionally — both independent of the
+  `InsecureSkipTLS` option. Host key verification is now on by default:
+  the native backend uses `StrictHostKeyChecking=accept-new` (first use
+  records the key; a known host presenting a different key fails hard),
+  and the go-git backend verifies against `~/.ssh/known_hosts` (missing
+  file → actionable error). Set `InsecureSkipTLS` to opt out explicitly.
+- **SSH key paths in `GIT_SSH_COMMAND` are shell-quoted** (`%q`) across
+  the native backend and all four `pkg/credential` command builders — a
+  caller-supplied key path containing spaces, `$`, backticks or `;` can
+  no longer be interpreted by the shell git spawns.
+- **go-git auth failures surface their real cause.** `buildTransportAuth`
+  returned `nil` on SSH key parse errors and callers silently fell back
+  to anonymous auth ("authentication required"); it now returns an error
+  wrapping `ErrAuthFailed` with the parse detail, propagated by every
+  clone/fetch/push/pull/tag operation.
+- **gogit stash operations return `ErrStashUnsupported`.** The go-git
+  backend's stash wrote `refs/stash@{N}` references — a name git's
+  ref-format rules reject — creating entries invisible to native git,
+  and `StashPop` dropped entries whose apply had half-failed (potential
+  data loss). Stash is now native-backend-only and registered as such on
+  `StashOps`; the gogit implementations fail loudly instead of
+  maintaining a parallel, incompatible data set.
+- **gogit config contract aligned with native** — missing keys wrap
+  `ErrConfigKeyNotFound` (errors.Is-able), explicitly-empty values are no
+  longer mistaken for missing, and `SetConfig` underlying errors pass
+  through `GitError` wrapping per the backend contract.- **gogit no longer silently does the wrong thing on non-SHA revs** —
+  `GetCommitsBetween`/`Diff`/`MergeBase`/`DiffNames`/`DeletedFiles`
+  accept branch names and tags via a unified `resolveRev` entry point
+  (previously a branch name produced a zero hash and, for commit ranges,
+  silently returned the entire history); `CreateBranch` on an existing
+  branch returns `ErrBranchExists` instead of resetting the branch
+  pointer; `CreateTag` with a branch-name ref tags that rev instead of
+  HEAD, and duplicate tags map to `ErrTagExists`; `RebaseAbort` restores
+  the worktree and index to the original HEAD instead of leaving
+  half-rebased state staged.
+- **gogit `CheckoutRef` attaches to branches** (matching the native
+  backend) and a new `CheckoutDetached` provides the explicit detached
+  form — previously `Repository.Checkout("main")` detached on gogit and
+  attached on native, and `CheckoutDetached` never detached on native.
+- **transport: RoundTrip no longer races on the shared Client.** The
+  per-request `http.Transport` derivation (ResponseHeaderTimeout) moved
+  to first use via `sync.Once`, stored on the roundTripper — concurrent
+  requests through `Client.RoundTripper()` no longer write the shared
+  `Client.Transport` field.
+- **transport: large response bodies are no longer truncated.** The
+  RoundTripper re-wrapped the caller context with `context.WithTimeout`
+  and cancelled on return, killing `resp.Body` reads beyond the bufio
+  buffer. Body-lifetime now belongs to the caller; stalled response
+  headers remain bounded by `ResponseHeaderTimeout`.
+- **transport: rate limiter no longer sleeps while holding its lock.**
+  Adaptive throttling (which could wait most of a rate-reset window)
+  blocked every other request and the limiter's own state updates. Wait
+  time computation and quota reservation happen under the lock; sleeping
+  happens outside it. Fixed alongside: an exhausted quota (remaining ==
+  0) now throttles instead of passing through, and waiters reserve slots
+  locally instead of stampeding after the same delay.
+- **transport: `Retry-After` is capped at `MaxDelay`** (30s default) —
+  a misbehaving server can no longer park a client for a day; HTTP-date
+  Retry-After values are parsed and capped the same way.
+- **transport: retries respect method idempotency.** Only
+  GET/HEAD/PUT/DELETE/OPTIONS are retried on retryable statuses; POST
+  and other non-idempotent methods are retried only when the request
+  provably never left (DNS/dial failure). Write-retry can be enabled
+  explicitly with `RetryConfig.RetryWrite`. This covers the third-party
+  SDK paths of all seven backends via `NewRetryingRoundTripper`.
+- **transport: request-hook abort errors are honored on the RoundTripper
+  path** (previously silently discarded there, while the `Client.do`
+  path aborted) — rejecting hooks now stop third-party SDK requests too.
+- **provider: `DetectPlatform` no longer misroutes self-hosted domains**
+  — `gitlab.company.com` / `gitee.com.cn` / `github.mycompany.com` matched
+  via `strings.Contains` and were sent to the public-cloud base URLs;
+  host matching is now exact/subdomain. HTTP clone URLs with trailing
+  slashes no longer produce a `Repo` with a trailing `/`, and the
+  GitLab-subgroup Owner/Repo split is documented on `DetectResult`.
+- **provider: `ProviderManager` janitor restarts after its context is
+  cancelled** (previously the "already running" flag stuck and expired
+  entries were never cleaned again).
+- **provider: `Wrap` preserves the original error chain** — the platform
+  SDK error (path, response body, root cause) is now reachable via
+  `errors.Is/As` and included in the message, instead of being replaced
+  by the classified sentinel.
+- **provider: HTTP status parsing no longer misfires on prose** —
+  `"merge with 500 files"` was classified as an HTTP 500; status
+  extraction from message text is now whitelist-based
+  (401/403/404/409/422/429/5xx).
+- **provider: batch cancellation interrupts semaphore acquisition** —
+  queued items fail fast with `context.Canceled` instead of blocking
+  until an in-flight request finishes.
+
+### Changed
+
+- **`transport.Error.StatusCode` is now a method** (`func (e *Error)
+  StatusCode() int`), enabling the `statusCoder` fast path in
+  `provider.Wrap` and removing the reflection fallback for the most
+  common error type.
+
+## [v0.62.0] - 2026-09-20
+
 ### Changed
 
 - **List methods without paging parameters now exhaust pagination on all
@@ -87,6 +189,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wait_for_status, search_repositories, search_issues, search_users.
   Built on `github.com/modelcontextprotocol/go-sdk` v1.8.0 with
   in-memory-transport end-to-end tests.
+- **`examples/capabilities` capability tour** — a runnable probe of all 13
+  optional capabilities against any connected platform (read-only,
+  isolated probes; entity-scoped ones gated by `CR_NUMBER`/`COMMIT_SHA`/
+  `ISSUE_NUMBER` env). The executable version of the capability matrix in
+  the README.
+- **SemVer contract documented** — CONTRIBUTING now pins what counts as
+  breaking: additive fields on unified types = minor, interface methods =
+  major, new optional capabilities = minor, SDK swaps behind an unchanged
+  unified surface = minor. Backed by two repo invariants: the contract
+  suites are the spec, and the divergence ledger is the fine print.
 
 ### Changed
 
@@ -96,11 +208,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `context.Context`, so cancellation finally propagates into in-flight
   Gitea requests — the standing divergence-ledger limitation now applies
   to Forgejo only.
-- **GitHub backend rebased from go-github v72 to v91**, adopting the
+- **GitHub backend rebased from go-github v72 to v92**, adopting the
   renamed request types (`Update*`), value-typed request payloads, the
   struct-typed `User.Permissions`, and `ListByAuthenticatedUser`; all 65
   contract subtests pass with unchanged wire fixtures.
-- **GitLab backend rebased from client-go v2 to v3.9.0** (module path
+- **GitLab backend rebased from client-go v2 to v3.12** (module path
   `gitlab.com/gitlab-org/api/client-go/v3`); no behavioral changes.
 
 ### Fixed

@@ -2,12 +2,19 @@ package provider
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 )
 
 // DetectResult holds the platform, owner, repo, and base API URL extracted
 // from a git remote URL by DetectPlatform.
+//
+// Owner/Repo are split as "first path segment = Owner, remainder = Repo".
+// For GitLab repositories nested in subgroups the full subgroup path stays
+// part of Repo: "https://gitlab.com/group/sub/repo" yields Owner="group"
+// and Repo="sub/repo". Callers must therefore treat Repo as a path (it may
+// contain "/"), not a bare repository name.
 type DetectResult struct {
 	Platform Platform
 	Owner    string
@@ -43,7 +50,7 @@ func detectSSH(raw string) (*DetectResult, error) {
 		return nil, fmt.Errorf("invalid SSH URL: %s", raw)
 	}
 	host := parts[0]
-	path := strings.TrimSuffix(parts[1], ".git")
+	path := cleanRepoPath(parts[1])
 	pathParts := strings.SplitN(path, "/", 2)
 	if len(pathParts) != 2 {
 		return nil, fmt.Errorf("invalid SSH path: %s", path)
@@ -66,8 +73,7 @@ func detectSSHProtocol(raw string) (*DetectResult, error) {
 		return nil, err
 	}
 	host := u.Host
-	path := strings.TrimSuffix(u.Path, ".git")
-	path = strings.TrimPrefix(path, "/")
+	path := cleanRepoPath(u.Path)
 	pathParts := strings.SplitN(path, "/", 2)
 	if len(pathParts) != 2 {
 		return nil, fmt.Errorf("invalid SSH path: %s", path)
@@ -90,8 +96,7 @@ func detectHTTP(raw string) (*DetectResult, error) {
 		return nil, err
 	}
 	host := u.Host
-	path := strings.TrimSuffix(u.Path, ".git")
-	path = strings.TrimPrefix(path, "/")
+	path := cleanRepoPath(u.Path)
 	pathParts := strings.SplitN(path, "/", 2)
 	if len(pathParts) != 2 {
 		return nil, fmt.Errorf("invalid HTTP path: %s", path)
@@ -108,24 +113,47 @@ func detectHTTP(raw string) (*DetectResult, error) {
 	}, nil
 }
 
+// cleanRepoPath normalizes the path portion of a clone URL: surrounding
+// slashes are removed first so a trailing slash (".../owner/repo/") does not
+// leak a "/" into Repo, then the ".git" suffix is stripped.
+func cleanRepoPath(p string) string {
+	return strings.TrimSuffix(strings.Trim(p, "/"), ".git")
+}
+
+// classifyHost maps a clone-URL host to a platform and its public API base
+// URL. The port is stripped first, then matching is exact host or subdomain
+// ("host == x" or strings.HasSuffix(host, ".x")). Self-hosted instances whose
+// hostname merely *contains* a known public domain (e.g. "gitlab.company.com"
+// contains "gitlab.com", "gitee.com.cn" contains "gitee.com") are NOT routed
+// to the public-cloud BaseURL; they fall through to ErrPlatformNotSupported.
+// knownHostPlatforms maps the public forge hosts (and their subdomains) to
+// the platform they identify and its public API base URL.
+var knownHostPlatforms = []struct {
+	host     string
+	platform Platform
+	baseURL  string
+}{
+	{"github.com", PlatformGitHub, "https://api.github.com"},
+	{"code.tencent.com", PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
+	{"codeberg.org", PlatformForgejo, "https://codeberg.org"},
+	{"gitlab.com", PlatformGitLab, "https://gitlab.com/api/v4"},
+	{"gitea.com", PlatformGitea, "https://gitea.com/api/v1"},
+	{"gitee.com", PlatformGitee, "https://gitee.com/api/v5"},
+	{"gitcode.com", PlatformGitCode, "https://api.gitcode.com/api/v5"},
+}
+
 func classifyHost(host string) (Platform, string, error) {
 	lower := strings.ToLower(host)
-	switch {
-	case strings.Contains(lower, "github.com"):
-		return PlatformGitHub, "https://api.github.com", nil
-	case strings.Contains(lower, "code.tencent.com"):
-		return PlatformTencentCode, "https://git.code.tencent.com/api/v3", nil
-	case strings.Contains(lower, "codeberg.org"):
-		return PlatformForgejo, "https://codeberg.org", nil
-	case strings.Contains(lower, "gitlab.com"):
-		return PlatformGitLab, "https://gitlab.com/api/v4", nil
-	case strings.Contains(lower, "gitea.com"):
-		return PlatformGitea, "https://gitea.com/api/v1", nil
-	case strings.Contains(lower, "gitee.com"):
-		return PlatformGitee, "https://gitee.com/api/v5", nil
-	case strings.Contains(lower, "gitcode.com"):
-		return PlatformGitCode, "https://api.gitcode.com/api/v5", nil
-	default:
-		return "", "", fmt.Errorf("%w: unrecognized host %q; use provider.NewProvider with explicit platform config instead of DetectPlatform", ErrPlatformNotSupported, host)
+	// Strip a trailing port ("github.com:8443"); SplitHostPort also handles
+	// bracketed IPv6 ("[::1]:22"). Hosts without a port fail the split and
+	// are kept as-is.
+	if h, _, err := net.SplitHostPort(lower); err == nil {
+		lower = h
 	}
+	for _, k := range knownHostPlatforms {
+		if lower == k.host || strings.HasSuffix(lower, "."+k.host) {
+			return k.platform, k.baseURL, nil
+		}
+	}
+	return "", "", fmt.Errorf("%w: unrecognized host %q; use provider.NewProvider with explicit platform config instead of DetectPlatform", ErrPlatformNotSupported, host)
 }

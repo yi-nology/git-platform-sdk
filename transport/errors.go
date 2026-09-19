@@ -12,7 +12,7 @@ func NewStatusError(method, path string, status int, body []byte) error {
 	return &Error{
 		Method:     method,
 		Path:       path,
-		StatusCode: status,
+		statusCode: status,
 		Body:       body,
 	}
 }
@@ -21,10 +21,17 @@ func NewStatusError(method, path string, status int, body []byte) error {
 // with a non-2xx status code, or when the underlying transport fails. It
 // implements errors.Is / errors.As so callers can branch on either the status
 // class (via IsStatusClass) or the wrapped cause.
+//
+// The status code is exposed through the StatusCode() method rather than an
+// exported field so that *Error satisfies the statusCoder interface
+// (StatusCode() int) consumed by provider.Wrap — that interface check is what
+// removes the reflection-based fallback there. A struct cannot have a field
+// and a method with the same name, hence the unexported storage field.
 type Error struct {
-	Method     string
-	Path       string
-	StatusCode int
+	Method string
+	Path   string
+	// statusCode is the HTTP status code. Read it via StatusCode().
+	statusCode int
 	Body       []byte
 	Cause      error
 }
@@ -32,9 +39,9 @@ type Error struct {
 // Error implements the error interface.
 func (e *Error) Error() string {
 	if e.Cause != nil {
-		return fmt.Sprintf("transport: %s %s: %d: %v", e.Method, e.Path, e.StatusCode, e.Cause)
+		return fmt.Sprintf("transport: %s %s: %d: %v", e.Method, e.Path, e.statusCode, e.Cause)
 	}
-	return fmt.Sprintf("transport: %s %s: %d: %s", e.Method, e.Path, e.StatusCode, truncate(e.Body, 200))
+	return fmt.Sprintf("transport: %s %s: %d: %s", e.Method, e.Path, e.statusCode, truncate(e.Body, 200))
 }
 
 // Unwrap implements errors.Unwrap so callers can recover the underlying cause.
@@ -46,17 +53,25 @@ func (e *Error) Unwrap() error { return e.Cause }
 // (same pointer).
 func (e *Error) Is(target error) bool {
 	if t, ok := target.(*Error); ok {
-		return e.StatusCode == t.StatusCode
+		return e.statusCode == t.statusCode
 	}
 	return false
 }
 
+// StatusCode returns the HTTP status code of the failed response. It makes
+// *Error satisfy the statusCoder-style interface (StatusCode() int) used by
+// provider.Wrap, so the fast interface path matches *transport.Error directly
+// and no reflection fallback is needed.
+func (e *Error) StatusCode() int { return e.statusCode }
+
 // IsStatus reports whether the error has the given status code.
-func (e *Error) IsStatus(code int) bool { return e.StatusCode == code }
+func (e *Error) IsStatus(code int) bool { return e.statusCode == code }
 
 // IsStatusClass reports whether the error is in the given status class. For
 // example IsStatusClass(http.StatusInternalServerError) reports 5xx.
-func (e *Error) IsStatusClass(lo int) bool { return e.StatusCode >= lo && e.StatusCode < lo+100 }
+func (e *Error) IsStatusClass(lo int) bool {
+	return e.statusCode >= lo && e.statusCode < lo+100
+}
 
 // IsClientError reports 4xx.
 func (e *Error) IsClientError() bool { return e.IsStatusClass(http.StatusBadRequest) }

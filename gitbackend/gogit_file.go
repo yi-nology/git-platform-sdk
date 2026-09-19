@@ -234,12 +234,18 @@ func (b *GoGitBackend) GetBlob(ctx context.Context, repoPath, ref, filePath stri
 
 // --- Checkout helpers ---
 
+// CheckoutRef force-checks out ref. A ref that names a local branch (bare
+// name or refs/heads/... form) is checked out ATTACHED — HEAD follows the
+// branch, matching the native backend and `git checkout <branch>`. Anything
+// else that resolves to a bare commit (raw hash, tag, HEAD~n) is checked out
+// detached. CheckoutRef used to detach unconditionally, silently drifting
+// from the native backend's attached semantics for branch names.
 func (b *GoGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string) error {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return newGitError("CheckoutRef", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
-	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	hash, err := resolveRev(repo, ref)
 	if err != nil {
 		return newGitError("CheckoutRef", repoPath, "", err)
 	}
@@ -247,7 +253,34 @@ func (b *GoGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string) er
 	if err != nil {
 		return newGitError("CheckoutRef", repoPath, "", err)
 	}
-	return wt.Checkout(&git.CheckoutOptions{Hash: *hash, Force: true})
+
+	branch := plumbing.ReferenceName(ref)
+	if !branch.IsBranch() {
+		branch = plumbing.ReferenceName("refs/heads/" + ref)
+	}
+	if _, err := repo.Reference(branch, true); err == nil {
+		return wt.Checkout(&git.CheckoutOptions{Branch: branch, Force: true})
+	}
+	return wt.Checkout(&git.CheckoutOptions{Hash: hash, Force: true})
+}
+
+// CheckoutDetached force-checks out ref in detached HEAD state, even when the
+// ref names a branch. Use it when the caller explicitly wants to pin HEAD to
+// a commit rather than follow a branch.
+func (b *GoGitBackend) CheckoutDetached(ctx context.Context, repoPath, ref string) error {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return newGitError("CheckoutDetached", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	hash, err := resolveRev(repo, ref)
+	if err != nil {
+		return newGitError("CheckoutDetached", repoPath, "", err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return newGitError("CheckoutDetached", repoPath, "", err)
+	}
+	return wt.Checkout(&git.CheckoutOptions{Hash: hash, Force: true})
 }
 
 func (b *GoGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, files []string) error {
@@ -321,11 +354,19 @@ func (b *GoGitBackend) treeChanges(repoPath, from, to string) (object.Changes, e
 	if err != nil {
 		return nil, newGitError("treeChanges", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
-	commitFrom, err := repo.CommitObject(plumbing.NewHash(from))
+	commitFromHash, err := resolveRev(repo, from)
 	if err != nil {
 		return nil, newGitError("treeChanges", repoPath, "", err)
 	}
-	commitTo, err := repo.CommitObject(plumbing.NewHash(to))
+	commitFrom, err := repo.CommitObject(commitFromHash)
+	if err != nil {
+		return nil, newGitError("treeChanges", repoPath, "", err)
+	}
+	commitToHash, err := resolveRev(repo, to)
+	if err != nil {
+		return nil, newGitError("treeChanges", repoPath, "", err)
+	}
+	commitTo, err := repo.CommitObject(commitToHash)
 	if err != nil {
 		return nil, newGitError("treeChanges", repoPath, "", err)
 	}

@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-git/go-git/v5"
@@ -82,17 +83,27 @@ func (b *GoGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string
 		return newGitError("CreateTag", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	hash := plumbing.NewHash(ref)
-	if ref == "" || hash.IsZero() {
+	var hash plumbing.Hash
+	if ref == "" {
 		head, err := repo.Head()
 		if err != nil {
 			return newGitError("CreateTag", repoPath, "", err)
 		}
 		hash = head.Hash()
+	} else {
+		// Resolve any rev (branch, tag, HEAD, hash...). plumbing.NewHash
+		// alone used to yield a zero hash for branch names, silently tagging
+		// HEAD instead of the requested ref.
+		hash, err = resolveRev(repo, ref)
+		if err != nil {
+			return newGitError("CreateTag", repoPath, "", err)
+		}
 	}
 
-	_, err = repo.CreateTag(name, hash, nil)
-	if err != nil {
+	if _, err = repo.CreateTag(name, hash, nil); err != nil {
+		if errors.Is(err, git.ErrTagExists) {
+			return newGitError("CreateTag", repoPath, "", ErrTagExists)
+		}
 		return newGitError("CreateTag", repoPath, "", err)
 	}
 	return nil
@@ -118,10 +129,14 @@ func (b *GoGitBackend) PushTag(ctx context.Context, repoPath, remote, name strin
 	}
 
 	refSpec := config.RefSpec(fmt.Sprintf("refs/tags/%s:refs/tags/%s", name, name))
+	am, err := b.buildTransportAuth(auth)
+	if err != nil {
+		return newGitError("PushTag", repoPath, "", err)
+	}
 	pushOpts := &git.PushOptions{
 		RemoteName:      remote,
 		RefSpecs:        []config.RefSpec{refSpec},
-		Auth:            b.buildTransportAuth(auth),
+		Auth:            am,
 		InsecureSkipTLS: auth.InsecureSkipTLS,
 	}
 
