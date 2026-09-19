@@ -304,6 +304,9 @@ if caps.Labels {
 | Reviews | `ReviewManager` | GitHub / GitLab / Gitea / Forgejo / GitCode / Tencent Code |
 | CommitStatuses | `CommitStatusManager` | GitHub / GitLab / Gitea / Forgejo / GitCode / Tencent Code |
 
+> **可运行巡检**:`examples/capabilities` 对已声明能力逐一执行只读探测,
+> 是这份表格的可执行版本(`PLATFORM=gitea PLATFORM_TOKEN=xxx OWNER=o REPO=r go run ./examples/capabilities`)。
+
 说明：
 
 - **Gitee 不声明 Reviews**: Gitee API 只有 PR 审查人员（Testers）指派，没有

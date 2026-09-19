@@ -74,3 +74,25 @@ Run `make check` before pushing — it mirrors what CI runs.
 This project follows SemVer. Breaking changes to the public API require a new
 major version. When you make one, document it under a `### ⚠️ Breaking changes`
 heading in `CHANGELOG.md` and explain the migration.
+
+### What counts as breaking (v1.0 contract)
+
+| Change | Version |
+|---|---|
+| Adding a field to a unified type (`ChangeRequest`, `Issue`, …) | minor (non-breaking — structs are append-only for consumers) |
+| Adding a method to `provider.Provider` or a core sub-interface | **major** (breaks every implementor, in-repo and external) |
+| Adding an optional capability interface (`ReviewManager`, …) | minor (additive; nothing implements it before) |
+| Adding a method to an existing optional capability interface | **major** (breaks implementors of that capability) |
+| Changing a sentinel error, normalizing a state vocabulary, or renaming an option field | **major** |
+| Widening behavior inside an existing method (pagination completeness, tighter validation) | patch/minor — behavior locked by the contract suites, so a suite change accompanying it must explain why the old wire shape was wrong |
+| Swapping a wrapped platform SDK when the unified surface is unchanged | minor (the divergence ledger + contract suites are the compatibility proof) |
+
+Two repo invariants back this contract:
+
+1. **The contract suites are the spec.** Every behavioral promise above is
+   enforced by `backends/contracttest/`; a PR that changes suite assertions
+   must justify the change as a bug fix in the commit message.
+2. **The divergence ledger is the fine print.** Platform gaps are declared
+   (`provider.Divergences()`), generated into `docs/divergence-ledger.md`,
+   and asserted against behavior by the drift check — never documented
+  -only.
