@@ -21,10 +21,10 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 		if s == string(provider.IssueStateOpen) {
 			s = "opened" // GitLab's issues API vocabulary; inbound convertIssue maps back
 		}
-		listOpts.State = gitlab.Ptr(s)
+		listOpts.State = new(s)
 	}
 	if opts.Assignee != "" {
-		listOpts.AssigneeUsername = gitlab.Ptr(opts.Assignee)
+		listOpts.AssigneeUsername = new(opts.Assignee)
 	}
 	if opts.Labels != "" {
 		lo := gitlab.LabelOptions(strings.Split(opts.Labels, ","))
@@ -57,9 +57,9 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 // CreateIssue implements provider.IssueManager.
 // Assignees are resolved to user IDs via the Users API (cached).
 func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
-	createOpts := &gitlab.CreateIssueOptions{Title: gitlab.Ptr(opts.Title)}
+	createOpts := &gitlab.CreateIssueOptions{Title: new(opts.Title)}
 	if opts.Body != "" {
-		createOpts.Description = gitlab.Ptr(opts.Body)
+		createOpts.Description = new(opts.Body)
 	}
 	if len(opts.Labels) > 0 {
 		lo := gitlab.LabelOptions(opts.Labels)
@@ -77,7 +77,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		if err != nil {
 			return nil, err
 		}
-		createOpts.MilestoneID = gitlab.Ptr(m)
+		createOpts.MilestoneID = new(m)
 	}
 	issue, _, err := p.client.Issues.CreateIssue(pidOf(opts.Owner, opts.Repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -95,17 +95,17 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	}
 	updateOpts := &gitlab.UpdateIssueOptions{}
 	if opts.Title != "" {
-		updateOpts.Title = gitlab.Ptr(opts.Title)
+		updateOpts.Title = new(opts.Title)
 	}
 	if opts.Body != "" {
-		updateOpts.Description = gitlab.Ptr(opts.Body)
+		updateOpts.Description = new(opts.Body)
 	}
 	if opts.State != "" {
 		event := "close"
 		if opts.State == provider.IssueStateOpen {
 			event = "reopen"
 		}
-		updateOpts.StateEvent = gitlab.Ptr(event) // IssueState → state_event 动词
+		updateOpts.StateEvent = new(event) // IssueState → state_event 动词
 	}
 	if len(opts.Labels) > 0 {
 		lo := gitlab.LabelOptions(opts.Labels)
@@ -123,7 +123,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		if err != nil {
 			return nil, err
 		}
-		updateOpts.MilestoneID = gitlab.Ptr(m)
+		updateOpts.MilestoneID = new(m)
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), n, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -139,7 +139,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 		return nil, err
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), n,
-		&gitlab.UpdateIssueOptions{StateEvent: gitlab.Ptr("close")}, gitlab.WithContext(ctx))
+		&gitlab.UpdateIssueOptions{StateEvent: new("close")}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CloseIssue", err)
 	}
@@ -153,7 +153,7 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 		return nil, err
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), n,
-		&gitlab.UpdateIssueOptions{StateEvent: gitlab.Ptr("reopen")}, gitlab.WithContext(ctx))
+		&gitlab.UpdateIssueOptions{StateEvent: new("reopen")}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ReopenIssue", err)
 	}
@@ -191,7 +191,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 		return nil, err
 	}
 	note, _, err := p.client.Notes.CreateIssueNote(pidOf(owner, repo), n,
-		&gitlab.CreateIssueNoteOptions{Body: gitlab.Ptr(body)}, gitlab.WithContext(ctx))
+		&gitlab.CreateIssueNoteOptions{Body: new(body)}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "CreateIssueComment", err)
 	}
@@ -207,7 +207,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 		return nil, err
 	}
 	note, _, err := p.client.Notes.UpdateIssueNote(pidOf(owner, repo), n, commentID,
-		&gitlab.UpdateIssueNoteOptions{Body: gitlab.Ptr(body)}, gitlab.WithContext(ctx))
+		&gitlab.UpdateIssueNoteOptions{Body: new(body)}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateIssueComment", err)
 	}

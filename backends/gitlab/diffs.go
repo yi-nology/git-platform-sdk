@@ -52,7 +52,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 		return "", err
 	}
 	note, _, err := p.client.Notes.CreateMergeRequestNote(pidOf(owner, repo), n,
-		&gitlab.CreateMergeRequestNoteOptions{Body: gitlab.Ptr(body)}, gitlab.WithContext(ctx))
+		&gitlab.CreateMergeRequestNoteOptions{Body: new(body)}, gitlab.WithContext(ctx))
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitLab, "CreateNote", err)
 	}
@@ -83,32 +83,32 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 		return "", err
 	}
 	pid := pidOf(owner, repo)
-	discOpts := &gitlab.CreateMergeRequestDiscussionOptions{Body: gitlab.Ptr(opts.Body)}
+	discOpts := &gitlab.CreateMergeRequestDiscussionOptions{Body: new(opts.Body)}
 	if opts.FilePath != "" {
 		position := &gitlab.PositionOptions{
-			PositionType: gitlab.Ptr("text"),
-			NewPath:      gitlab.Ptr(opts.FilePath),
+			PositionType: new("text"),
+			NewPath:      new(opts.FilePath),
 		}
 		if opts.BaseSHA != "" {
-			position.BaseSHA = gitlab.Ptr(opts.BaseSHA)
+			position.BaseSHA = new(opts.BaseSHA)
 		}
 		if opts.StartSHA != "" {
-			position.StartSHA = gitlab.Ptr(opts.StartSHA)
+			position.StartSHA = new(opts.StartSHA)
 		}
 		if opts.HeadSHA != "" {
-			position.HeadSHA = gitlab.Ptr(opts.HeadSHA)
+			position.HeadSHA = new(opts.HeadSHA)
 		}
 		if opts.OldLine > 0 {
-			position.OldPath = gitlab.Ptr(opts.FilePath)
-			position.OldLine = gitlab.Ptr(int64(opts.OldLine))
+			position.OldPath = new(opts.FilePath)
+			position.OldLine = new(int64(opts.OldLine))
 		}
 		if opts.NewLine > 0 {
-			position.NewLine = gitlab.Ptr(int64(opts.NewLine))
+			position.NewLine = new(int64(opts.NewLine))
 		}
 		if opts.StartNewLine > 0 && opts.NewLine > opts.StartNewLine {
 			position.LineRange = &gitlab.LineRangeOptions{
-				Start: &gitlab.LinePositionOptions{Type: gitlab.Ptr("new"), NewLine: gitlab.Ptr(int64(opts.StartNewLine))},
-				End:   &gitlab.LinePositionOptions{Type: gitlab.Ptr("new"), NewLine: gitlab.Ptr(int64(opts.NewLine))},
+				Start: &gitlab.LinePositionOptions{Type: new("new"), NewLine: new(int64(opts.StartNewLine))},
+				End:   &gitlab.LinePositionOptions{Type: new("new"), NewLine: new(int64(opts.NewLine))},
 			}
 		}
 		discOpts.Position = position

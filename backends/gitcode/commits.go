@@ -5,6 +5,7 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -82,7 +83,9 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 
 // ListCommitStatuses implements provider.CommitStatusManager.
 func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
-	statuses, err := p.client.ListCommitStatuses(ctx, owner, repo, sha, gitcode.ListOptions{})
+	statuses, err := backendutil.AllPages(func(page int) ([]*gitcode.CommitStatus, error) {
+		return p.client.ListCommitStatuses(ctx, owner, repo, sha, gitcode.ListOptions{Page: page, PerPage: 100})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListCommitStatuses", err)
 	}

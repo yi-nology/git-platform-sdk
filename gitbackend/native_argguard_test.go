@@ -62,6 +62,26 @@ func TestSanitizeGitArgs(t *testing.T) {
 	}
 }
 
+func TestValidateConfigKey(t *testing.T) {
+	// accepted: canonical section[.subsection].option keys
+	for _, key := range []string{"user.name", "core.bare", "remote.origin.url", "http.sslVerify"} {
+		if err := validateConfigKey(key); err != nil {
+			t.Errorf("validateConfigKey(%q) = %v, want nil", key, err)
+		}
+	}
+	// rejected: keys that git's option parser would swallow as flags
+	for _, key := range []string{
+		"--list", "--global", "--file=/etc/passwd", "-c", "core.--remove-section",
+		"", "nosuffix", "a.b.c.d", ".leading", "trailing.",
+	} {
+		if err := validateConfigKey(key); err == nil {
+			t.Errorf("validateConfigKey(%q) = nil, want error", key)
+		} else if !errors.Is(err, ErrInvalidGitArg) {
+			t.Errorf("validateConfigKey(%q) error = %v, want ErrInvalidGitArg", key, err)
+		}
+	}
+}
+
 func TestSanitizeGitArgsAllowsLibraryInsecureArgs(t *testing.T) {
 	// withInsecureArgs runs after the guard, so the library's own `-c`
 	// prepend must never be an input to sanitizeGitArgs.

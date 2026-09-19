@@ -27,8 +27,8 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
 	label := &github.CreateIssueLabelRequest{
 		Name:        opts.Name,
-		Color:       github.Ptr(opts.Color),
-		Description: github.Ptr(opts.Description),
+		Color:       new(opts.Color),
+		Description: new(opts.Description),
 	}
 	created, _, err := p.client.Issues.CreateLabel(ctx, owner, repo, *label)
 	if err != nil {

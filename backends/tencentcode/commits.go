@@ -4,6 +4,8 @@ import (
 	"context"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -86,7 +88,11 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 // ListCommitStatuses implements provider.CommitStatusManager.
 func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
 	pid := owner + "/" + repo
-	statuses, _, err := p.client.CommitStatuses.ListCommitStatuses(ctx, pid, sha, nil)
+	statuses, err := backendutil.AllPages(func(page int) ([]*gongfeng.CommitStatus, error) {
+		list, _, err := p.client.CommitStatuses.ListCommitStatuses(ctx, pid, sha,
+			&gongfeng.ListCommitStatusesOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommitStatuses", err)
 	}

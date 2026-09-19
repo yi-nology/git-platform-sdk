@@ -49,13 +49,13 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 // CreateRepo implements provider.RepoManager.
 func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
 	r := &github.Repository{
-		Name:        github.Ptr(opts.Name),
-		Description: github.Ptr(opts.Description),
-		Private:     github.Ptr(opts.Private),
-		AutoInit:    github.Ptr(opts.AutoInit),
+		Name:        new(opts.Name),
+		Description: new(opts.Description),
+		Private:     new(opts.Private),
+		AutoInit:    new(opts.AutoInit),
 	}
 	if opts.DefaultBranch != "" {
-		r.DefaultBranch = github.Ptr(opts.DefaultBranch)
+		r.DefaultBranch = new(opts.DefaultBranch)
 	}
 	var result *github.Repository
 	var err error
@@ -99,13 +99,13 @@ func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
 	r := &github.Repository{}
 	if opts.Name != "" {
-		r.Name = github.Ptr(opts.Name)
+		r.Name = new(opts.Name)
 	}
 	if opts.Description != "" {
-		r.Description = github.Ptr(opts.Description)
+		r.Description = new(opts.Description)
 	}
 	if opts.DefaultBranch != "" {
-		r.DefaultBranch = github.Ptr(opts.DefaultBranch)
+		r.DefaultBranch = new(opts.DefaultBranch)
 	}
 	if opts.Private != nil {
 		r.Private = opts.Private

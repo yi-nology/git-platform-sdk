@@ -27,9 +27,9 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 	// read-only), so the mapping is ReadOnly = !CanPush.
 	canPush := !opts.ReadOnly
 	createOpts := &gitlab.AddDeployKeyOptions{
-		Key:     gitlab.Ptr(opts.Key),
-		Title:   gitlab.Ptr(opts.Title),
-		CanPush: gitlab.Ptr(canPush),
+		Key:     new(opts.Key),
+		Title:   new(opts.Title),
+		CanPush: new(canPush),
 	}
 	key, _, err := p.client.DeployKeys.AddDeployKey(pidOf(owner, repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {

@@ -24,9 +24,9 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 // AddDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*provider.DeployKey, error) {
 	key := &github.CreateDeployKeyRequest{
-		Title:    github.Ptr(opts.Title),
+		Title:    new(opts.Title),
 		Key:      opts.Key,
-		ReadOnly: github.Ptr(opts.ReadOnly),
+		ReadOnly: new(opts.ReadOnly),
 	}
 	created, _, err := p.client.Repositories.CreateKey(ctx, owner, repo, *key)
 	if err != nil {

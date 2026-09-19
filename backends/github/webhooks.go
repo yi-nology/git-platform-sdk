@@ -19,13 +19,13 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 		events = []string{"push", "pull_request"}
 	}
 	hook := &github.Hook{
-		Name:   github.Ptr("web"),
+		Name:   new("web"),
 		Events: events,
 		Config: &github.HookConfig{
-			URL:    github.Ptr(opts.URL),
-			Secret: github.Ptr(opts.Secret),
+			URL:    new(opts.URL),
+			Secret: new(opts.Secret),
 		},
-		Active: github.Ptr(true),
+		Active: new(true),
 	}
 	h, _, err := p.client.Repositories.CreateHook(ctx, opts.Owner, opts.Repo, hook)
 	if err != nil {

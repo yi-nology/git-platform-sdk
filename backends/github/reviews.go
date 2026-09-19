@@ -51,32 +51,32 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 		return nil, err
 	}
 	reviewRequest := &github.PullRequestReviewRequest{
-		CommitID: github.Ptr(opts.CommitID),
-		Body:     github.Ptr(opts.Body),
-		Event:    github.Ptr(opts.Event),
+		CommitID: new(opts.CommitID),
+		Body:     new(opts.Body),
+		Event:    new(opts.Event),
 	}
 	for _, c := range opts.Comments {
 		rc := &github.DraftReviewComment{
-			Path: github.Ptr(c.Path),
-			Body: github.Ptr(c.Body),
+			Path: new(c.Path),
+			Body: new(c.Body),
 		}
 		if c.StartLine > 0 && c.EndLine > c.StartLine {
-			rc.StartLine = github.Ptr(c.StartLine)
-			rc.Line = github.Ptr(c.EndLine)
+			rc.StartLine = new(c.StartLine)
+			rc.Line = new(c.EndLine)
 			if c.Side != "" {
-				rc.Side = github.Ptr(c.Side)
+				rc.Side = new(c.Side)
 			} else {
-				rc.Side = github.Ptr("RIGHT")
+				rc.Side = new("RIGHT")
 			}
 			if c.StartLine != c.EndLine {
-				rc.StartSide = github.Ptr("RIGHT")
+				rc.StartSide = new("RIGHT")
 			}
 		} else if c.Line > 0 {
-			rc.Line = github.Ptr(c.Line)
+			rc.Line = new(c.Line)
 			if c.Side != "" {
-				rc.Side = github.Ptr(c.Side)
+				rc.Side = new(c.Side)
 			} else {
-				rc.Side = github.Ptr("RIGHT")
+				rc.Side = new("RIGHT")
 			}
 		}
 		reviewRequest.Comments = append(reviewRequest.Comments, rc)

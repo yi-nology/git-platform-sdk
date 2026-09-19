@@ -84,6 +84,8 @@ func TestGitee_Contract(t *testing.T) {
 		// carries its outcome in "conclusion", an in-flight one in "status".
 		CommitStatus: &contracttest.CommitStatusHarnessConfig{
 			ListResponse: `{"total_count":2,"check_runs":[{"id":1,"name":"ci/lint","head_sha":"deadbeef","status":"completed","conclusion":"success","details_url":"https://ci.example.com/1"},{"id":2,"name":"ci/test","head_sha":"deadbeef","status":"in_progress","details_url":"https://ci.example.com/2"}]}`,
+			// the check-run list decodes into a wrapped object, not a bare array
+			EmptyResponse: `{"total_count":0,"check_runs":[]}`,
 		},
 	})
 }

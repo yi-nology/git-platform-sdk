@@ -54,8 +54,15 @@ func Project(v any, fields ...string) (map[string]any, error) {
 		}
 		segs := strings.Split(f, ".")
 		for _, seg := range segs {
-			if seg == "" {
+			switch seg {
+			case "":
 				return nil, fmt.Errorf("projection: invalid field path %q", f)
+			case keepAll:
+				// A segment-level wildcard would otherwise be treated as a
+				// literal "*" key and silently drop the field — a trap for
+				// LLM-generated field lists. Only the bare "*" field means
+				// "everything".
+				return nil, fmt.Errorf("projection: wildcard is only supported as the standalone field %q, not inside path %q", keepAll, f)
 			}
 		}
 		keep.add(segs)

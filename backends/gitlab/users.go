@@ -22,7 +22,7 @@ func (p *Provider) resolveUserIDs(ctx context.Context, op string, usernames []st
 			continue
 		}
 		users, _, err := p.client.Users.ListUsers(
-			&gitlab.ListUsersOptions{Username: gitlab.Ptr(name)},
+			&gitlab.ListUsersOptions{Username: new(name)},
 			gitlab.WithContext(ctx))
 		if err != nil {
 			return nil, provider.Wrap(provider.PlatformGitLab, op, err)
@@ -49,7 +49,7 @@ func (p *Provider) resolveUserIDs(ctx context.Context, op string, usernames []st
 // GetUser implements provider.UserManager.
 func (p *Provider) GetUser(ctx context.Context, username string) (*provider.CRUser, error) {
 	users, _, err := p.client.Users.ListUsers(
-		&gitlab.ListUsersOptions{Username: gitlab.Ptr(username)},
+		&gitlab.ListUsersOptions{Username: new(username)},
 		gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "GetUser", err)

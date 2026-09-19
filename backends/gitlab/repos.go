@@ -25,7 +25,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		// 否则 /projects 会返回全实例可见项目(公共 GitLab 上是海量数据)。
 		projects, _, err = p.client.Projects.ListProjects(&gitlab.ListProjectsOptions{
 			ListOptions: gitlab.ListOptions{Page: page64, PerPage: perPage64},
-			Membership:  gitlab.Ptr(true),
+			Membership:  new(true),
 		}, gitlab.WithContext(ctx))
 	}
 	if err != nil {
@@ -50,16 +50,16 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 // CreateRepo implements provider.RepoManager.
 func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
 	createOpts := &gitlab.CreateProjectOptions{
-		Name:                 gitlab.Ptr(opts.Name),
-		Description:          gitlab.Ptr(opts.Description),
-		Visibility:           gitlab.Ptr(gitlab.VisibilityValue("private")),
-		InitializeWithReadme: gitlab.Ptr(opts.AutoInit),
+		Name:                 new(opts.Name),
+		Description:          new(opts.Description),
+		Visibility:           new(gitlab.VisibilityValue("private")),
+		InitializeWithReadme: new(opts.AutoInit),
 	}
 	if !opts.Private {
-		createOpts.Visibility = gitlab.Ptr(gitlab.VisibilityValue("public"))
+		createOpts.Visibility = new(gitlab.VisibilityValue("public"))
 	}
 	if opts.DefaultBranch != "" {
-		createOpts.DefaultBranch = gitlab.Ptr(opts.DefaultBranch)
+		createOpts.DefaultBranch = new(opts.DefaultBranch)
 	}
 	if owner != "" {
 		// Create under a namespace (group) by looking up the namespace ID from the owner path.
@@ -67,7 +67,7 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 		if nsErr == nil {
 			for _, ns := range namespaces {
 				if ns.Path == owner || ns.FullPath == owner {
-					createOpts.NamespaceID = gitlab.Ptr(ns.ID)
+					createOpts.NamespaceID = new(ns.ID)
 					break
 				}
 			}
@@ -85,10 +85,10 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 	forkOpts := &gitlab.ForkProjectOptions{}
 	if opts.Organization != "" {
 		//nolint:staticcheck // Namespace is deprecated in newer client-go but still functional
-		forkOpts.Namespace = gitlab.Ptr(opts.Organization)
+		forkOpts.Namespace = new(opts.Organization)
 	}
 	if opts.Name != "" {
-		forkOpts.Name = gitlab.Ptr(opts.Name)
+		forkOpts.Name = new(opts.Name)
 	}
 	proj, _, err := p.client.Projects.ForkProject(pidOf(owner, repo), forkOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -110,20 +110,20 @@ func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
 	updateOpts := &gitlab.EditProjectOptions{}
 	if opts.Name != "" {
-		updateOpts.Name = gitlab.Ptr(opts.Name)
+		updateOpts.Name = new(opts.Name)
 	}
 	if opts.Description != "" {
-		updateOpts.Description = gitlab.Ptr(opts.Description)
+		updateOpts.Description = new(opts.Description)
 	}
 	if opts.DefaultBranch != "" {
-		updateOpts.DefaultBranch = gitlab.Ptr(opts.DefaultBranch)
+		updateOpts.DefaultBranch = new(opts.DefaultBranch)
 	}
 	if opts.Private != nil {
 		vis := "public"
 		if *opts.Private {
 			vis = "private"
 		}
-		updateOpts.Visibility = gitlab.Ptr(gitlab.VisibilityValue(vis))
+		updateOpts.Visibility = new(gitlab.VisibilityValue(vis))
 	}
 	proj, _, err := p.client.Projects.EditProject(pidOf(owner, repo), updateOpts, gitlab.WithContext(ctx))
 	if err != nil {

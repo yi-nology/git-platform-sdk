@@ -5,6 +5,7 @@ import (
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -74,7 +75,12 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 // The forgejo SDK accepts no context parameter (registered platform
 // limitation), so ctx is unused here beyond signature conformance.
 func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
-	statuses, _, err := p.client.ListStatuses(owner, repo, sha, forgejo.ListStatusesOption{})
+	statuses, err := backendutil.AllPages(func(page int) ([]*forgejo.Status, error) {
+		list, _, err := p.client.ListStatuses(owner, repo, sha, forgejo.ListStatusesOption{
+			ListOptions: forgejo.ListOptions{Page: page, PageSize: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformForgejo, "ListCommitStatuses", err)
 	}

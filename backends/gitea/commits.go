@@ -5,6 +5,7 @@ import (
 
 	gitea "gitea.dev/sdk"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -71,7 +72,12 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 
 // ListCommitStatuses implements provider.CommitStatusManager.
 func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
-	statuses, _, err := p.client.Repositories.ListStatuses(ctx, owner, repo, sha, gitea.ListStatusesOption{})
+	statuses, err := backendutil.AllPages(func(page int) ([]*gitea.Status, error) {
+		list, _, err := p.client.Repositories.ListStatuses(ctx, owner, repo, sha, gitea.ListStatusesOption{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: 100},
+		})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ListCommitStatuses", err)
 	}

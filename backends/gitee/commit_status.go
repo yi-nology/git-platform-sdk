@@ -4,6 +4,8 @@ import (
 	"context"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
+
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -28,24 +30,32 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 // Gitee's public REST API has no commit-status endpoint; statuses read back
 // through the Checks API as the check runs attached to the head SHA.
 func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
-	list, _, err := p.client.Checks.List(ctx, esc(owner), esc(repo), sha, &gitee.CheckRunListOptions{})
+	runs, err := backendutil.AllPages(func(page int) ([]*gitee.CheckRun, error) {
+		pageNo, perPage := page, 100
+		list, _, err := p.client.Checks.List(ctx, esc(owner), esc(repo), sha,
+			&gitee.CheckRunListOptions{Page: &pageNo, PerPage: &perPage})
+		if err != nil {
+			return nil, err
+		}
+		if list == nil || list.CheckRuns == nil {
+			return nil, nil
+		}
+		return *list.CheckRuns, nil
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListCommitStatuses", err)
 	}
-	return convertCommitStatuses(list), nil
+	return convertCommitStatuses(runs), nil
 }
 
-// convertCommitStatuses folds a CheckRunList into unified statuses. A check
+// convertCommitStatuses folds check runs into unified statuses. A check
 // run's context is its Name and its page the details_url; the state comes
 // from Conclusion once the run is completed and from the in-flight Status
 // verb otherwise, both normalized via the shared vocabulary. Description is
 // dropped: Output is a free-form interface{} with no stable wire shape.
-func convertCommitStatuses(list *gitee.CheckRunList) []provider.CommitStatus {
-	result := make([]provider.CommitStatus, 0)
-	if list == nil || list.CheckRuns == nil {
-		return result
-	}
-	for _, run := range *list.CheckRuns {
+func convertCommitStatuses(runs []*gitee.CheckRun) []provider.CommitStatus {
+	result := make([]provider.CommitStatus, 0, len(runs))
+	for _, run := range runs {
 		if run == nil {
 			continue
 		}

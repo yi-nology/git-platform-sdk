@@ -53,7 +53,7 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
 	req := &github.CreateIssueRequest{Title: opts.Title}
 	if opts.Body != "" {
-		req.Body = github.Ptr(opts.Body)
+		req.Body = new(opts.Body)
 	}
 	if len(opts.Assignees) > 0 {
 		req.Assignees = opts.Assignees
@@ -66,7 +66,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		if err != nil {
 			return nil, err
 		}
-		req.Milestone = github.Ptr(int(m64))
+		req.Milestone = new(int(m64))
 	}
 	issue, _, err := p.client.Issues.Create(ctx, opts.Owner, opts.Repo, *req)
 	if err != nil {
@@ -83,10 +83,10 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	}
 	req := &github.UpdateIssueRequest{}
 	if opts.Title != "" {
-		req.Title = github.Ptr(opts.Title)
+		req.Title = new(opts.Title)
 	}
 	if opts.Body != "" {
-		req.Body = github.Ptr(opts.Body)
+		req.Body = new(opts.Body)
 	}
 	if len(opts.Assignees) > 0 {
 		req.Assignees = opts.Assignees
@@ -99,7 +99,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		if err != nil {
 			return nil, err
 		}
-		req.Milestone = github.Ptr(int(m64))
+		req.Milestone = new(int(m64))
 	}
 	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, *req)
 	if err != nil {
@@ -114,7 +114,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 	if err != nil {
 		return nil, err
 	}
-	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, github.UpdateIssueRequest{State: github.Ptr("closed")})
+	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, github.UpdateIssueRequest{State: new("closed")})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CloseIssue", err)
 	}
@@ -127,7 +127,7 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	if err != nil {
 		return nil, err
 	}
-	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, github.UpdateIssueRequest{State: github.Ptr("open")})
+	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, github.UpdateIssueRequest{State: new("open")})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ReopenIssue", err)
 	}

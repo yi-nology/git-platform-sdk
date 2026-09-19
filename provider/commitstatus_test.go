@@ -193,3 +193,99 @@ func TestWaitForCommitStatusContextCancellation(t *testing.T) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }
+
+func TestWaitForCommitStatusRerunHistoryTakesLatest(t *testing.T) {
+	// CI re-runs append history: ci/test failed once, then succeeded.
+	// The newest report must win (GitHub combined-status semantics) —
+	// folding the raw list would keep waiting on the stale failure.
+	fake := &waitFakeProvider{}
+	fake.set([]CommitStatus{
+		{State: CommitStatusSuccess, Context: "ci/test"},
+		{State: CommitStatusFailure, Context: "ci/test"},
+	})
+
+	state, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
+		WaitOptions{Interval: 5 * time.Millisecond})
+	if err != nil {
+		t.Fatalf("WaitForCommitStatus() err = %v", err)
+	}
+	if state != CommitStatusSuccess {
+		t.Fatalf("state = %q, want success (latest per context wins)", state)
+	}
+}
+
+func TestWaitForCommitStatusDuplicateMustNotVoteForMissingContext(t *testing.T) {
+	// ci/lint reported twice but ci/test never did: the missing context
+	// must keep the wait pending instead of passing the gate.
+	fake := &waitFakeProvider{}
+	fake.set([]CommitStatus{
+		{State: CommitStatusSuccess, Context: "ci/lint"},
+		{State: CommitStatusSuccess, Context: "ci/lint"},
+	})
+
+	_, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
+		WaitOptions{Interval: 5 * time.Millisecond, Timeout: 80 * time.Millisecond, Contexts: []string{"ci/lint", "ci/test"}})
+	if !errors.Is(err, ErrWaitTimedOut) {
+		t.Fatalf("err = %v, want ErrWaitTimedOut (ci/test never reported)", err)
+	}
+}
+
+func TestWaitForCommitStatusNotFoundReturnsImmediately(t *testing.T) {
+	fake := &waitFakeProvider{}
+	notFound := New(PlatformGitHub, "ListCommitStatuses", 404, "no such commit")
+	fake.mu.Lock()
+	fake.err = notFound
+	fake.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
+			WaitOptions{Interval: 5 * time.Millisecond, Timeout: 5 * time.Second})
+		if !errors.Is(err, ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound propagated immediately", err)
+		}
+	}()
+	select {
+	case <-done:
+		// returned before any poll backoff — fast-fail works
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("WaitForCommitStatus kept polling on ErrNotFound")
+	}
+}
+
+func TestInitWaitTimeoutSemantics(t *testing.T) {
+	interval, budget, _ := initWait(WaitOptions{})
+	if interval != DefaultWaitInterval {
+		t.Fatalf("interval = %v, want default", interval)
+	}
+	if budget == nil {
+		t.Fatal("zero Timeout must arm the DefaultWaitTimeout budget, got nil")
+	}
+	select {
+	case <-budget:
+		t.Fatal("budget fired immediately")
+	default:
+	}
+	if _, budget2, _ := initWait(WaitOptions{Timeout: -1}); budget2 != nil {
+		t.Fatal("negative Timeout must disable the budget")
+	}
+	if _, budget3, w3 := initWait(WaitOptions{Contexts: []string{"a", "a", "b"}}); len(w3) != 2 {
+		t.Fatalf("want = %v, want deduped contexts", w3)
+	} else if budget3 == nil {
+		t.Fatal("explicit Timeout must arm the budget")
+	}
+}
+
+func TestLatestCommitStatuses(t *testing.T) {
+	in := []CommitStatus{
+		{State: CommitStatusSuccess, Context: "b"},
+		{State: CommitStatusFailure, Context: "a"},
+		{State: CommitStatusPending, Context: "b"},
+	}
+	out := LatestCommitStatuses(in)
+	if len(out) != 2 || out[0].Context != "b" || out[0].State != CommitStatusSuccess ||
+		out[1].Context != "a" {
+		t.Fatalf("LatestCommitStatuses() = %v, want first-occurrence-per-context", out)
+	}
+}

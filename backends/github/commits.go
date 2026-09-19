@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-github/v91/github"
 
+	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
 	"github.com/yi-nology/git-platform-sdk/provider"
 )
 
@@ -79,10 +80,10 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 // CreateCommitStatus implements provider.CommitStatusManager.
 func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
 	_, _, err := p.client.Repositories.CreateStatus(ctx, owner, repo, sha, github.RepoStatus{
-		State:       github.Ptr(opts.State),
-		Context:     github.Ptr(opts.Context),
-		Description: github.Ptr(opts.Description),
-		TargetURL:   github.Ptr(opts.TargetURL),
+		State:       new(opts.State),
+		Context:     new(opts.Context),
+		Description: new(opts.Description),
+		TargetURL:   new(opts.TargetURL),
 	})
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "CreateCommitStatus", err)
@@ -92,7 +93,11 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 
 // ListCommitStatuses implements provider.CommitStatusManager.
 func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
-	statuses, _, err := p.client.Repositories.ListStatuses(ctx, owner, repo, sha, nil)
+	statuses, err := backendutil.AllPages(func(page int) ([]*github.RepoStatus, error) {
+		list, _, err := p.client.Repositories.ListStatuses(ctx, owner, repo, sha,
+			&github.ListOptions{Page: page, PerPage: 100})
+		return list, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ListCommitStatuses", err)
 	}
