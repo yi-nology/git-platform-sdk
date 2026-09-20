@@ -127,6 +127,32 @@ func TestGoGit_Fetch_Tags(t *testing.T) {
 	}
 }
 
+// TestGoGit_Fetch_DeletedBranchShortName verifies a remote-tracking branch
+// pruned away by the fetch is reported with its SHORT name, matching the
+// native backend (it used to carry the full refs/remotes/... refname).
+func TestGoGit_Fetch_DeletedBranchShortName(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	origin, seed, clone := pushSetup(t)
+	gitOutput(t, seed, "push", "-q", "origin", "main:feature")
+
+	// Make the clone see feature, then delete it on the remote.
+	if _, err := b.Fetch(context.Background(), FetchOptions{RepoPath: clone}); err != nil {
+		t.Fatalf("Fetch (first): %v", err)
+	}
+	gitOutput(t, origin, "update-ref", "-d", "refs/heads/feature")
+
+	res, err := b.Fetch(context.Background(), FetchOptions{RepoPath: clone, Prune: true})
+	if err != nil {
+		t.Fatalf("Fetch (after remote delete): %v", err)
+	}
+	if !contains(res.DeletedBranch, "feature") {
+		t.Errorf("expected DeletedBranch to report the short name feature, got %+v", res)
+	}
+	if contains(res.FetchedRefs, "refs/remotes/origin/feature") {
+		t.Errorf("expected the pruned ref not to be reported as fetched, got %+v", res)
+	}
+}
+
 func contains(list []string, want string) bool {
 	for _, v := range list {
 		if v == want {

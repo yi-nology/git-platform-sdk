@@ -293,14 +293,6 @@ func TestNative_DiffStatusAndRevisionQueries(t *testing.T) {
 }
 
 func TestNativeOutputParsers(t *testing.T) {
-	refs := parseFetchRefs("From /repo\n * [new branch] main     -> origin/main\n   old..new          feature -> origin/feature\nignored")
-	if len(refs) != 2 || refs[0] != "origin/main" || refs[1] != "origin/feature" {
-		t.Errorf("parseFetchRefs: got %v", refs)
-	}
-	if got := parseFetchRefs(""); len(got) != 0 {
-		t.Errorf("parseFetchRefs(empty): got %v", got)
-	}
-
 	pushed := parsePushRefs("To /repo\n   abc123..def456  main -> main")
 	if len(pushed) != 1 || !strings.Contains(pushed[0], "..") {
 		t.Errorf("parsePushRefs: got %v", pushed)
@@ -314,5 +306,103 @@ func TestNativeOutputParsers(t *testing.T) {
 	}
 	if isText([]byte{0x00, 0x01}) || isText([]byte{0xFF, 0xFE}) {
 		t.Error("expected null bytes and invalid UTF-8 to classify as binary")
+	}
+}
+
+// TestNative_Fetch_ClassifiesNewUpdatedDeletedAndTags verifies the native
+// backend fills every FetchResult field from the before/after ref snapshots,
+// with short branch/tag names, mirroring the gogit backend.
+func TestNative_Fetch_ClassifiesNewUpdatedDeletedAndTags(t *testing.T) {
+	b := newTestNativeBackend(t)
+	ctx := context.Background()
+	origin := bareOrigin(t)
+	seed := t.TempDir()
+	gitOutput(t, seed, "init", "--initial-branch=main")
+	gitOutput(t, seed, "config", "user.email", "test@test.com")
+	gitOutput(t, seed, "config", "user.name", "Test")
+	gitOutput(t, seed, "remote", "add", "origin", origin)
+	commitFile(t, seed, "a.txt", "one", "first")
+	gitOutput(t, seed, "push", "-q", "origin", "main")
+
+	clone := t.TempDir()
+	cloneRepo(t, origin, clone)
+
+	// Origin gains a branch, a tag, and a moved main.
+	gitOutput(t, seed, "branch", "feature")
+	gitOutput(t, seed, "tag", "v1")
+	commitFile(t, seed, "a.txt", "two", "second")
+	gitOutput(t, seed, "push", "-q", "origin", "main", "feature", "v1")
+
+	res, err := b.Fetch(ctx, FetchOptions{RepoPath: clone, Tags: true})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !contains(res.NewBranches, "feature") {
+		t.Errorf("expected NewBranches to report feature (short name), got %+v", res)
+	}
+	if !contains(res.UpdatedBranch, "main") {
+		t.Errorf("expected UpdatedBranch to report main (short name), got %+v", res)
+	}
+	if !contains(res.NewTags, "v1") {
+		t.Errorf("expected NewTags to report v1, got %+v", res)
+	}
+	if !contains(res.FetchedRefs, "refs/remotes/origin/feature") {
+		t.Errorf("expected FetchedRefs to carry the full new remote-tracking ref, got %+v", res)
+	}
+	if len(res.DeletedBranch) != 0 {
+		t.Errorf("expected no deletions yet, got %+v", res)
+	}
+
+	// Deleting feature on the remote must surface as a pruned short name,
+	// even though the fetch did not ask for Prune (native always prunes).
+	gitOutput(t, seed, "push", "-q", "origin", ":refs/heads/feature")
+	res, err = b.Fetch(ctx, FetchOptions{RepoPath: clone})
+	if err != nil {
+		t.Fatalf("Fetch (after remote delete): %v", err)
+	}
+	if !contains(res.DeletedBranch, "feature") {
+		t.Errorf("expected DeletedBranch to report feature (short name), got %+v", res)
+	}
+	if contains(res.NewBranches, "feature") || contains(res.UpdatedBranch, "feature") {
+		t.Errorf("expected feature only in DeletedBranch, got %+v", res)
+	}
+}
+
+// TestDiffFetchRefs unit-tests the classification rules in isolation,
+// including the tag namespace and the moved-hash case.
+func TestDiffFetchRefs(t *testing.T) {
+	before := map[string]string{
+		"refs/remotes/origin/main":   "aaaa",
+		"refs/remotes/origin/gone":   "bbbb",
+		"refs/tags/v1":               "cccc",
+		"refs/tags/v1-unchanged":     "dddd",
+		"refs/remotes/origin/stable": "eeee",
+	}
+	after := map[string]string{
+		"refs/remotes/origin/main":   "1111",
+		"refs/remotes/origin/newbr":  "2222",
+		"refs/tags/v1":               "cccc", // unchanged tags are not reported
+		"refs/tags/v2":               "3333",
+		"refs/tags/v1-unchanged":     "dddd",
+		"refs/remotes/origin/stable": "eeee",
+	}
+
+	res := diffFetchRefs("origin", before, after)
+	if !contains(res.NewBranches, "newbr") || len(res.NewBranches) != 1 {
+		t.Errorf("NewBranches: got %v", res.NewBranches)
+	}
+	if !contains(res.UpdatedBranch, "main") || len(res.UpdatedBranch) != 1 {
+		t.Errorf("UpdatedBranch: got %v", res.UpdatedBranch)
+	}
+	if !contains(res.DeletedBranch, "gone") || len(res.DeletedBranch) != 1 {
+		t.Errorf("DeletedBranch: got %v", res.DeletedBranch)
+	}
+	if !contains(res.NewTags, "v2") || len(res.NewTags) != 1 {
+		t.Errorf("NewTags: got %v", res.NewTags)
+	}
+	if !contains(res.FetchedRefs, "refs/remotes/origin/main") ||
+		!contains(res.FetchedRefs, "refs/remotes/origin/newbr") ||
+		!contains(res.FetchedRefs, "refs/tags/v2") || len(res.FetchedRefs) != 3 {
+		t.Errorf("FetchedRefs: got %v", res.FetchedRefs)
 	}
 }

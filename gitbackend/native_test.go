@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -290,6 +291,59 @@ func TestFactory_UnknownType(t *testing.T) {
 	_, err := NewGitBackend(Options{Type: "unknown"})
 	if err == nil {
 		t.Fatal("expected error for unknown type")
+	}
+}
+
+// captureLogger records Warn calls so tests can assert the auto-detect
+// fallback is audible instead of silent.
+type captureLogger struct {
+	warnMsgs []string
+}
+
+func (l *captureLogger) Debug(string, ...any) {}
+func (l *captureLogger) Info(string, ...any)  {}
+func (l *captureLogger) Warn(msg string, _ ...any) {
+	l.warnMsgs = append(l.warnMsgs, msg)
+}
+func (l *captureLogger) Error(string, ...any) {}
+
+// TestNewAutoBackend_WarnsOnNativeFallback verifies the native->gogit
+// degradation logs exactly one Warn, the success path logs none, a missing
+// logger does not panic, and no backends at all still errors.
+func TestNewAutoBackend_WarnsOnNativeFallback(t *testing.T) {
+	gogitBackend := NewGoGitBackend(Options{})
+	failing := func(Options) (GitBackend, error) { return nil, fmt.Errorf("git not installed") }
+	succeeding := func(Options) (GitBackend, error) { return gogitBackend, nil }
+
+	logger := &captureLogger{}
+	backend, err := newAutoBackend(Options{Logger: logger}, failing, true, succeeding, true)
+	if err != nil {
+		t.Fatalf("newAutoBackend (fallback): %v", err)
+	}
+	if _, ok := backend.(*GoGitBackend); !ok {
+		t.Errorf("expected the gogit backend after degradation, got %T", backend)
+	}
+	if len(logger.warnMsgs) != 1 {
+		t.Fatalf("expected exactly one Warn on degradation, got %q", logger.warnMsgs)
+	}
+	if !strings.Contains(logger.warnMsgs[0], "gogit") {
+		t.Errorf("expected the Warn to name the gogit fallback, got %q", logger.warnMsgs[0])
+	}
+
+	okLogger := &captureLogger{}
+	if _, err := newAutoBackend(Options{Logger: okLogger}, succeeding, true, succeeding, true); err != nil {
+		t.Fatalf("newAutoBackend (native ok): %v", err)
+	}
+	if len(okLogger.warnMsgs) != 0 {
+		t.Errorf("expected no Warn when native constructs fine, got %q", okLogger.warnMsgs)
+	}
+
+	if _, err := newAutoBackend(Options{}, failing, true, succeeding, true); err != nil {
+		t.Errorf("degradation without a Logger must not fail or panic, got %v", err)
+	}
+
+	if _, err := newAutoBackend(Options{}, nil, false, nil, false); err == nil {
+		t.Error("expected an error when no backend is available")
 	}
 }
 

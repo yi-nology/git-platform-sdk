@@ -3,6 +3,7 @@ package gitbackend
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -56,6 +57,22 @@ func TestRepository_FetchAndFetchAll(t *testing.T) {
 	}
 	if got := gitOutput(t, dst, "rev-parse", "origin/main"); got == "" {
 		t.Error("expected the origin/main remote-tracking ref after the fetches")
+	}
+
+	// FetchAll is a single full fetch WITH prune: a branch deleted on the
+	// remote must disappear locally after the next FetchAll, and the single
+	// fetch error path is what surfaces remote problems.
+	gitOutput(t, seed, "push", "-q", "origin", "main:side")
+	if err := r.FetchAll(context.Background()); err != nil {
+		t.Fatalf("FetchAll (new branch): %v", err)
+	}
+	gitOutput(t, dst, "show-ref", "--verify", "refs/remotes/origin/side")
+	gitOutput(t, seed, "push", "-q", "origin", ":refs/heads/side")
+	if err := r.FetchAll(context.Background()); err != nil {
+		t.Fatalf("FetchAll (after remote delete): %v", err)
+	}
+	if refErr := exec.Command("git", "-C", dst, "show-ref", "--verify", "refs/remotes/origin/side").Run(); refErr == nil {
+		t.Error("expected the stale origin/side ref to be pruned by FetchAll")
 	}
 }
 

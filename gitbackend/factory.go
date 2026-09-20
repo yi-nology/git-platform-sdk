@@ -43,15 +43,27 @@ func NewGitBackend(opts Options) (GitBackend, error) {
 		return ctor(opts)
 	}
 
-	// Auto-detect: try native first, fallback to gogit
-	if ctor, ok := backendRegistry["native"]; ok {
-		backend, err := ctor(opts)
+	nativeCtor, hasNative := backendRegistry["native"]
+	gogitCtor, hasGogit := backendRegistry["gogit"]
+	return newAutoBackend(opts, nativeCtor, hasNative, gogitCtor, hasGogit)
+}
+
+// newAutoBackend implements the auto-detect fallback: the native backend when
+// its constructor succeeds, the feature-reduced gogit backend otherwise. The
+// degradation is logged at Warn level so a missing git binary never silently
+// shrinks the backend's capability set.
+func newAutoBackend(opts Options, nativeCtor GitBackendConstructor, hasNative bool, gogitCtor GitBackendConstructor, hasGogit bool) (GitBackend, error) {
+	if hasNative {
+		backend, err := nativeCtor(opts)
 		if err == nil {
 			return backend, nil
 		}
+		if opts.Logger != nil {
+			opts.Logger.Warn("gitbackend: native backend unavailable, falling back to the feature-reduced gogit backend", "error", err)
+		}
 	}
-	if ctor, ok := backendRegistry["gogit"]; ok {
-		return ctor(opts)
+	if hasGogit {
+		return gogitCtor(opts)
 	}
 	return nil, fmt.Errorf("gitbackend: no backends available")
 }

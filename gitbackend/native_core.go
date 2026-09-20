@@ -3,15 +3,28 @@ package gitbackend
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // --- Core operations ---
 
 func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
-	args := []string{"fetch", opts.Remote}
-	if opts.Prune {
-		args = append(args, "--prune")
+	remote := opts.Remote
+	if remote == "" {
+		remote = "origin"
 	}
+
+	// Snapshot the refs a fetch can move before running it, so the result can
+	// be derived from a before/after diff exactly like the gogit backend.
+	before, err := b.snapshotFetchRefs(ctx, opts.RepoPath, remote)
+	if err != nil {
+		return nil, newGitError("Fetch", opts.RepoPath, "", err)
+	}
+
+	// --prune is always passed so DeletedBranch is actually reachable: without
+	// pruning, a branch deleted on the remote leaves its remote-tracking ref
+	// in place and the before/after diff shows no deletion.
+	args := []string{"fetch", "--prune", remote}
 	if opts.Tags {
 		args = append(args, "--tags")
 	} else {
@@ -34,11 +47,89 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 	}
 
 	auth := mergeInsecure(opts.Auth, opts.InsecureSkipTLS)
-	stdout, stderr, err := b.runGit(ctx, opts.RepoPath, args, auth)
+	_, stderr, err := b.runGit(ctx, opts.RepoPath, args, auth)
 	if err != nil {
 		return nil, newGitError("Fetch", opts.RepoPath, stderr, err)
 	}
-	return &FetchResult{FetchedRefs: parseFetchRefs(stdout + stderr)}, nil
+
+	after, err := b.snapshotFetchRefs(ctx, opts.RepoPath, remote)
+	if err != nil {
+		return nil, newGitError("Fetch", opts.RepoPath, "", err)
+	}
+	return diffFetchRefs(remote, before, after), nil
+}
+
+// snapshotFetchRefs snapshots the refs a fetch can move — the remote's
+// remote-tracking refs and all tags — as refname→hash. It mirrors the gogit
+// backend's collectFetchRefs.
+func (b *NativeGitBackend) snapshotFetchRefs(ctx context.Context, repoPath, remote string) (map[string]string, error) {
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
+		"for-each-ref", "--format=%(refname) %(objectname)",
+		"refs/remotes/" + remote + "/", "refs/tags/",
+	}, AuthConfig{})
+	if err != nil {
+		return nil, fmt.Errorf("git for-each-ref: %w: %s", err, strings.TrimSpace(stderr))
+	}
+	refs := make(map[string]string)
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Format is "%(refname) %(objectname)": refnames cannot contain
+		// spaces, so everything before the last space is the refname.
+		idx := strings.LastIndexByte(line, ' ')
+		if idx <= 0 {
+			continue
+		}
+		refs[line[:idx]] = line[idx+1:]
+	}
+	return refs, nil
+}
+
+// diffFetchRefs classifies a before/after pair of ref snapshots into a
+// FetchResult, applying the same rules as the gogit backend: refs created by
+// the fetch go to FetchedRefs + NewBranches/NewTags, refs that moved go to
+// FetchedRefs + UpdatedBranch, and pruned remote-tracking refs go to
+// DeletedBranch. NewBranches/UpdatedBranch/DeletedBranch carry short names
+// (after the refs/remotes/<remote>/ or refs/tags/ prefix); FetchedRefs keeps
+// the full refname of every ref the fetch created or moved.
+func diffFetchRefs(remote string, before, after map[string]string) *FetchResult {
+	remotePrefix := "refs/remotes/" + remote + "/"
+	tagsPrefix := "refs/tags/"
+
+	result := &FetchResult{}
+
+	for ref, hash := range after {
+		oldHash, existed := before[ref]
+		switch {
+		case !existed:
+			// New ref after fetch.
+			result.FetchedRefs = append(result.FetchedRefs, ref)
+			switch {
+			case strings.HasPrefix(ref, remotePrefix):
+				result.NewBranches = append(result.NewBranches, strings.TrimPrefix(ref, remotePrefix))
+			case strings.HasPrefix(ref, tagsPrefix):
+				result.NewTags = append(result.NewTags, strings.TrimPrefix(ref, tagsPrefix))
+			}
+		case oldHash != hash:
+			// Existing ref moved to a different commit.
+			result.FetchedRefs = append(result.FetchedRefs, ref)
+			if strings.HasPrefix(ref, remotePrefix) {
+				result.UpdatedBranch = append(result.UpdatedBranch, strings.TrimPrefix(ref, remotePrefix))
+			}
+		}
+	}
+
+	for ref := range before {
+		// Only remote-tracking refs can be pruned away by a fetch; tag refs
+		// are never pruned.
+		if _, exists := after[ref]; !exists && strings.HasPrefix(ref, remotePrefix) {
+			result.DeletedBranch = append(result.DeletedBranch, strings.TrimPrefix(ref, remotePrefix))
+		}
+	}
+
+	return result
 }
 
 func (b *NativeGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult, error) {
@@ -92,7 +183,10 @@ func (b *NativeGitBackend) Init(ctx context.Context, repoPath string) error {
 // --- Extended core operations ---
 
 func (b *NativeGitBackend) FetchAll(ctx context.Context, repoPath string, auth AuthConfig) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"fetch", "--all", "--tags"}, auth)
+	// One full fetch across all configured remotes: git itself walks the
+	// remotes in a single subprocess (no per-branch round trips) and --prune
+	// keeps remote-tracking refs aligned so deletions surface.
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"fetch", "--all", "--tags", "--prune"}, auth)
 	if err != nil {
 		return newGitError("FetchAll", repoPath, stderr, err)
 	}

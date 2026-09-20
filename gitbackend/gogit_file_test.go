@@ -222,3 +222,80 @@ func TestGoGit_CheckoutFiles(t *testing.T) {
 		t.Errorf("expected a.txt clean after the restore, got %q", dirty)
 	}
 }
+
+// commitExecFile writes an executable file, commits it, and returns HEAD.
+func commitExecFile(t *testing.T, dir, name, content, msg string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o755); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+	if err := os.Chmod(filepath.Join(dir, name), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitOutput(t, dir, "add", name)
+	gitOutput(t, dir, "commit", "-m", msg)
+}
+
+// TestGoGit_CheckoutFiles_PreservesExecMode verifies CheckoutFiles restores a
+// file's git mode: executables come back 0o755 even when the checkout target
+// already existed as a plain 0o644 file (os.Create used to drop the bit).
+func TestGoGit_CheckoutFiles_PreservesExecMode(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	commitExecFile(t, repo, "run.sh", "#!/bin/sh\n", "add script")
+	head := headHash(t, repo)
+
+	// Clobber the executable down to a plain file.
+	if err := os.WriteFile(filepath.Join(repo, "run.sh"), []byte("clobbered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.CheckoutFiles(context.Background(), repo, head, []string{"run.sh"}); err != nil {
+		t.Fatalf("CheckoutFiles: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(repo, "run.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Errorf("expected run.sh restored with mode 0755, got %v", info.Mode().Perm())
+	}
+	if body, _ := os.ReadFile(filepath.Join(repo, "run.sh")); string(body) != "#!/bin/sh\n" {
+		t.Errorf("expected run.sh content restored, got %q", body)
+	}
+}
+
+// TestGoGit_CheckoutFiles_SymlinkRecreatedAsLink verifies symlink entries are
+// restored as links instead of plain files holding the target path.
+func TestGoGit_CheckoutFiles_SymlinkRecreatedAsLink(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	commitFile(t, repo, "a.txt", "target", "add a")
+	if err := os.Symlink("a.txt", filepath.Join(repo, "link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	gitOutput(t, repo, "add", "link")
+	gitOutput(t, repo, "commit", "-m", "add link")
+	head := headHash(t, repo)
+
+	// Replace the link with a plain file to simulate the damage.
+	if err := os.Remove(filepath.Join(repo, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "link"), []byte("a.txt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := b.CheckoutFiles(context.Background(), repo, head, []string{"link"}); err != nil {
+		t.Fatalf("CheckoutFiles: %v", err)
+	}
+	info, err := os.Lstat(filepath.Join(repo, "link"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected link to be restored as a symlink, got mode %v", info.Mode())
+	}
+	if target, err := os.Readlink(filepath.Join(repo, "link")); err != nil || target != "a.txt" {
+		t.Errorf("expected link target a.txt, got %q (%v)", target, err)
+	}
+}

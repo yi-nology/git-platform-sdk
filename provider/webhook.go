@@ -7,14 +7,17 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // WebhookValidator verifies the authenticity of an incoming webhook request.
@@ -26,9 +29,11 @@ import (
 //   - GitLab:    static token compared in constant time against X-Gitlab-Token.
 //   - Gitea /
 //     Forgejo:   HMAC-SHA256 of the body, sent in X-Gitea-Signature.
-//   - Gitee /
-//     GitCode /
-//     Tencent:   HMAC-SHA256 of the body, sent in X-Gitee-Token / X-Token.
+//   - GitCode:   HMAC-SHA256 of the body, sent in X-Token.
+//   - Tencent:   static token compared in constant time against X-Token.
+//   - Gitee:     sign mode — Base64(HMAC-SHA256(secret, timestamp+"\n"+
+//     secret)) in X-Gitee-Token with X-Gitee-Timestamp; or
+//     password mode — the plain password in X-Gitee-Token.
 type WebhookValidator interface {
 	Name() string
 	Validate(r *http.Request, body []byte, secret string) error
@@ -161,6 +166,83 @@ func (s StaticTokenValidator) Validate(r *http.Request, body []byte, secret stri
 	return nil
 }
 
+// DefaultGiteeSignMaxAge bounds the accepted X-Gitee-Timestamp drift in
+// sign mode when GiteeWebhookValidator.MaxAge is zero.
+const DefaultGiteeSignMaxAge = 10 * time.Minute
+
+// GiteeWebhookValidator verifies Gitee webhooks. Gitee offers two security
+// modes and both ride the X-Gitee-Token header:
+//
+//   - 签名密钥 (sign) mode: X-Gitee-Timestamp carries the send time in
+//     unix millis and X-Gitee-Token carries
+//     Base64(HMAC-SHA256(key=secret, msg=timestamp+"\n"+secret)).
+//     This is the default mode this validator checks, including a
+//     timestamp freshness bound (replay protection).
+//   - 密码 (password) mode: X-Gitee-Token carries the configured password
+//     verbatim, X-Gitee-Timestamp is absent, and the signature cannot be
+//     computed. Opt in with AllowPasswordMode; the token is then compared
+//     against the secret in constant time.
+//
+// The webhook body plays no part in either scheme (Gitee signs the
+// timestamp, not the payload) — transport-level integrity is delegated to
+// TLS.
+type GiteeWebhookValidator struct {
+	// MaxAge bounds |now - X-Gitee-Timestamp| in sign mode. Zero means
+	// DefaultGiteeSignMaxAge; a negative value disables the freshness
+	// check (not recommended — it enables indefinite replay).
+	MaxAge time.Duration
+	// AllowPasswordMode also accepts the plain-password form when
+	// X-Gitee-Timestamp is absent. Enable only when the webhook is known
+	// to be configured in password mode.
+	AllowPasswordMode bool
+}
+
+// Name implements WebhookValidator.
+func (GiteeWebhookValidator) Name() string { return "gitee-sign" }
+
+// Validate implements WebhookValidator.
+func (v GiteeWebhookValidator) Validate(r *http.Request, body []byte, secret string) error {
+	if secret == "" {
+		return fmt.Errorf("%w: empty secret", ErrWebhookValidation)
+	}
+	token := r.Header.Get("X-Gitee-Token")
+	if token == "" {
+		return fmt.Errorf("%w: missing X-Gitee-Token header", ErrWebhookValidation)
+	}
+	ts := strings.TrimSpace(r.Header.Get("X-Gitee-Timestamp"))
+	if ts == "" {
+		if !v.AllowPasswordMode {
+			return fmt.Errorf("%w: missing X-Gitee-Timestamp header (password mode requires AllowPasswordMode)", ErrWebhookValidation)
+		}
+		if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
+			return fmt.Errorf("%w: password mismatch", ErrWebhookValidation)
+		}
+		return nil
+	}
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(ts + "\n" + secret))
+	want := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
+		return fmt.Errorf("%w: signature mismatch", ErrWebhookValidation)
+	}
+
+	maxAge := v.MaxAge
+	if maxAge == 0 {
+		maxAge = DefaultGiteeSignMaxAge
+	}
+	if maxAge > 0 {
+		ms, err := strconv.ParseInt(ts, 10, 64)
+		if err != nil {
+			return fmt.Errorf("%w: bad X-Gitee-Timestamp %q", ErrWebhookValidation, ts)
+		}
+		if drift := time.Since(time.UnixMilli(ms)); drift > maxAge || -drift > maxAge {
+			return fmt.Errorf("%w: timestamp drift %s exceeds %s", ErrWebhookValidation, drift, maxAge)
+		}
+	}
+	return nil
+}
+
 // HmacValidator is a lower-level helper that supports arbitrary hash
 // algorithms. It is intended for use by platform implementations that need
 // something other than SHA-256.
@@ -261,7 +343,7 @@ func init() {
 	defaultWebhookRegistry.Register(PlatformGitHub, HMACSHA256Validator{Header: "X-Hub-Signature-256"})
 	defaultWebhookRegistry.Register(PlatformGitea, HMACSHA256Validator{Header: "X-Gitea-Signature"})
 	defaultWebhookRegistry.Register(PlatformForgejo, HMACSHA256Validator{Header: "X-Gitea-Signature"})
-	defaultWebhookRegistry.Register(PlatformGitee, HMACSHA256Validator{Header: "X-Gitee-Token"})
+	defaultWebhookRegistry.Register(PlatformGitee, GiteeWebhookValidator{})
 	defaultWebhookRegistry.Register(PlatformGitCode, HMACSHA256Validator{Header: "X-Token"})
 	defaultWebhookRegistry.Register(PlatformTencentCode, StaticTokenValidator{Header: "X-Token"})
 	defaultWebhookRegistry.Register(PlatformGitLab, StaticTokenValidator{Header: "X-Gitlab-Token"})
