@@ -122,23 +122,17 @@ func (b *GoGitBackend) applyChangesToWorktree(repoPath string, baseTree, sourceT
 		case merkletrie.Insert, merkletrie.Modify:
 			file, err := sourceTree.File(change.To.Name)
 			if err != nil {
-				continue
+				return fmt.Errorf("resolve %s in source tree: %w", change.To.Name, err)
 			}
-			reader, err := file.Blob.Reader()
-			if err != nil {
-				continue
+			// Write with the entry's mode restored and surface copy/close
+			// errors: a silently truncated file used to be staged and
+			// committed as if it were complete.
+			if err := writeWorktreeFile(repoPath, change.To.Name, &file.Blob, file.Mode); err != nil {
+				return err
 			}
-			fullPath := filepath.Join(repoPath, change.To.Name)
-			_ = os.MkdirAll(filepath.Dir(fullPath), 0o750)
-			f, err := os.Create(fullPath)
-			if err != nil {
-				_ = reader.Close()
-				continue
+			if _, err := wt.Add(change.To.Name); err != nil {
+				return fmt.Errorf("stage %s: %w", change.To.Name, err)
 			}
-			_, _ = io.Copy(f, reader)
-			_ = f.Close()
-			_ = reader.Close()
-			_, _ = wt.Add(change.To.Name)
 
 		case merkletrie.Delete:
 			fullPath := filepath.Join(repoPath, change.From.Name)

@@ -13,7 +13,9 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -281,6 +283,15 @@ func signRequest(req *http.Request, v provider.WebhookValidator, body []byte, se
 		req.Header.Set(vv.Header, "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	case provider.StaticTokenValidator:
 		req.Header.Set(vv.Header, secret)
+	case provider.GiteeWebhookValidator:
+		// Gitee sign mode: Base64(HMAC-SHA256(secret, ts+"\n"+secret)) with
+		// the send time in X-Gitee-Timestamp. The body is not signed.
+		ts := fmt.Sprintf("%d", time.Now().UnixMilli())
+		mac := hmac.New(sha256.New, []byte(secret))
+		_, _ = mac.Write([]byte(ts + "\n" + secret))
+		req.Header.Set("X-Gitee-Timestamp", ts)
+		req.Header.Set("X-Gitee-Token", base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+		_ = vv
 	}
 }
 

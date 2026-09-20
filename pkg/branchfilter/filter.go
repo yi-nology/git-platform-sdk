@@ -1,6 +1,20 @@
+// Package branchfilter matches branch names against comma-separated glob
+// patterns (e.g. "main,release-*,feature/*").
+//
+// Patterns follow filepath.Match semantics. Notably, `*` matches any run of
+// non-separator characters and therefore never crosses `/`:
+//
+//	"release/*"  matches "release/v1"   but not "release/a/b"
+//	"release-*"  matches "release-1.0"  but not "release/1.0"
+//
+// There is no `**`; to match additional path levels, spell them out (e.g.
+// "feature/*/*"). Malformed patterns (such as an unclosed "[") are rejected
+// by New with an error wrapping filepath.ErrBadPattern — a bad pattern never
+// silently matches nothing.
 package branchfilter
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -13,20 +27,32 @@ type BranchFilter struct {
 
 // New creates a BranchFilter from a comma-separated list of glob patterns
 // (e.g. "main,release-*,feature/*"). An empty string matches everything.
-func New(filterStr string) *BranchFilter {
+//
+// Each pattern is validated up front with filepath.Match; a malformed
+// pattern yields an error wrapping filepath.ErrBadPattern instead of a
+// filter that silently never matches.
+func New(filterStr string) (*BranchFilter, error) {
 	if filterStr == "" {
-		return &BranchFilter{patterns: nil}
+		return &BranchFilter{patterns: nil}, nil
 	}
 
 	raw := strings.Split(filterStr, ",")
 	patterns := make([]string, 0, len(raw))
 	for _, p := range raw {
 		p = strings.TrimSpace(p)
-		if p != "" {
-			patterns = append(patterns, p)
+		if p == "" {
+			continue
 		}
+		// Pre-flight every pattern: filepath.Match's ErrBadPattern would
+		// otherwise be swallowed at match time, where a malformed pattern
+		// silently matches nothing and callers cannot tell exclusion caused
+		// by the filter apart from a broken pattern.
+		if _, err := filepath.Match(p, ""); err != nil {
+			return nil, fmt.Errorf("branchfilter: bad pattern %q: %w", p, err)
+		}
+		patterns = append(patterns, p)
 	}
-	return &BranchFilter{patterns: patterns}
+	return &BranchFilter{patterns: patterns}, nil
 }
 
 // Match reports whether branchName matches any of the filter's patterns.

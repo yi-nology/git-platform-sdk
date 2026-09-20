@@ -2,7 +2,6 @@ package gitbackend
 
 import (
 	"context"
-	"fmt"
 )
 
 // Repository is a stateful convenience wrapper around GitBackend that binds a
@@ -62,32 +61,21 @@ func (r *Repository) Fetch(ctx context.Context, refspec string) error {
 }
 
 // FetchAll fetches tags and every remote branch from the "origin" remote.
+//
+// It is a single full fetch (refspec +refs/heads/*:refs/remotes/origin/*
+// plus --tags and --prune): one network round trip instead of one per
+// branch, and the single fetch error is propagated — per-branch failures are
+// never silently dropped.
 func (r *Repository) FetchAll(ctx context.Context) error {
 	_, err := r.backend.Fetch(ctx, FetchOptions{
 		RepoPath:        r.dir,
 		Remote:          "origin",
 		Tags:            true,
+		Prune:           true,
 		Auth:            r.auth,
 		InsecureSkipTLS: r.insecure,
 	})
-	if err != nil {
-		return err
-	}
-	branches, branchErr := r.backend.ListRemoteBranches(ctx, r.dir, "origin")
-	if branchErr != nil {
-		return fmt.Errorf("list remote branches: %w", branchErr)
-	}
-	for _, branch := range branches {
-		_, _ = r.backend.Fetch(ctx, FetchOptions{
-			RepoPath:        r.dir,
-			Remote:          "origin",
-			Branches:        []string{branch},
-			Tags:            true,
-			Auth:            r.auth,
-			InsecureSkipTLS: r.insecure,
-		})
-	}
-	return nil
+	return err
 }
 
 // Checkout checks out the given ref (branch, tag or commit).

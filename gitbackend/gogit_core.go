@@ -96,7 +96,7 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 		// Only remote-tracking refs can be pruned away by a fetch; tag refs
 		// are never pruned.
 		if _, exists := after[ref]; !exists && strings.HasPrefix(ref, remotePrefix) {
-			result.DeletedBranch = append(result.DeletedBranch, ref)
+			result.DeletedBranch = append(result.DeletedBranch, strings.TrimPrefix(ref, remotePrefix))
 		}
 	}
 

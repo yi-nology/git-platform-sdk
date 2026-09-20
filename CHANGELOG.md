@@ -8,6 +8,37 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Gitee webhook validation now implements Gitee's actual schemes.** The
+  registered validator computed HMAC-SHA256 over the request body in hex
+  into `X-Gitee-Token` — a scheme Gitee does not use, so valid webhooks
+  were rejected and forged ones could not be distinguished. The new
+  `GiteeWebhookValidator` checks sign mode
+  (`Base64(HMAC-SHA256(secret, timestamp+"\n"+secret))` with a 10-minute
+  timestamp freshness bound for replay protection, both configurable) and
+  optionally password mode (plain constant-time token comparison) via
+  `AllowPasswordMode`. Errors wrap `ErrWebhookValidation` for
+  `errors.Is` classification.
+- **`gitbackend` Fetch results are now symmetric across backends.** The
+  native backend fills `FetchResult.NewBranches/UpdatedBranch/NewTags/
+  DeletedBranch` via a before/after `for-each-ref` snapshot (previously
+  only `FetchedRefs` was populated, and `DeletedBranch` carried full ref
+  names on gogit — both now short names); native fetch prunes
+  remote-tracking refs so deletions are observable, and an empty remote
+  name defaults to `origin` instead of failing.
+- **`Repository.FetchAll` performs a single full fetch** (previously one
+  fetch per remote branch — N+1 network round trips with tags re-pulled
+  each time — and per-branch errors silently swallowed).
+- **gitbackend worktree writes no longer lose the executable bit or
+  swallow I/O errors.** Checkout/merge/cherry-pick/rebase file writes
+  restore the entry's git mode (0o755 executables, symlinks recreated as
+  links) and surface copy/close failures instead of staging silently
+  truncated files.
+- **`gitbackend` factory logs its native→gogit fallback** — a missing git
+  binary used to degrade to the feature-reduced go-git backend with no
+  record of why.
+- **`branchfilter.New` rejects malformed patterns** (`filepath.Match`'s
+  `ErrBadPattern`) instead of silently never matching; package docs state
+  that `*` does not cross `/`.
 - **SSH host keys are now verified by both git backends.** The native
   backend defaulted to `StrictHostKeyChecking=no` and the go-git backend
   accepted any host key unconditionally — both independent of the

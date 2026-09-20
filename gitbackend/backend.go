@@ -88,6 +88,9 @@ type FetchOptions struct {
 	// Tags fetches all tags when true.
 	Tags bool
 	// Prune removes remote-tracking refs that no longer exist on the remote.
+	// Note: the native backend always passes --prune so that deleted branches
+	// actually surface in FetchResult.DeletedBranch; the gogit backend prunes
+	// only when this flag is set.
 	Prune bool
 	// Depth limits the fetch to the given number of commits (shallow fetch).
 	// Zero means no depth limit.
@@ -210,6 +213,14 @@ type FileStatus struct {
 }
 
 // FetchResult contains the result of a fetch operation.
+//
+// Both backends populate every field the same way, from a before/after diff
+// of the remote-tracking refs and tags:
+//   - FetchedRefs: full refnames (refs/remotes/<remote>/..., refs/tags/...)
+//     of every ref the fetch created or moved;
+//   - NewBranches/UpdatedBranch/DeletedBranch: short branch names (after the
+//     refs/remotes/<remote>/ prefix);
+//   - NewTags: short tag names (after the refs/tags/ prefix).
 type FetchResult struct {
 	FetchedRefs   []string
 	NewBranches   []string

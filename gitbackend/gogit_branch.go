@@ -47,17 +47,21 @@ func (b *GoGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref s
 		return newGitError("CreateBranch", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
 	}
 
-	hash := plumbing.NewHash(ref)
-	if hash.IsZero() {
+	// Resolve the start point: ref may be a branch/tag name, HEAD, or a raw
+	// hash. When empty the branch starts at HEAD. resolveRev rejects anything
+	// it cannot resolve, so a branch-name ref can no longer fall through the
+	// zero-hash probe and silently start at HEAD instead.
+	var hash plumbing.Hash
+	if ref == "" {
 		head, err := repo.Head()
 		if err != nil {
 			return newGitError("CreateBranch", repoPath, "", err)
 		}
 		hash = head.Hash()
-	} else if !isCommitSHA(ref) {
-		headRef, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+ref), true)
-		if err == nil {
-			hash = headRef.Hash()
+	} else {
+		hash, err = resolveRev(repo, ref)
+		if err != nil {
+			return newGitError("CreateBranch", repoPath, "", err)
 		}
 	}
 

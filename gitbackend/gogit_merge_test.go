@@ -210,3 +210,49 @@ func TestResolveRev(t *testing.T) {
 		t.Errorf("resolveRev(tree hash): expected a cannot-resolve error, got %v", err)
 	}
 }
+
+// TestGoGit_Merge_PreservesExecMode verifies the three-way merge apply path
+// restores a changed entry's git mode: an executable touched on the merged
+// branch must come back 0o755 in the worktree, not the umask-truncated 0o644
+// a plain os.Create used to leave behind. It also proves the merge commit
+// still records the mode (status stays clean after the commit).
+func TestGoGit_Merge_PreservesExecMode(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	main := currentBranch(t, repo)
+	commitExecFile(t, repo, "run.sh", "#!/bin/sh\necho one\n", "add script")
+
+	// Feature edits the executable while main moves on its own file.
+	gitOutput(t, repo, "checkout", "-q", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(repo, "run.sh"), []byte("#!/bin/sh\necho two\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(repo, "run.sh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitOutput(t, repo, "add", "run.sh")
+	gitOutput(t, repo, "commit", "-m", "feature edits script")
+	gitOutput(t, repo, "checkout", "-q", main)
+	commitFile(t, repo, "main-only.txt", "main", "main work")
+
+	if err := b.Merge(context.Background(), repo, "feature", MergeOptions{}); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(repo, "run.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Errorf("expected run.sh merged with mode 0755, got %v", info.Mode().Perm())
+	}
+	if body, _ := os.ReadFile(filepath.Join(repo, "run.sh")); string(body) != "#!/bin/sh\necho two\n" {
+		t.Errorf("expected the feature content merged in, got %q", body)
+	}
+	status, err := b.GetStatus(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.IsClean {
+		t.Errorf("expected a clean worktree after the merge commit, got %+v", status)
+	}
+}

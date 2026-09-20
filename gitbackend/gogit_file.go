@@ -234,6 +234,71 @@ func (b *GoGitBackend) GetBlob(ctx context.Context, repoPath, ref, filePath stri
 
 // --- Checkout helpers ---
 
+// worktreeFileMode maps a git entry mode onto the permission bits the
+// working-tree file should carry. Git only tracks the executable bit:
+// executables get 0o755, everything else 0o644.
+func worktreeFileMode(mode filemode.FileMode) os.FileMode {
+	if mode == filemode.Executable {
+		return 0o755
+	}
+	return 0o644
+}
+
+// writeWorktreeFile writes blob content to the working tree at relPath with
+// the entry's mode applied. Copy and close errors are returned instead of
+// swallowed: a silently truncated write used to end up staged and committed
+// as if it were complete. Symlink entries are recreated as links rather than
+// clobbered into plain files holding the target path.
+func writeWorktreeFile(repoPath, relPath string, blob *object.Blob, mode filemode.FileMode) (err error) {
+	fullPath := filepath.Join(repoPath, relPath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
+		return fmt.Errorf("mkdir for %s: %w", relPath, err)
+	}
+
+	reader, err := blob.Reader()
+	if err != nil {
+		return fmt.Errorf("open blob reader for %s: %w", relPath, err)
+	}
+	defer func() {
+		if cerr := reader.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close blob reader for %s: %w", relPath, cerr)
+		}
+	}()
+
+	if mode == filemode.Symlink {
+		target, err := io.ReadAll(reader)
+		if err != nil {
+			return fmt.Errorf("read symlink target for %s: %w", relPath, err)
+		}
+		_ = os.Remove(fullPath)
+		if err := os.Symlink(string(target), fullPath); err != nil {
+			return fmt.Errorf("create symlink %s: %w", relPath, err)
+		}
+		return nil
+	}
+
+	perm := worktreeFileMode(mode)
+	// os.OpenFile with the final permission bits so freshly created files
+	// never sit at the wrong mode mid-write.
+	f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return fmt.Errorf("create file %s: %w", relPath, err)
+	}
+	if _, err := io.Copy(f, reader); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write file %s: %w", relPath, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close file %s: %w", relPath, err)
+	}
+	// The process umask strips bits from OpenFile's mode parameter; chmod
+	// restores the exact entry mode so the executable bit survives.
+	if err := os.Chmod(fullPath, perm); err != nil {
+		return fmt.Errorf("chmod %s: %w", relPath, err)
+	}
+	return nil
+}
+
 // CheckoutRef force-checks out ref. A ref that names a local branch (bare
 // name or refs/heads/... form) is checked out ATTACHED — HEAD follows the
 // branch, matching the native backend and `git checkout <branch>`. Anything
@@ -311,24 +376,8 @@ func (b *GoGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, 
 			lastErr = fmt.Errorf("file %s not found in tree: %w", file, err)
 			continue
 		}
-		reader, err := treeFile.Blob.Reader()
-		if err != nil {
-			lastErr = fmt.Errorf("read blob for %s: %w", file, err)
-			continue
-		}
-		fullPath := filepath.Join(repoPath, file)
-		_ = os.MkdirAll(filepath.Dir(fullPath), 0o750)
-		f, err := os.Create(fullPath)
-		if err != nil {
-			_ = reader.Close()
-			lastErr = fmt.Errorf("create file %s: %w", file, err)
-			continue
-		}
-		_, copyErr := io.Copy(f, reader)
-		_ = f.Close()
-		_ = reader.Close()
-		if copyErr != nil {
-			lastErr = fmt.Errorf("write file %s: %w", file, copyErr)
+		if err := writeWorktreeFile(repoPath, file, &treeFile.Blob, treeFile.Mode); err != nil {
+			lastErr = err
 			continue
 		}
 		if _, err := wt.Add(file); err != nil {

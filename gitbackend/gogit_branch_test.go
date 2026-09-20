@@ -175,6 +175,48 @@ func TestGoGit_CreateBranch_ExistsKeepsRef(t *testing.T) {
 	}
 }
 
+// TestGoGit_CreateBranch_FromBranchRef verifies a branch-name ref starts the
+// new branch at THAT branch's tip. The old zero-hash probe could not resolve
+// branch names, so the branch silently started at HEAD instead; unresolvable
+// refs must fail loudly rather than fall back to HEAD.
+func TestGoGit_CreateBranch_FromBranchRef(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	ctx := context.Background()
+	baseHash := headHash(t, repo)
+	gitOutput(t, repo, "branch", "base")
+	commitFile(t, repo, "later.txt", "later", "advance main")
+
+	if err := b.CreateBranch(ctx, repo, "new", "base"); err != nil {
+		t.Fatalf("CreateBranch(from base): %v", err)
+	}
+	if got := gitOutput(t, repo, "rev-parse", "new"); got != baseHash {
+		t.Errorf("expected new at base's tip %s, got %s", baseHash, got)
+	}
+
+	err := b.CreateBranch(ctx, repo, "other", "no-such-branch-or-tag")
+	if err == nil || !errors.Is(err, errCannotResolveRev) {
+		t.Fatalf("expected a cannot-resolve error for the unknown ref, got %v", err)
+	}
+	if refErr := exec.Command("git", "-C", repo, "show-ref", "--verify", "refs/heads/other").Run(); refErr == nil {
+		t.Error("expected no branch to be created from the unresolvable ref")
+	}
+
+	// HEAD and a raw hash keep working as start points.
+	if err := b.CreateBranch(ctx, repo, "from-head", "HEAD"); err != nil {
+		t.Fatalf("CreateBranch(from HEAD): %v", err)
+	}
+	if got := gitOutput(t, repo, "rev-parse", "from-head"); got != headHash(t, repo) {
+		t.Errorf("expected from-head at HEAD, got %s", got)
+	}
+	if err := b.CreateBranch(ctx, repo, "from-empty", ""); err != nil {
+		t.Fatalf("CreateBranch(from empty ref): %v", err)
+	}
+	if got := gitOutput(t, repo, "rev-parse", "from-empty"); got != headHash(t, repo) {
+		t.Errorf("expected from-empty at HEAD, got %s", got)
+	}
+}
+
 func TestGoGit_ListRemoteBranches(t *testing.T) {
 	b := newTestGoGitBackend(t)
 	origin := createTestRepo(t)

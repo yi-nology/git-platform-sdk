@@ -37,7 +37,7 @@ func NewNativeGitBackend(opts Options) (*NativeGitBackend, error) {
 var gitSubcommands = map[string]bool{
 	"add": true, "branch": true, "checkout": true, "cherry-pick": true,
 	"clone": true, "commit": true, "config": true, "diff": true,
-	"fetch": true, "init": true, "log": true, "ls-remote": true,
+	"fetch": true, "for-each-ref": true, "init": true, "log": true, "ls-remote": true,
 	"ls-tree": true, "merge": true, "merge-base": true, "pull": true,
 	"push": true, "rebase": true, "remote": true, "rev-list": true,
 	"rev-parse": true, "show": true, "stash": true, "status": true,
@@ -229,27 +229,6 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) {
 }
 
 // --- Output parsers ---
-
-func parseFetchRefs(output string) []string {
-	var refs []string
-	for _, raw := range strings.Split(output, "\n") {
-		// git's fetch ref lines are indented (" * [new branch] main ->
-		// origin/main"); the leading-space check must run on the raw line,
-		// before trimming — a trimmed line can never match it.
-		if !strings.HasPrefix(raw, " ") {
-			continue
-		}
-		line := strings.TrimSpace(raw)
-		if !strings.Contains(line, "->") {
-			continue
-		}
-		parts := strings.SplitN(line, "->", 2)
-		if len(parts) == 2 {
-			refs = append(refs, strings.TrimSpace(parts[1]))
-		}
-	}
-	return refs
-}
 
 func parsePushRefs(output string) []string {
 	var refs []string
