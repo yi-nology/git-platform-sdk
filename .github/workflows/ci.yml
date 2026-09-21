@@ -130,6 +130,14 @@ jobs:
           cache: true
           cache-dependency-path: mcp/go.sum
 
+      # Self-heal mcp/go.sum: root-module dependency bumps (e.g. dependabot
+      # PRs touching only the root go.mod) change the graph this module
+      # inherits via `replace ../`, leaving hashes stale. Tidy before
+      # building so the job tests code, not bookkeeping.
+      - name: Tidy
+        working-directory: mcp
+        run: go mod tidy
+
       - name: Build
         working-directory: mcp
         run: go build ./...

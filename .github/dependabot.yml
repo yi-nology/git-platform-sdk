@@ -10,6 +10,19 @@ updates:
     commit-message:
       prefix: "deps"
 
+  # The mcp/ module is its own Go module (replace ../); without its own
+  # ecosystem entry its go.mod/go.sum never get updated by Dependabot.
+  - package-ecosystem: gomod
+    directory: /mcp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - mcp
+    commit-message:
+      prefix: "deps"
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
