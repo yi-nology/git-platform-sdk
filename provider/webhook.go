@@ -29,7 +29,9 @@ import (
 //   - GitLab:    static token compared in constant time against X-Gitlab-Token.
 //   - Gitea /
 //     Forgejo:   HMAC-SHA256 of the body, sent in X-Gitea-Signature.
-//   - GitCode:   HMAC-SHA256 of the body, sent in X-Token.
+//   - GitCode:   static password compared in constant time against
+//     X-GitCode-Token (an HMAC sign mode exists on the platform;
+//     its message format is not yet mirrored here).
 //   - Tencent:   static token compared in constant time against X-Token.
 //   - Gitee:     sign mode — Base64(HMAC-SHA256(secret, timestamp+"\n"+
 //     secret)) in X-Gitee-Token with X-Gitee-Timestamp; or
@@ -344,7 +346,12 @@ func init() {
 	defaultWebhookRegistry.Register(PlatformGitea, HMACSHA256Validator{Header: "X-Gitea-Signature"})
 	defaultWebhookRegistry.Register(PlatformForgejo, HMACSHA256Validator{Header: "X-Gitea-Signature"})
 	defaultWebhookRegistry.Register(PlatformGitee, GiteeWebhookValidator{})
-	defaultWebhookRegistry.Register(PlatformGitCode, HMACSHA256Validator{Header: "X-Token"})
+	// GitCode documents its webhook password in X-GitCode-Token
+	// (docs.gitcode.com "配置 WebHook"); the X-Token body-HMAC scheme
+	// registered previously matched no documented mode. An HMAC sign mode
+	// exists but its exact message format is not yet verified against the
+	// docs — the documented password scheme is registered until then.
+	defaultWebhookRegistry.Register(PlatformGitCode, StaticTokenValidator{Header: "X-GitCode-Token"})
 	defaultWebhookRegistry.Register(PlatformTencentCode, StaticTokenValidator{Header: "X-Token"})
 	defaultWebhookRegistry.Register(PlatformGitLab, StaticTokenValidator{Header: "X-Gitlab-Token"})
 }

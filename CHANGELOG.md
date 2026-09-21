@@ -8,6 +8,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **GitCode webhook validation uses the documented header.** GitCode
+  carries the webhook password in `X-GitCode-Token` (docs.gitcode.com,
+  "配置 WebHook") — the registered validator checked `X-Token` with a
+  body-HMAC scheme that matches no documented GitCode mode. The
+  documented password scheme is now registered; the platform's HMAC sign
+  mode is noted as not yet mirrored (message format unverified).
 - **Gitee webhook validation now implements Gitee's actual schemes.** The
   registered validator computed HMAC-SHA256 over the request body in hex
   into `X-Gitee-Token` — a scheme Gitee does not use, so valid webhooks
