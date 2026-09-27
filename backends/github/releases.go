@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/go-github/v92/github"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListTags implements provider.ReleaseManager. The provider interface

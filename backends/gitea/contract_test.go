@@ -3,9 +3,9 @@ package gitea_test
 import (
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/backends/contracttest"
-	"github.com/yi-nology/git-platform-sdk/backends/gitea"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/backends/gitea"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestGitea_Contract(t *testing.T) {

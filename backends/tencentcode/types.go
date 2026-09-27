@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func mapState(state string) provider.CRState {

@@ -1,4 +1,4 @@
-// Package forgejo implements the Forgejo Provider for the git-platform-sdk.
+// Package forgejo implements the Forgejo Provider for the go-git-platform.
 //
 // It builds on top of the official codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 SDK and adds
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
@@ -31,9 +31,9 @@ import (
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
-	"github.com/yi-nology/git-platform-sdk/transport"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/transport"
 )
 
 // Provider is the Forgejo implementation of provider.Provider.

@@ -1,4 +1,4 @@
-// Package github implements the GitHub Provider for the git-platform-sdk.
+// Package github implements the GitHub Provider for the go-git-platform.
 //
 // It builds on top of the official google/go-github SDK and adds the
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
@@ -30,9 +30,9 @@ import (
 
 	"github.com/google/go-github/v92/github"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
-	"github.com/yi-nology/git-platform-sdk/transport"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/transport"
 )
 
 // Provider is the GitHub implementation of provider.Provider. It embeds the

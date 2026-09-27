@@ -1,4 +1,4 @@
-// Package gitlab implements the GitLab Provider for the git-platform-sdk.
+// Package gitlab implements the GitLab Provider for the go-git-platform.
 //
 // It builds on top of the official gitlab-org/api/client-go SDK and adds
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
@@ -34,9 +34,9 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
-	"github.com/yi-nology/git-platform-sdk/transport"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/transport"
 )
 
 // Provider is the GitLab implementation of provider.Provider.

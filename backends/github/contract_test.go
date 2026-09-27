@@ -6,8 +6,8 @@ import (
 
 	sdkgithub "github.com/google/go-github/v92/github"
 
-	"github.com/yi-nology/git-platform-sdk/backends/contracttest"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestGitHub_Contract runs the cross-platform contract suite against the

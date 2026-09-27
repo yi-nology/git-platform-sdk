@@ -1,4 +1,4 @@
-# Contributing to git-platform-sdk
+# Contributing to go-git-platform
 
 Thanks for your interest in contributing! This document covers the basics.
 

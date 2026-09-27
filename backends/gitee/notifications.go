@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // rawNotification is a local type that handles Gitee's non-standard

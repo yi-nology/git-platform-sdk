@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestGitCode_UpdateLabel_ColorWireFormat verifies the wire form of the color

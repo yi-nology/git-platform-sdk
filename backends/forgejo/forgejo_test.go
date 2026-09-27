@@ -12,8 +12,8 @@ import (
 
 	forgejosdk "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
-	"github.com/yi-nology/git-platform-sdk/backends/forgejo"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/forgejo"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func writeJSON(w http.ResponseWriter, v any) {

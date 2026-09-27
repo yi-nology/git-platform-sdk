@@ -3,7 +3,7 @@ package gitee
 import (
 	"context"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListBranchProtections implements provider.BranchProtectionManager. Gitee has

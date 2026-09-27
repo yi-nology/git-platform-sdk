@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yi-nology/git-platform-sdk/pkg/credential"
+	"github.com/yi-nology/go-git-platform/pkg/credential"
 )
 
 func main() {

@@ -26,7 +26,7 @@ type Config struct {
 // Returns ErrPlatformNotSupported if the platform is not registered.
 //
 // Platform backends are registered via init() functions. Import
-// "github.com/yi-nology/git-platform-sdk/backends/all" with a blank
+// "github.com/yi-nology/go-git-platform/backends/all" with a blank
 // identifier to register every platform shipped with the SDK.
 func NewProvider(cfg Config) (Provider, error) {
 	registryMu.RLock()

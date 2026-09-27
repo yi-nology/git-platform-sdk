@@ -1,6 +1,6 @@
 package forgejo
 
-import "github.com/yi-nology/git-platform-sdk/provider"
+import "github.com/yi-nology/go-git-platform/provider"
 
 // divergences is the Forgejo divergence ledger: the registered places where
 // this backend's behavior departs from the unified provider semantics.

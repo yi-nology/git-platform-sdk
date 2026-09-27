@@ -3,8 +3,8 @@ package gitlab_test
 import (
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/backends/contracttest"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestGitLab_Contract(t *testing.T) {

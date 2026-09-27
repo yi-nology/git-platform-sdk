@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // testDivergenceSuite locks each backend's divergence ledger to its

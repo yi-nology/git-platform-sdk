@@ -7,7 +7,7 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // deref safely dereferences a pointer, returning the zero value when nil.

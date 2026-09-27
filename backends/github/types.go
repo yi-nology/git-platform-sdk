@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-github/v92/github"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // Internal type aliases for clarity in conversion code. The actual JSON

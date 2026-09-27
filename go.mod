@@ -1,4 +1,4 @@
-module github.com/yi-nology/git-platform-sdk
+module github.com/yi-nology/go-git-platform
 
 go 1.26.3
 

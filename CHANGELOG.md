@@ -211,7 +211,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   segment-level wildcard (`labels.*`) is rejected instead of silently
   dropping the field.
 - **`mcp/` module** — a Model Context Protocol server
-  (`mcp/cmd/git-platform-mcp`) exposing the SDK as one AI-agent tool
+  (`mcp/cmd/go-git-platform-mcp`) exposing the SDK as one AI-agent tool
   surface for all seven platforms: toolsets (core/crs/issues/status/
   search) gated by `Capabilities()`, read-only mode that drops mutating
   tools at registration time, `fields` projections on list tools, and

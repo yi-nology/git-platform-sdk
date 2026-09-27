@@ -111,7 +111,7 @@ func (l LoggerFunc) Error(msg string, kv ...any) {
 }
 
 // NewDebugLogger returns a Logger that writes to stderr at debug level.
-// It checks the GIT_PLATFORM_SDK_DEBUG environment variable: if set to
+// It checks the GO_GIT_PLATFORM_DEBUG environment variable: if set to
 // "1", "true", or "yes", debug-level messages are emitted. Otherwise
 // only info and above are shown.
 //
@@ -119,7 +119,7 @@ func (l LoggerFunc) Error(msg string, kv ...any) {
 // inject a structured logger (SlogLogger or a custom implementation).
 func NewDebugLogger() Logger {
 	level := slog.LevelInfo
-	switch strings.ToLower(os.Getenv("GIT_PLATFORM_SDK_DEBUG")) {
+	switch strings.ToLower(os.Getenv("GO_GIT_PLATFORM_DEBUG")) {
 	case "1", "true", "yes":
 		level = slog.LevelDebug
 	}

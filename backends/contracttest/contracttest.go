@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // Harness bundles the inputs needed to run the contract suite against a

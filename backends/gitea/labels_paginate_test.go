@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/backends/contracttest"
-	"github.com/yi-nology/git-platform-sdk/backends/gitea"
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/backends/gitea"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestGitea_ResolveLabelID_Paginates verifies that UpdateLabel resolves a

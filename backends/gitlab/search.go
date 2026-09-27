@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 )
 

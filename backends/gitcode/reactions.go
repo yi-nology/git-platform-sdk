@@ -3,9 +3,9 @@ package gitcode
 import (
 	"context"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
 )
 

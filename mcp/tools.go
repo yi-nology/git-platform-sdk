@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/yi-nology/git-platform-sdk/pkg/projection"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/pkg/projection"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // toolsetNames are the selectable toolset identifiers (Options.Toolsets).

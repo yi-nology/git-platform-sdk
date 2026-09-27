@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
-	"github.com/yi-nology/git-platform-sdk/transport"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/transport"
 )
 
 // ConvertHooks adapts provider.Hooks into transport.Hooks. The request-hook

@@ -1,4 +1,4 @@
-module github.com/yi-nology/git-platform-sdk/mcp
+module github.com/yi-nology/go-git-platform/mcp
 
 go 1.26.3
 
@@ -6,7 +6,7 @@ toolchain go1.26.6
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/yi-nology/git-platform-sdk v0.61.0
+	github.com/yi-nology/go-git-platform v0.61.0
 )
 
 require (
@@ -57,4 +57,4 @@ require (
 	golang.org/x/time v0.16.0 // indirect
 )
 
-replace github.com/yi-nology/git-platform-sdk => ../
+replace github.com/yi-nology/go-git-platform => ../

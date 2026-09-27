@@ -1,4 +1,4 @@
-// Package gitea implements the Gitea Provider for the git-platform-sdk.
+// Package gitea implements the Gitea Provider for the go-git-platform.
 //
 // It builds on top of the official gitea.dev/sdk SDK and adds
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
@@ -31,9 +31,9 @@ import (
 
 	gitea "gitea.dev/sdk"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
-	"github.com/yi-nology/git-platform-sdk/transport"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/transport"
 )
 
 // Provider is the Gitea implementation of provider.Provider.

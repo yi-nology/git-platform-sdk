@@ -5,7 +5,7 @@ import (
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // GetFileContent implements provider.FileManager.

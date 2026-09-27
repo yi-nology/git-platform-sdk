@@ -7,7 +7,7 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // resolveUserIDs resolves usernames to GitLab user IDs using ListUsers with

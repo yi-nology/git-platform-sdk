@@ -1,20 +1,20 @@
-# Git Platform SDK
+# go-git-platform
 
 A unified Go SDK for interacting with 7 Git hosting platforms through a single interface.
 
 [English](#english) | [中文](#简介)
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/yi-nology/git-platform-sdk.svg)](https://pkg.go.dev/github.com/yi-nology/git-platform-sdk)
-[![CI](https://github.com/yi-nology/git-platform-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/yi-nology/git-platform-sdk/actions/workflows/ci.yml)
-[![Release](https://github.com/yi-nology/git-platform-sdk/actions/workflows/release.yml/badge.svg)](https://github.com/yi-nology/git-platform-sdk/actions/workflows/release.yml)
-[![Latest Release](https://img.shields.io/github/v/release/yi-nology/git-platform-sdk?include_prereleases)](https://github.com/yi-nology/git-platform-sdk/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/yi-nology/go-git-platform.svg)](https://pkg.go.dev/github.com/yi-nology/go-git-platform)
+[![CI](https://github.com/yi-nology/go-git-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/yi-nology/go-git-platform/actions/workflows/ci.yml)
+[![Release](https://github.com/yi-nology/go-git-platform/actions/workflows/release.yml/badge.svg)](https://github.com/yi-nology/go-git-platform/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/yi-nology/go-git-platform?include_prereleases)](https://github.com/yi-nology/go-git-platform/releases)
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://go.dev/)
 
 ## English
 
 ### Overview
 
-`git-platform-sdk` provides a unified Go interface for 7 Git hosting platforms: **GitHub**, **GitLab**, **Gitea**, **Forgejo**, **Gitee**, **GitCode**, and **Tencent Code**. Write once, run against any platform.
+`go-git-platform` provides a unified Go interface for 7 Git hosting platforms: **GitHub**, **GitLab**, **Gitea**, **Forgejo**, **Gitee**, **GitCode**, and **Tencent Code**. Write once, run against any platform.
 
 **Key features:**
 
@@ -35,8 +35,8 @@ import (
     "fmt"
     "log"
 
-    "github.com/yi-nology/git-platform-sdk/backends/all"
-    "github.com/yi-nology/git-platform-sdk/provider"
+    "github.com/yi-nology/go-git-platform/backends/all"
+    "github.com/yi-nology/go-git-platform/provider"
 )
 
 func main() {
@@ -75,13 +75,13 @@ func main() {
 ### Installation
 
 ```bash
-go get github.com/yi-nology/git-platform-sdk
+go get github.com/yi-nology/go-git-platform
 ```
 
 ### Rate Limiting
 
 ```go
-import "github.com/yi-nology/git-platform-sdk/transport"
+import "github.com/yi-nology/go-git-platform/transport"
 
 client := transport.NewClient("https://api.github.com", auth)
 client.Limiter = transport.NewRateLimiter(
@@ -116,7 +116,7 @@ contract suite fails when a ledger entry drifts from actual behavior.
 
 ## 简介
 
-`git-platform-sdk` 提供统一的接口来操作不同的 Git 平台，无需关心底层 API 差异。支持自动平台检测、统一的仓库/Issue/PR/Webhook 管理。
+`go-git-platform` 提供统一的接口来操作不同的 Git 平台，无需关心底层 API 差异。支持自动平台检测、统一的仓库/Issue/PR/Webhook 管理。
 
 ### 架构亮点
 
@@ -140,7 +140,7 @@ contract suite fails when a ledger entry drifts from actual behavior.
 ## 安装
 
 ```bash
-go get github.com/yi-nology/git-platform-sdk
+go get github.com/yi-nology/go-git-platform
 ```
 
 ## 快速开始
@@ -153,9 +153,9 @@ import (
     "fmt"
     "log"
 
-    "github.com/yi-nology/git-platform-sdk/backends/all" // 注册所有平台
-    _ "github.com/yi-nology/git-platform-sdk/backends/all"
-    "github.com/yi-nology/git-platform-sdk/provider"
+    "github.com/yi-nology/go-git-platform/backends/all" // 注册所有平台
+    _ "github.com/yi-nology/go-git-platform/backends/all"
+    "github.com/yi-nology/go-git-platform/provider"
 )
 
 func main() {
@@ -187,7 +187,7 @@ func main() {
 ```
 
 > **重要**: 必须导入 `backends/all` (blank import) 才能注册所有平台后端。
-> 如果只需要特定平台, 可以单独导入, 例如 `_ "github.com/yi-nology/git-platform-sdk/backends/github"`。
+> 如果只需要特定平台, 可以单独导入, 例如 `_ "github.com/yi-nology/go-git-platform/backends/github"`。
 
 ## 平台检测
 
@@ -214,7 +214,7 @@ result, _ = provider.DetectPlatform("https://my-gitea.example.com/owner/repo.git
 Provider Manager 提供带 TTL 缓存的 Provider 管理, 并支持命中率统计和后台自动清理:
 
 ```go
-import "github.com/yi-nology/git-platform-sdk/provider"
+import "github.com/yi-nology/go-git-platform/provider"
 
 // 创建管理器, 缓存 30 分钟过期, 最多缓存 100 个 provider
 mgr := provider.NewManager(30*time.Minute, provider.WithMaxSize(100))
@@ -392,7 +392,7 @@ toolset 按能力声明门控、`--read-only` 注册期丢弃写工具、列表�
 Tencent 工蜂 backend 额外实现了 `TencentCodeExtras` 接口, 暴露工蜂独有的功能:
 
 ```go
-import "github.com/yi-nology/git-platform-sdk/backends/tencentcode"
+import "github.com/yi-nology/go-git-platform/backends/tencentcode"
 
 p, _ := provider.NewProvider(provider.Config{
     Platform: provider.PlatformTencentCode,
@@ -464,7 +464,7 @@ p, err := provider.NewProvider(provider.Config{
 | go-git | `"gogit"` | 纯 Go 实现 (基于 go-git/v5), 无需 git 二进制, 部分高级操作返回 `ErrNotSupported` |
 
 ```go
-import "github.com/yi-nology/git-platform-sdk/gitbackend"
+import "github.com/yi-nology/go-git-platform/gitbackend"
 
 // 显式指定后端
 backend, _ := gitbackend.NewGitBackend(gitbackend.Options{Type: "native"})
@@ -506,7 +506,7 @@ repo.Diff(ctx, baseSHA, headSHA)
 ## 项目结构
 
 ```
-git-platform-sdk/
+go-git-platform/
 ├── provider/                    # 公共 API (类型 + 接口 + 工厂 + Manager)
 │   ├── provider.go              # Provider interface, Platform, 核心类型
 │   ├── options.go               # 所有 Options/Result 类型 (集中定义)
@@ -549,7 +549,7 @@ git-platform-sdk/
 │   └── projection/              # 字段投影 (LLM/agent 上下文经济)
 ├── mcp/                         # MCP server 独立模块 (独立 go.mod)
 │   ├── server.go, tools.go      # toolsets + 能力门控 + 读写分离
-│   └── cmd/git-platform-mcp/    # stdio 入口
+│   └── cmd/go-git-platform-mcp/    # stdio 入口
 ├── Makefile                     # test/lint/fmt/cover 等命令
 ├── .golangci.yml                # lint 配置
 └── go.mod

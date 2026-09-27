@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yi-nology/git-platform-sdk/backends/gitee"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/gitee"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func writeJSON(w http.ResponseWriter, v any) {

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/backends/tencentcode"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/tencentcode"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestTencentCode_RawPaths_EscapeSegments verifies that the raw diff and

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // SearchHarnessConfig carries the fixtures a backend's main Harness needs to

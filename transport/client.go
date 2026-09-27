@@ -1,5 +1,5 @@
 // Package transport provides a unified HTTP transport layer for the
-// git-platform-sdk. It is the single entry point through which all platform
+// go-git-platform. It is the single entry point through which all platform
 // implementations send requests, so cross-cutting concerns (authentication
 // header injection, retry/backoff, request/response hooks, structured logging,
 // body capture for retry) are implemented in exactly one place.

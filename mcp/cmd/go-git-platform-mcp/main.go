@@ -1,10 +1,10 @@
-// Command git-platform-mcp runs a Model Context Protocol server over
-// git-platform-sdk, exposing one tool surface for GitHub, GitLab, Gitea,
+// Command go-git-platform-mcp runs a Model Context Protocol server over
+// go-git-platform, exposing one tool surface for GitHub, GitLab, Gitea,
 // Forgejo, Gitee, GitCode, and Tencent Code.
 //
 // Usage:
 //
-//	git-platform-mcp --platform gitea --base-url https://gitea.example.com --token-env GITEA_TOKEN
+//	go-git-platform-mcp --platform gitea --base-url https://gitea.example.com --token-env GITEA_TOKEN
 //
 // Flags:
 //
@@ -18,7 +18,7 @@
 //
 // The server speaks MCP over stdio, so a typical client config is:
 //
-//	{"command": "git-platform-mcp", "args": ["--platform", "gitea", "--token-env", "GITEA_TOKEN"]}
+//	{"command": "go-git-platform-mcp", "args": ["--platform", "gitea", "--token-env", "GITEA_TOKEN"]}
 package main
 
 import (
@@ -30,11 +30,11 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	mcpserver "github.com/yi-nology/git-platform-sdk/mcp"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	mcpserver "github.com/yi-nology/go-git-platform/mcp"
+	"github.com/yi-nology/go-git-platform/provider"
 
 	// register every shipped backend
-	_ "github.com/yi-nology/git-platform-sdk/backends/all"
+	_ "github.com/yi-nology/go-git-platform/backends/all"
 )
 
 func main() {

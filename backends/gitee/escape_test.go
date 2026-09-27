@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/backends/gitee"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/gitee"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestGitee_PathEscaping verifies that owner/repo/label-name/file-path

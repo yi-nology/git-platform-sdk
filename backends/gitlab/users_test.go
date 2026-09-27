@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // usersRecordingStub is a recording mock for the username→ID resolution

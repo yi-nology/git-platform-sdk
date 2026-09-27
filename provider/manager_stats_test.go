@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/yi-nology/git-platform-sdk/backends/all"
+	_ "github.com/yi-nology/go-git-platform/backends/all"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestManagerStats_HitsAndMisses(t *testing.T) {

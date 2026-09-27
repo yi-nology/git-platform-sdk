@@ -1,4 +1,4 @@
-// Package mcpserver exposes git-platform-sdk as a Model Context Protocol
+// Package mcpserver exposes go-git-platform as a Model Context Protocol
 // (MCP) server so AI agents can operate GitHub, GitLab, Gitea, Forgejo,
 // Gitee, GitCode, and Tencent Code through one tool surface.
 //
@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // Version is the MCP server's own version.
@@ -34,7 +34,7 @@ type Options struct {
 	// never sees (and cannot call) the mutations.
 	ReadOnly bool
 	// Name/Version reported in the MCP initialize handshake; defaults
-	// to "git-platform-sdk" / the module version.
+	// to "go-git-platform" / the module version.
 	Name string
 }
 
@@ -59,7 +59,7 @@ type state struct {
 func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 	name := opts.Name
 	if name == "" {
-		name = "git-platform-sdk"
+		name = "go-git-platform"
 	}
 	s := mcp.NewServer(&mcp.Implementation{Name: name, Version: Version}, nil)
 

@@ -1,4 +1,4 @@
-// Package gitcode implements the GitCode Provider for the git-platform-sdk.
+// Package gitcode implements the GitCode Provider for the go-git-platform.
 //
 // It builds on top of the yi-nology/go-gitcode client SDK and adds
 // transport-layer cross-cutting behavior (auth, retry, hooks, logging)
@@ -29,9 +29,9 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
-	"github.com/yi-nology/git-platform-sdk/transport"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/transport"
 )
 
 // Provider is the GitCode implementation of provider.Provider.

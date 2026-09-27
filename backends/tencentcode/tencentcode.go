@@ -1,5 +1,5 @@
 // Package tencentcode implements the Tencent 工蜂 Provider for the
-// git-platform-sdk.
+// go-git-platform.
 //
 // Tencent 工蜂 exposes a GitLab-compatible REST API with some platform-
 // specific extensions (native code reviews, branch protection, repository
@@ -41,9 +41,9 @@ import (
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
-	"github.com/yi-nology/git-platform-sdk/transport"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/transport"
 )
 
 // Provider is the Tencent 工蜂 implementation of provider.Provider.

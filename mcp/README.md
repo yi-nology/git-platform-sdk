@@ -1,6 +1,6 @@
-# git-platform-mcp
+# go-git-platform-mcp
 
-一个 MCP(Model Context Protocol)server,把 [git-platform-sdk](../) 的七平台统一
+一个 MCP(Model Context Protocol)server,把 [go-git-platform](../) 的七平台统一
 API(GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode / 腾讯工蜂)暴露成
 AI agent 可直接调用的工具面。
 
@@ -32,10 +32,10 @@ AI agent 可直接调用的工具面。
 ## 使用
 
 ```bash
-go build ./cmd/git-platform-mcp
+go build ./cmd/go-git-platform-mcp
 
 # Gitea 自托管实例,token 从环境变量读
-GIT_PLATFORM_TOKEN=xxx ./git-platform-mcp \
+GIT_PLATFORM_TOKEN=xxx ./go-git-platform-mcp \
   --platform gitea --base-url https://gitea.example.com --read-only
 ```
 
@@ -45,7 +45,7 @@ GIT_PLATFORM_TOKEN=xxx ./git-platform-mcp \
 {
   "mcpServers": {
     "git-platform": {
-      "command": "git-platform-mcp",
+      "command": "go-git-platform-mcp",
       "args": ["--platform", "gitlab", "--token-env", "GITLAB_TOKEN", "--read-only"]
     }
   }

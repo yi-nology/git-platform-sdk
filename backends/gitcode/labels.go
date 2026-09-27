@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
 )
 

@@ -6,9 +6,9 @@ import (
 	// Register all built-in backends so factory/manager tests have providers
 	// to work with. Without this, only custom-registered platforms would be
 	// available.
-	_ "github.com/yi-nology/git-platform-sdk/backends/all"
+	_ "github.com/yi-nology/go-git-platform/backends/all"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestNewProvider_GitLab(t *testing.T) {

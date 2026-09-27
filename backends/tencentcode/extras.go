@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TencentCodeExtras exposes Tencent 工蜂-specific capabilities that are not

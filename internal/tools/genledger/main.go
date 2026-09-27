@@ -10,14 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/yi-nology/git-platform-sdk/backends/forgejo"
-	"github.com/yi-nology/git-platform-sdk/backends/gitcode"
-	"github.com/yi-nology/git-platform-sdk/backends/gitea"
-	"github.com/yi-nology/git-platform-sdk/backends/gitee"
-	"github.com/yi-nology/git-platform-sdk/backends/github"
-	"github.com/yi-nology/git-platform-sdk/backends/gitlab"
-	"github.com/yi-nology/git-platform-sdk/backends/tencentcode"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/forgejo"
+	"github.com/yi-nology/go-git-platform/backends/gitcode"
+	"github.com/yi-nology/go-git-platform/backends/gitea"
+	"github.com/yi-nology/go-git-platform/backends/gitee"
+	"github.com/yi-nology/go-git-platform/backends/github"
+	"github.com/yi-nology/go-git-platform/backends/gitlab"
+	"github.com/yi-nology/go-git-platform/backends/tencentcode"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func main() {

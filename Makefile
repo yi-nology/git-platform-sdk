@@ -1,4 +1,4 @@
-# git-platform-sdk Makefile
+# go-git-platform Makefile
 #
 # Common targets:
 #   make test        - run all tests with race detector and coverage

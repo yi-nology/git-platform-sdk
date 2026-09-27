@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestGitCode_MilestoneMutations_OmitDueOn verifies the wire form of the

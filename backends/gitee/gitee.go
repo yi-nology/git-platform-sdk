@@ -1,4 +1,4 @@
-// Package gitee implements the Gitee Provider for the git-platform-sdk.
+// Package gitee implements the Gitee Provider for the go-git-platform.
 //
 // The backend builds on the hand-written go-gitee SDK
 // (github.com/next-bin/go-gitee) which follows go-github patterns:
@@ -35,9 +35,9 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
-	"github.com/yi-nology/git-platform-sdk/transport"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/transport"
 )
 
 // Provider is the Gitee implementation of provider.Provider.

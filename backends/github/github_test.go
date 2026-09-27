@@ -12,8 +12,8 @@ import (
 
 	sdkgithub "github.com/google/go-github/v92/github"
 
-	ghbackend "github.com/yi-nology/git-platform-sdk/backends/github"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	ghbackend "github.com/yi-nology/go-git-platform/backends/github"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func newTestProvider(t *testing.T, baseURL string) *ghbackend.Provider {

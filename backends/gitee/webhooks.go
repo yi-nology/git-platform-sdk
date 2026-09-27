@@ -16,7 +16,7 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // giteeHookEventFlags maps the platform-neutral webhook event names onto

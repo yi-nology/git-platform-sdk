@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestMapRetryConfig_PlusOneConversion guards the off-by-one mapping between

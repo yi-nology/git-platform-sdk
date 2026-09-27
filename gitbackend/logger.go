@@ -1,6 +1,6 @@
 package gitbackend
 
-import "github.com/yi-nology/git-platform-sdk/provider"
+import "github.com/yi-nology/go-git-platform/provider"
 
 // Logger reuses the provider.Logger interface.
 // Consumers can inject the same logger for both provider and gitbackend.

@@ -5,8 +5,8 @@ import (
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 
-	"github.com/yi-nology/git-platform-sdk/backends/internal/backendutil"
-	"github.com/yi-nology/git-platform-sdk/provider"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListForks implements provider.RepoStatsManager.
