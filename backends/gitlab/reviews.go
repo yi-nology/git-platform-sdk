@@ -1,8 +1,8 @@
 package gitlab
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -92,9 +92,12 @@ func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo str
 	}
 	refs := mr.DiffRefs
 	if refs.HeadSha == "" || refs.BaseSha == "" {
+		p.logger.Warn("gitlab.CreateReview: diff_refs 缺失，行内评论降级纯评论",
+			"base", refs.BaseSha, "head", refs.HeadSha, "start", refs.StartSha)
 		return nil, provider.Wrap(provider.PlatformGitLab, "CreateReview",
 			errors.New("mr diff_refs 缺失，无法定位行内评论"))
 	}
+	p.logger.Info("gitlab.CreateReview: inline comments path", "comments", len(opts.Comments))
 	posType := "text"
 	for _, c := range opts.Comments {
 		if c.Path == "" || c.Line <= 0 || c.Body == "" {
