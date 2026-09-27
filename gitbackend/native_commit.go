@@ -164,7 +164,15 @@ func (b *NativeGitBackend) CommitWithIdentity(ctx context.Context, repoPath, nam
 		"-c", "commit.gpgsign=false",
 		"commit", "--allow-empty", "-m", message,
 	}
-	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
+	// 显式设 GIT_AUTHOR_*/GIT_COMMITTER_*:进程环境里的同名变量优先级高于
+	// `git -c user.name`,不覆盖会导致调用方指定的身份被全局配置顶掉。
+	env := []string{
+		"GIT_AUTHOR_NAME=" + name,
+		"GIT_AUTHOR_EMAIL=" + email,
+		"GIT_COMMITTER_NAME=" + name,
+		"GIT_COMMITTER_EMAIL=" + email,
+	}
+	_, stderr, err := b.runGitEnv(ctx, repoPath, args, AuthConfig{}, env)
 	if err != nil {
 		return newGitError("CommitWithIdentity", repoPath, stderr, err)
 	}

@@ -119,6 +119,12 @@ func sanitizeGitArgs(args []string) error {
 }
 
 func (b *NativeGitBackend) runGit(ctx context.Context, repoPath string, args []string, auth AuthConfig) (string, string, error) {
+	return b.runGitEnv(ctx, repoPath, args, auth, nil)
+}
+
+// runGitEnv 与 runGit 相同,但允许附加环境变量(如 GIT_AUTHOR_NAME 覆盖全局身份)。
+// env 为空时沿用当前进程环境。
+func (b *NativeGitBackend) runGitEnv(ctx context.Context, repoPath string, args []string, auth AuthConfig, extraEnv []string) (string, string, error) {
 	if err := sanitizeGitArgs(args); err != nil {
 		return "", "", err
 	}
@@ -135,6 +141,9 @@ func (b *NativeGitBackend) runGit(ctx context.Context, repoPath string, args []s
 	defer cleanup()
 
 	b.configureAuth(cmd, resolvedAuth)
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

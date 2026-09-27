@@ -34,7 +34,15 @@ func pushSetup(t *testing.T) (origin, seed, clone string) {
 	gitOutput(t, seed, "config", "user.email", "test@test.com")
 	gitOutput(t, seed, "config", "user.name", "Test")
 	gitOutput(t, seed, "remote", "add", "origin", origin)
-	gitOutput(t, seed, "commit", "--allow-empty", "-m", "seed")
+	{
+		cmd := exec.Command("git", "-C", seed, "commit", "--allow-empty", "-m", "seed")
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("seed commit: %v\n%s", err, out)
+		}
+	}
 	gitOutput(t, seed, "push", "-q", "origin", "main")
 
 	clone = t.TempDir()

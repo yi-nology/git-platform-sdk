@@ -29,8 +29,16 @@ func commitFile(t *testing.T, dir, name, content, msg string) string {
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", name, err)
 	}
+	// 身份走 GIT_* env(优先级高于 -c),不依赖全局 config
 	gitOutput(t, dir, "add", name)
-	gitOutput(t, dir, "commit", "-m", msg)
+	cmd := exec.Command("git", "-C", dir, "commit", "-m", msg)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, out)
+	}
 	return headHash(t, dir)
 }
 

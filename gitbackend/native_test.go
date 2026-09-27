@@ -26,16 +26,22 @@ func createTestRepo(t *testing.T) string {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
-	cmd = exec.Command("git", "-C", dir, "config", "user.email", "test@test.com")
-	cmd.Run()
-	cmd = exec.Command("git", "-C", dir, "config", "user.name", "Test")
-	cmd.Run()
-
-	os.WriteFile(filepath.Join(dir, "README.md"), []byte("init"), 0644)
+	// 身份用 -c 传给 commit,不依赖仓库/全局 config,保证 hermetic
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("init"), 0644); err != nil {
+		t.Fatalf("write readme: %v", err)
+	}
 	cmd = exec.Command("git", "-C", dir, "add", ".")
-	cmd.Run()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
 	cmd = exec.Command("git", "-C", dir, "commit", "-m", "init")
-	cmd.Run()
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
 	return dir
 }
 
