@@ -46,7 +46,7 @@ func (b *GoGitBackend) buildTransportAuth(auth AuthConfig) (transport.AuthMethod
 		authFail := func(err error) (transport.AuthMethod, error) {
 			return nil, fmt.Errorf("%w: %v", ErrAuthFailed, err)
 		}
-		hk, err := hostKeyCallback(auth.InsecureSkipTLS)
+		hk, err := hostKeyCallbackWithConfig(auth)
 		if err != nil {
 			return authFail(err)
 		}
@@ -82,19 +82,48 @@ func (b *GoGitBackend) buildTransportAuth(auth AuthConfig) (transport.AuthMethod
 //     file is an error with an actionable message — first-use MITM is the
 //     exact threat host-key verification exists for, so unknown hosts are
 //     never silently trusted.
+//
+// hostKeyCallback 返回主机密钥校验策略(兼容旧签名)。
 func hostKeyCallback(insecure bool) (ssh.HostKeyCallback, error) {
-	if insecure {
+	return hostKeyCallbackWithConfig(AuthConfig{InsecureSkipTLS: insecure})
+}
+
+// hostKeyCallbackWithConfig 按 AuthConfig 选择校验策略:
+//  1. InsecureSkipTLS: 跳过校验(显式不安全)
+//  2. HostKeyFingerprint: 指纹钉扎,必须匹配
+//  3. 默认: known_hosts(可用 KnownHostsPath 指定路径)
+func hostKeyCallbackWithConfig(auth AuthConfig) (ssh.HostKeyCallback, error) {
+	if auth.InsecureSkipTLS {
 		return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			return nil
 		}, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("resolve home dir for known_hosts: %w", err)
+
+	// 指纹钉扎:最强约束,不依赖 known_hosts 文件
+	if fp := strings.TrimSpace(auth.HostKeyFingerprint); fp != "" {
+		return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			got := ssh.FingerprintSHA256(key)
+			want := fp
+			if !strings.HasPrefix(want, "SHA256:") {
+				want = "SHA256:" + want
+			}
+			if got != want {
+				return fmt.Errorf("ssh host key fingerprint mismatch for %s: got %s want %s (possible MITM)", hostname, got, want)
+			}
+			return nil
+		}, nil
 	}
-	kh := filepath.Join(home, ".ssh", "known_hosts")
+
+	kh := strings.TrimSpace(auth.KnownHostsPath)
+	if kh == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("resolve home dir for known_hosts: %w", err)
+		}
+		kh = filepath.Join(home, ".ssh", "known_hosts")
+	}
 	if _, err := os.Stat(kh); err != nil {
-		return nil, fmt.Errorf("ssh host key verification: %s not found; add the host key (ssh-keyscan host >> %s) or set InsecureSkipTLS", kh, kh)
+		return nil, fmt.Errorf("ssh host key verification: %s not found; add the host key (ssh-keyscan host >> %s), set HostKeyFingerprint, or set InsecureSkipTLS", kh, kh)
 	}
 	cb, err := knownhosts.New(kh)
 	if err != nil {
