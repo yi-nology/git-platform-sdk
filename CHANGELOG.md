@@ -6,6 +6,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-09-27
+
+### Added
+
+- **PlatformRepo 仓库元数据**: `Archived` / `Fork` / `Stars` / `Language`,
+  供上层做导入过滤(排除归档/fork、按 star/语言裁剪)。
+  GitHub/GitLab/Gitea/Forgejo 转换已填充。
+- **CloneOptions 部分克隆与子模块**:
+  - `Filter`: `blob:none` / `tree:0` 等 partial clone
+  - `Submodules`: `--recurse-submodules`
+  - native 后端支持 `--filter` / `--recurse-submodules` / `--single-branch`
+
+### Fixed
+
+- **CommitWithIdentity 显式设 GIT_AUTHOR_*/GIT_COMMITTER_***,
+  压过进程环境变量,调用方指定的身份不再被全局配置顶掉。
+- **测试 hermetic 化**: commitFile/createTestRepo/seed 改走 `GIT_*` env,
+  修复 4 个受本机 `GIT_AUTHOR_NAME` 污染的失败用例。
+
 ### Fixed
 
 - **GitCode webhook validation uses the documented header.** GitCode
