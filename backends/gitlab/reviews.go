@@ -1,6 +1,7 @@
 package gitlab
 
 import (
+	"errors"
 	"context"
 	"net/http"
 	"strconv"
@@ -63,11 +64,62 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 // comments (opts.Comments) and verdicts (opts.Event, opts.CommitID) are not
 // mapped: a note is neither an approval nor a commit report, so the created
 // review is always in the commented state.
+//
+// v0.65.0 行内评论：opts.Comments 非空时改走 discussions 路径——此前实现丢弃
+// Comments 只发纯文本 note，调用方（argus poster）的行内评论链路在 GitLab
+// 后端从未生效。position 用 MR diff_refs 三 SHA + new_path/new_line（模型给
+// 的是新文件行号）；单条 discussion 失败（行号不在 diff hunk 内等 422）按条
+// 跳过不整单失败；总结 note 照发保留评审事件语义。
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
 	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
+	if len(opts.Comments) > 0 {
+		if res, err := p.createReviewWithComments(ctx, owner, repo, iid, opts); err == nil {
+			return res, nil
+		}
+		// 行内路径失败（拉不到 diff_refs 等）→ 降级纯评论 note，评审事件不丢
+	}
+	return p.createNoteReview(ctx, owner, repo, iid, opts)
+}
+
+// createReviewWithComments 逐条建 position discussion + 总结 note。
+func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo string, iid int64, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
+	mr, _, err := p.client.MergeRequests.GetMergeRequest(pidOf(owner, repo), iid, nil, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "CreateReview", err)
+	}
+	refs := mr.DiffRefs
+	if refs.HeadSha == "" || refs.BaseSha == "" {
+		return nil, provider.Wrap(provider.PlatformGitLab, "CreateReview",
+			errors.New("mr diff_refs 缺失，无法定位行内评论"))
+	}
+	posType := "text"
+	for _, c := range opts.Comments {
+		if c.Path == "" || c.Line <= 0 || c.Body == "" {
+			continue
+		}
+		path, line, body := c.Path, int64(c.Line), c.Body
+		opt := &gitlab.CreateMergeRequestDiscussionOptions{
+			Body: gitlab.Ptr(body),
+			Position: &gitlab.PositionOptions{
+				BaseSHA:      gitlab.Ptr(refs.BaseSha),
+				HeadSHA:      gitlab.Ptr(refs.HeadSha),
+				StartSHA:     gitlab.Ptr(refs.StartSha),
+				PositionType: gitlab.Ptr(posType),
+				NewPath:      gitlab.Ptr(path),
+				NewLine:      gitlab.Ptr(line),
+			},
+		}
+		// 单条失败 best-effort 跳过：行号不在 hunk / 文件二进制等，不该拖垮整轮评审
+		_, _, _ = p.client.Discussions.CreateMergeRequestDiscussion(pidOf(owner, repo), iid, opt, gitlab.WithContext(ctx))
+	}
+	return p.createNoteReview(ctx, owner, repo, iid, opts)
+}
+
+// createNoteReview 纯评论评审（无行内时的原路径）。
+func (p *Provider) createNoteReview(ctx context.Context, owner, repo string, iid int64, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
 	note, _, err := p.client.Notes.CreateMergeRequestNote(pidOf(owner, repo), iid,
 		&gitlab.CreateMergeRequestNoteOptions{Body: new(opts.Body)}, gitlab.WithContext(ctx))
 	if err != nil {
