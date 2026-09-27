@@ -27,6 +27,9 @@ func convertRepo(r *forgejo.Repository) *provider.PlatformRepo {
 		SSHURL:        r.SSHURL,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
+		Archived:      r.Archived,
+		Fork:          r.Fork,
+		Stars:         r.Stars,
 		Platform:      provider.PlatformForgejo,
 	}
 }

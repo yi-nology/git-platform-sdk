@@ -27,6 +27,10 @@ func convertRepo(r *gitea.Repository) *provider.PlatformRepo {
 		SSHURL:        r.SSHURL,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
+		Archived:      r.Archived,
+		Fork:          r.Fork,
+		Stars:         r.Stars,
+		Language:      r.Language,
 		Platform:      provider.PlatformGitea,
 	}
 }

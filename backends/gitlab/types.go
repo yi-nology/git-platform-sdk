@@ -26,6 +26,10 @@ func convertProject(p *gitlab.Project) *provider.PlatformRepo {
 		DefaultBranch: p.DefaultBranch,
 		Private:       p.Visibility != "public",
 		Platform:      provider.PlatformGitLab,
+		Archived:      p.Archived,
+		Fork:          p.ForkedFromProject != nil,
+		Stars:         int(p.StarCount),
+		Language:      "",
 	}
 }
 

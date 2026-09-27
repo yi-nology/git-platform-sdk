@@ -39,6 +39,10 @@ func convertRepo(r *ghRepo) *provider.PlatformRepo {
 		DefaultBranch: r.GetDefaultBranch(),
 		Private:       r.GetPrivate(),
 		Platform:      provider.PlatformGitHub,
+		Archived:      r.GetArchived(),
+		Fork:          r.GetFork(),
+		Stars:         r.GetStargazersCount(),
+		Language:      r.GetLanguage(),
 	}
 }
 

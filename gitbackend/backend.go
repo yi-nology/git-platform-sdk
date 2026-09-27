@@ -146,6 +146,10 @@ type CloneOptions struct {
 	NoCheckout      bool
 	SingleBranch    bool
 	InsecureSkipTLS bool
+	// Filter 部分克隆:"blob:none" / "tree:0" 等;空=全量
+	Filter string
+	// Submodules clone 后递归初始化子模块
+	Submodules bool
 }
 
 // MergeOptions contains options for merging a branch into HEAD.

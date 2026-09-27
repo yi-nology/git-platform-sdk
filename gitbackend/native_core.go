@@ -162,6 +162,16 @@ func (b *NativeGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
 	if opts.NoCheckout {
 		args = append(args, "--no-checkout")
 	}
+	if opts.SingleBranch {
+		args = append(args, "--single-branch")
+	}
+	// 部分克隆:blob:none / tree:0,显著降冷备/首次同步体积
+	if f := strings.TrimSpace(opts.Filter); f != "" {
+		args = append(args, "--filter", f)
+	}
+	if opts.Submodules {
+		args = append(args, "--recurse-submodules")
+	}
 	args = append(args, opts.URL, opts.Path)
 
 	auth := mergeInsecure(opts.Auth, opts.InsecureSkipTLS)

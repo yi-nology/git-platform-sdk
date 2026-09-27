@@ -108,6 +108,11 @@ type PlatformRepo struct {
 	DefaultBranch string   `json:"default_branch"`
 	Private       bool     `json:"private"`
 	Platform      Platform `json:"platform"`
+	// 仓库元数据(用于导入过滤:排除 archived/fork、按 star/语言过滤)
+	Archived bool   `json:"archived,omitempty"`
+	Fork     bool   `json:"fork,omitempty"`
+	Stars    int    `json:"stars,omitempty"`
+	Language string `json:"language,omitempty"`
 }
 
 // CRState represents the state of a change request.
