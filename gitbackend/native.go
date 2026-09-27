@@ -214,15 +214,7 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) {
 			// %q keeps a caller-supplied key path from being interpreted by
 			// the shell GIT_SSH_COMMAND runs under (spaces, $, backticks).
 			sshCmd := fmt.Sprintf("ssh -i %q -o BatchMode=yes", auth.SSHKey)
-			if auth.InsecureSkipTLS {
-				// Explicit opt-out: accept any host key, keep no record.
-				sshCmd += " -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-			} else {
-				// Secure default: verify against the user's known_hosts and
-				// auto-accept new hosts on first use (MITM on a known host
-				// still fails hard).
-				sshCmd += " -o StrictHostKeyChecking=accept-new"
-			}
+			sshCmd += " " + sshHostKeyArgs(auth)
 			cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
 		}
 	}
@@ -258,4 +250,30 @@ func isText(data []byte) bool {
 		}
 	}
 	return utf8.Valid(data)
+}
+
+// sshHostKeyArgs 按 AuthConfig 生成 ssh 主机密钥校验参数。
+// 优先级:InsecureSkipTLS > HostKeyFingerprint(known_hosts 禁用) > KnownHostsPath/默认。
+func sshHostKeyArgs(auth AuthConfig) string {
+	if auth.InsecureSkipTLS {
+		return "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+	}
+	// 指纹钉扎:禁用 known_hosts 自动信任,由应用层校验指纹
+	// (native git 走 ssh 命令,指纹校验在 gogit 路径完整;这里用
+	//  StrictHostKeyChecking=yes + 自定义 known_hosts 作为第二道防线)
+	if fp := strings.TrimSpace(auth.HostKeyFingerprint); fp != "" {
+		// 生成仅含期望指纹的临时 known_hosts 太重;用 yes + 指定文件,
+		// 由调用方把钉扎主机写进 KnownHostsPath。
+		if auth.KnownHostsPath != "" {
+			return fmt.Sprintf("-o StrictHostKeyChecking=yes -o UserKnownHostsFile=%q", auth.KnownHostsPath)
+		}
+		return "-o StrictHostKeyChecking=yes"
+	}
+	if auth.KnownHostsPath != "" {
+		return fmt.Sprintf("-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=%q", auth.KnownHostsPath)
+	}
+	// Secure default: verify against the user's known_hosts and
+	// auto-accept new hosts on first use (MITM on a known host
+	// still fails hard).
+	return "-o StrictHostKeyChecking=accept-new"
 }

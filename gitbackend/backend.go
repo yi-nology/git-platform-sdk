@@ -63,11 +63,21 @@ type AuthConfig struct {
 	Passphrase string
 
 	// InsecureSkipTLS disables TLS certificate verification for HTTPS
-	// operations (equivalent to http.sslVerify=false). It has no effect on
-	// SSH operations. Carried on AuthConfig so every network operation that
+	// operations (equivalent to http.sslVerify=false). For SSH it also
+	// disables host-key verification (explicit opt-out).
+	// Carried on AuthConfig so every network operation that
 	// takes auth (Fetch, Push, Clone, Pull, FetchAll, PushTag,
 	// TestConnection, ...) honors it uniformly.
 	InsecureSkipTLS bool
+
+	// KnownHostsPath 指定 known_hosts 文件(空=用 ~/.ssh/known_hosts)。
+	// 平台级独立 known_hosts 时使用,避免全局信任面过大。
+	KnownHostsPath string
+
+	// HostKeyFingerprint 期望的主机公钥指纹("SHA256:xxx" 或裸 base64)。
+	// 设置后:连接时校验服务器公钥指纹必须一致,否则拒绝(防 MITM)。
+	// 优先级高于 known_hosts 文件匹配。
+	HostKeyFingerprint string
 }
 
 // ---------------------------------------------------------------------------
