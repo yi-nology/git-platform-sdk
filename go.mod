@@ -13,7 +13,7 @@ require (
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/stretchr/testify v1.12.1
 	github.com/yi-nology/go-gitcode v0.7.2
-	gitlab.com/gitlab-org/api/client-go/v3 v3.12.0
+	gitlab.com/gitlab-org/api/client-go/v3 v3.13.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.37.0
 )
