@@ -112,8 +112,12 @@ func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo str
 				NewLine:      gitlab.Ptr(line),
 			},
 		}
-		// 单条失败 best-effort 跳过：行号不在 hunk / 文件二进制等，不该拖垮整轮评审
-		_, _, _ = p.client.Discussions.CreateMergeRequestDiscussion(pidOf(owner, repo), iid, opt, gitlab.WithContext(ctx))
+		// 单条失败 best-effort 跳过：行号不在 hunk / 文件二进制等，不该拖垮整轮评审；
+		// 但必须留痕——否则调用方行内全丢还以为发出去了（v0.65.1 实测教训）
+		if _, _, err := p.client.Discussions.CreateMergeRequestDiscussion(pidOf(owner, repo), iid, opt, gitlab.WithContext(ctx)); err != nil {
+			p.logger.Warn("gitlab.CreateReview: inline discussion skipped",
+				"path", c.Path, "line", c.Line, "error", err.Error())
+		}
 	}
 	return p.createNoteReview(ctx, owner, repo, iid, opts)
 }
