@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
@@ -98,22 +100,53 @@ func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo str
 			errors.New("mr diff_refs 缺失，无法定位行内评论"))
 	}
 	p.logger.Info("gitlab.CreateReview: inline comments path", "comments", len(opts.Comments))
+	// diff 感知定位（v0.66.0）：模型行号来自 get_file 全文（文件级行号），而
+	// GitLab position 只接受 hunk 内的行——只传 new_line 遇上下文行/非 hunk 行
+	// 会 400 "must be a valid line code"（v0.65 实测）。拉一次 diffs 构建
+	// per-file 的 hunk 行集与 new→old 映射：
+	//   行 ∈ hunk → 精确行级 position（new_line + 推导的 old_line）；
+	//   文件在 diff 但行 ∉ hunk → file 级 position（评论仍挂在 diff 视图该文件下）；
+	//   文件不在 diff → 跳过（调用方 poster 的文件级预校验已拦，双保险）。
+	hunks := p.mrDiffHunks(ctx, owner, repo, iid)
 	posType := "text"
+	fileType := "file"
 	for _, c := range opts.Comments {
 		if c.Path == "" || c.Line <= 0 || c.Body == "" {
 			continue
 		}
 		path, line, body := c.Path, int64(c.Line), c.Body
+		position := &gitlab.PositionOptions{
+			BaseSHA:      gitlab.Ptr(refs.BaseSha),
+			HeadSHA:      gitlab.Ptr(refs.HeadSha),
+			StartSHA:     gitlab.Ptr(refs.StartSha),
+			PositionType: gitlab.Ptr(posType),
+			NewPath:      gitlab.Ptr(path),
+			OldPath:      gitlab.Ptr(path),
+		}
+		if h, ok := hunks[path]; ok {
+			if old, in := h.newToOld[int(line)]; in {
+				// hunk 内：行级 position。上下文行必须带 old_line（服务端据此
+				// 生成 line_code）；纯新增行 old_line 置 0 不传。
+				position.NewLine = gitlab.Ptr(line)
+				if old > 0 {
+					position.OldLine = gitlab.Ptr(int64(old))
+				}
+			} else {
+				// 行不在 hunk：file 级 position（不 400，评论挂文件下）
+				position.PositionType = gitlab.Ptr(fileType)
+				position.NewLine = nil
+				p.logger.Info("gitlab.CreateReview: line not in hunk, file-level position",
+					"path", c.Path, "line", c.Line)
+			}
+		} else {
+			// 文件不在 diff：跳过（错误行/未变更文件——不可定位也不该挂）
+			p.logger.Warn("gitlab.CreateReview: file not in diff, skipped",
+				"path", c.Path, "line", c.Line)
+			continue
+		}
 		opt := &gitlab.CreateMergeRequestDiscussionOptions{
-			Body: gitlab.Ptr(body),
-			Position: &gitlab.PositionOptions{
-				BaseSHA:      gitlab.Ptr(refs.BaseSha),
-				HeadSHA:      gitlab.Ptr(refs.HeadSha),
-				StartSHA:     gitlab.Ptr(refs.StartSha),
-				PositionType: gitlab.Ptr(posType),
-				NewPath:      gitlab.Ptr(path),
-				NewLine:      gitlab.Ptr(line),
-			},
+			Body:     gitlab.Ptr(body),
+			Position: position,
 		}
 		// 单条失败 best-effort 跳过：行号不在 hunk / 文件二进制等，不该拖垮整轮评审；
 		// 但必须留痕——否则调用方行内全丢还以为发出去了（v0.65.1 实测教训）
@@ -123,6 +156,67 @@ func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo str
 		}
 	}
 	return p.createNoteReview(ctx, owner, repo, iid, opts)
+}
+
+// mrDiffHunk 单文件 diff 的行定位信息：hunk 内 new 行号 → old 行号映射
+// （上下文行 old/new 同步推进；纯 + 行 old=0；纯 - 行不入映射）。
+type mrDiffHunk struct {
+	newToOld map[int]int
+}
+
+// mrDiffHunks 拉 MR 全部文件 diff 并解析 hunk 行映射（一次调用，供本任务
+// 全部行内评论共用）。解析失败返回空 map——调用方对未知文件走 skip 分支。
+func (p *Provider) mrDiffHunks(ctx context.Context, owner, repo string, iid int64) map[string]mrDiffHunk {
+	out := map[string]mrDiffHunk{}
+	diffs, _, err := p.client.MergeRequests.ListMergeRequestDiffs(pidOf(owner, repo), iid,
+		&gitlab.ListMergeRequestDiffsOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, gitlab.WithContext(ctx))
+	if err != nil {
+		p.logger.Warn("gitlab.CreateReview: 拉取 MR diffs 失败，行内定位退化为保守模式",
+			"error", err.Error())
+		return out
+	}
+	for _, d := range diffs {
+		out[d.NewPath] = parseDiffHunk(d.Diff)
+	}
+	return out
+}
+
+// parseDiffHunk 单文件 unified diff 解析（纯函数，单测钉住）：hunk 内
+// new 行号 → old 行号映射。上下文行同步推进；纯 + 行 old=0；纯 - 行不占
+// new 号；"\" 行（no newline 标记）忽略；hunk 间计数重置。
+func parseDiffHunk(diff string) mrDiffHunk {
+	h := mrDiffHunk{newToOld: map[int]int{}}
+	oldLn, newLn := 0, 0
+	inHunk := false
+	for _, line := range strings.Split(diff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "@@"):
+			if m := hunkHeaderRe.FindStringSubmatch(line); m != nil {
+				inHunk = true
+				oldLn, _ = strconv.Atoi(m[1])
+				newLn, _ = strconv.Atoi(m[2])
+				// hunk 头行号是首行行号，先回退一格让后续逐行 ++ 从首行开始
+				oldLn--
+				newLn--
+			} else {
+				inHunk = false
+			}
+		case !inHunk:
+			// 文件头（---/+++/index）忽略
+		case strings.HasPrefix(line, "+"):
+			newLn++
+			h.newToOld[newLn] = 0
+		case strings.HasPrefix(line, "-"):
+			oldLn++
+		case strings.HasPrefix(line, "\\"):
+			// "\ No newline at end of file" 不计数
+		default: // 上下文行
+			newLn++
+			oldLn++
+			h.newToOld[newLn] = oldLn
+		}
+	}
+	return h
 }
 
 // createNoteReview 纯评论评审（无行内时的原路径）。
@@ -217,3 +311,6 @@ func convertNoteReviewResult(note *gitlab.Note) *provider.ReviewResult {
 }
 
 var _ provider.ReviewManager = (*Provider)(nil)
+
+// hunkHeaderRe unified diff hunk 头：@@ -old[,n] +new[,n] @@（后缀函数上下文忽略）。
+var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
