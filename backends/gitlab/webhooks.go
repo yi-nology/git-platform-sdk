@@ -129,7 +129,12 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			} `json:"diff_refs"`
 			CreatedAt time.Time `json:"created_at"`
 			UpdatedAt time.Time `json:"updated_at"`
+			SHA       string    `json:"sha"`
+			Status    string    `json:"status"`
 		} `json:"object_attributes"`
+		MergeRequest struct {
+			IID int64 `json:"iid"`
+		} `json:"merge_request"`
 		Ref   string `json:"ref"`
 		After string `json:"after"`
 	}
@@ -190,6 +195,24 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case "tag_push":
 		event.Type = "tag.created"
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
+	case "pipeline":
+		// Pipeline Hook（v0.67.0）：只把失败终态送进事件流——成功/运行中对
+		// CI 失败归因场景是噪声。pipeline 的 sha 取 object_attributes.sha
+		//（merge_request 关联字段仅在 MR hook 出现，pipeline hook 用
+		// merge_request.iid 若有则带出，供评论回帖定位）。
+		status := pl.ObjectAttributes.Status
+		if status != "failed" && status != "canceled" {
+			return nil, nil
+		}
+		event.Type = "pipeline." + status
+		event.Action = status
+		event.CommitSHA = pl.ObjectAttributes.SHA
+		if pl.MergeRequest.IID != 0 {
+			event.CR = &provider.ChangeRequest{
+				ID:     pl.MergeRequest.IID,
+				Number: strconv.FormatInt(pl.MergeRequest.IID, 10),
+			}
+		}
 	case "note":
 		if pl.ObjectAttributes.IID != 0 {
 			event.Type = "cr.note"
