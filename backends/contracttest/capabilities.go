@@ -43,55 +43,31 @@ func testCapabilities(t *testing.T, h Harness) {
 
 	// Declared capabilities must always type-assert, and implemented ones
 	// must be declared — both directions, uniformly across capabilities.
-	if caps.Issues != issuesImpl {
-		t.Errorf("Capabilities().Issues = %v, but IssueManager type assertion = %v; declaration and implementation have drifted", caps.Issues, issuesImpl)
-	}
-	if caps.Search != searchImpl {
-		t.Errorf("Capabilities().Search = %v, but SearchManager type assertion = %v; declaration and implementation have drifted", caps.Search, searchImpl)
-	}
-	if caps.Labels != labelsImpl {
-		t.Errorf("Capabilities().Labels = %v, but LabelManager type assertion = %v; declaration and implementation have drifted", caps.Labels, labelsImpl)
-	}
-	if caps.Reviews != reviewsImpl {
-		t.Errorf("Capabilities().Reviews = %v, but ReviewManager type assertion = %v; declaration and implementation have drifted", caps.Reviews, reviewsImpl)
-	}
-	if caps.Milestones != milestonesImpl {
-		t.Errorf("Capabilities().Milestones = %v, but MilestoneManager type assertion = %v; declaration and implementation have drifted", caps.Milestones, milestonesImpl)
-	}
-	if caps.CommitStatuses != commitStatusesImpl {
-		t.Errorf("Capabilities().CommitStatuses = %v, but CommitStatusManager type assertion = %v; declaration and implementation have drifted", caps.CommitStatuses, commitStatusesImpl)
-	}
-	if caps.Notifications != notificationsImpl {
-		t.Errorf("Capabilities().Notifications = %v, but NotificationManager type assertion = %v; declaration and implementation have drifted", caps.Notifications, notificationsImpl)
-	}
-	if caps.Reactions != reactionsImpl {
-		t.Errorf("Capabilities().Reactions = %v, but ReactionManager type assertion = %v; declaration and implementation have drifted", caps.Reactions, reactionsImpl)
-	}
-	if caps.BranchProtections != branchProtectionsImpl {
-		t.Errorf("Capabilities().BranchProtections = %v, but BranchProtectionManager type assertion = %v; declaration and implementation have drifted", caps.BranchProtections, branchProtectionsImpl)
-	}
-	if caps.Collaborators != collaboratorsImpl {
-		t.Errorf("Capabilities().Collaborators = %v, but CollaboratorManager type assertion = %v; declaration and implementation have drifted", caps.Collaborators, collaboratorsImpl)
-	}
-	if caps.DeployKeys != deployKeysImpl {
-		t.Errorf("Capabilities().DeployKeys = %v, but DeploymentKeyManager type assertion = %v; declaration and implementation have drifted", caps.DeployKeys, deployKeysImpl)
-	}
-	if caps.RepoStats != repoStatsImpl {
-		t.Errorf("Capabilities().RepoStats = %v, but RepoStatsManager type assertion = %v; declaration and implementation have drifted", caps.RepoStats, repoStatsImpl)
-	}
-	if caps.Users != usersImpl {
-		t.Errorf("Capabilities().Users = %v, but UserManager type assertion = %v; declaration and implementation have drifted", caps.Users, usersImpl)
-	}
-	if caps.Gists != gistsImpl {
-		t.Errorf("Capabilities().Gists = %v, but GistManager type assertion = %v; declaration and implementation have drifted", caps.Gists, gistsImpl)
-	}
-	if caps.Starred != starredImpl {
-		t.Errorf("Capabilities().Starred = %v, but StarredManager type assertion = %v; declaration and implementation have drifted", caps.Starred, starredImpl)
-	}
-	if caps.Migrations != migrationsImpl {
-		t.Errorf("Capabilities().Migrations = %v, but MigrationManager type assertion = %v; declaration and implementation have drifted", caps.Migrations, migrationsImpl)
-	}
-	if caps.ReleaseAssets != releaseAssetsImpl {
-		t.Errorf("Capabilities().ReleaseAssets = %v, but ReleaseAssetManager type assertion = %v; declaration and implementation have drifted", caps.ReleaseAssets, releaseAssetsImpl)
+	assertCap(t, "Issues", "IssueManager", caps.Issues, issuesImpl)
+	assertCap(t, "Search", "SearchManager", caps.Search, searchImpl)
+	assertCap(t, "Labels", "LabelManager", caps.Labels, labelsImpl)
+	assertCap(t, "Reviews", "ReviewManager", caps.Reviews, reviewsImpl)
+	assertCap(t, "Milestones", "MilestoneManager", caps.Milestones, milestonesImpl)
+	assertCap(t, "CommitStatuses", "CommitStatusManager", caps.CommitStatuses, commitStatusesImpl)
+	assertCap(t, "Notifications", "NotificationManager", caps.Notifications, notificationsImpl)
+	assertCap(t, "Reactions", "ReactionManager", caps.Reactions, reactionsImpl)
+	assertCap(t, "BranchProtections", "BranchProtectionManager", caps.BranchProtections, branchProtectionsImpl)
+	assertCap(t, "Collaborators", "CollaboratorManager", caps.Collaborators, collaboratorsImpl)
+	assertCap(t, "DeployKeys", "DeploymentKeyManager", caps.DeployKeys, deployKeysImpl)
+	assertCap(t, "RepoStats", "RepoStatsManager", caps.RepoStats, repoStatsImpl)
+	assertCap(t, "Users", "UserManager", caps.Users, usersImpl)
+	assertCap(t, "Gists", "GistManager", caps.Gists, gistsImpl)
+	assertCap(t, "Starred", "StarredManager", caps.Starred, starredImpl)
+	assertCap(t, "Migrations", "MigrationManager", caps.Migrations, migrationsImpl)
+	assertCap(t, "ReleaseAssets", "ReleaseAssetManager", caps.ReleaseAssets, releaseAssetsImpl)
+}
+
+// assertCap fails the test when a declared capability and the concrete
+// type's optional-interface implementation disagree in either direction.
+func assertCap(t *testing.T, capName, ifaceName string, declared, implemented bool) {
+	t.Helper()
+	if declared != implemented {
+		t.Errorf("Capabilities().%s = %v, but %s type assertion = %v; declaration and implementation have drifted",
+			capName, declared, ifaceName, implemented)
 	}
 }

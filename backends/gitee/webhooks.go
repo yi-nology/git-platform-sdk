@@ -145,7 +145,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		UpdatedAt time.Time `json:"updated_at"`
 		// note hooks: the comment body and its target kind.
 		Note         string `json:"note"`
-		NoteableType string `json:"noteable_type"`
+		NoteableType string `json:"noteable_type"` //nolint:misspell // 平台 webhook 原始字段名
 		// issue hooks: the issue object (Gitee numbers are alphanumeric).
 		Issue *struct {
 			Number  string `json:"number"`

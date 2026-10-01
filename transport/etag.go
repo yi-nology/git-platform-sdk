@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/hashicorp/golang-lru/v2"
+	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 // DefaultETagEntries is the default maximum number of responses kept in an
@@ -146,13 +146,13 @@ func (c *ETagCache) process(req *http.Request, resp *http.Response, body []byte)
 	if c == nil || resp == nil {
 		return resp, body
 	}
-	switch {
-	case resp.StatusCode == http.StatusNotModified:
+	switch resp.StatusCode {
+	case http.StatusNotModified:
 		if e, ok := c.entries.Get(etagKey(req)); ok {
 			out := e.synthesize(req)
 			return out, e.body
 		}
-	case resp.StatusCode == http.StatusOK:
+	case http.StatusOK:
 		c.store(req, resp, body)
 	}
 	return resp, body

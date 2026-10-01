@@ -133,7 +133,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			Status    string    `json:"status"`
 			// Note hook: object_attributes is the note itself.
 			Note         string `json:"note"`
-			NoteableType string `json:"noteable_type"`
+			NoteableType string `json:"noteable_type"` //nolint:misspell // 平台 webhook 原始字段名
 		} `json:"object_attributes"`
 		MergeRequest struct {
 			IID int64 `json:"iid"`
@@ -225,7 +225,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			}
 		}
 	case "note":
-		// Note hook: object_attributes is the note; the noteable target
+		// Note hook: object_attributes is the note; the referenced target
 		// rides along as a top-level issue or merge_request object. The
 		// canonical type is comment.created regardless of the target —
 		// consumers branch on which of CR/Issue is populated.

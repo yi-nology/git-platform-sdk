@@ -83,7 +83,7 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 	return EnsureUpdated, hook, nil
 }
 
-func equalEvents(a []string, sortedB []string) bool {
+func equalEvents(a, sortedB []string) bool {
 	sa := slices.Clone(a)
 	slices.Sort(sa)
 	return slices.Equal(sa, sortedB)

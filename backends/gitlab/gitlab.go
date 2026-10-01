@@ -93,7 +93,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// Bearer auth (e.g. GitLab CI_JOB_TOKEN). The deprecated
 		// NewOAuthClient is replaced by NewAuthSourceClient per the
 		// client-go v2.60 guidance.
-		var ts oauth2.TokenSource = oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cfg.Token})
+		var ts = oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cfg.Token})
 		if cfg.TokenSource != nil {
 			ts = providerTokenSource{src: cfg.TokenSource}
 		}

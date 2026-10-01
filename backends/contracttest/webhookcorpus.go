@@ -64,59 +64,66 @@ func RunWebhookCorpus(t *testing.T, platform provider.Platform, parser WebhookPa
 		}
 		ran++
 		t.Run(strings.TrimSuffix(name, ".json"), func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join(dir, name))
-			if err != nil {
-				t.Fatalf("read fixture: %v", err)
-			}
-			var fx struct {
-				Headers map[string]string `json:"headers"`
-				Body    json.RawMessage   `json:"body"`
-			}
-			if err := json.Unmarshal(raw, &fx); err != nil {
-				t.Fatalf("decode fixture: %v", err)
-			}
-			body, err := json.Marshal(fx.Body)
-			if err != nil {
-				t.Fatalf("encode body: %v", err)
-			}
-
-			req := httptest.NewRequest(http.MethodPost, "/hook", bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
-			for k, val := range fx.Headers {
-				req.Header.Set(k, val)
-			}
-			if v != nil {
-				signRequest(req, v, body, corpusSecret)
-			}
-
-			ev, err := parser.ParseWebhookEvent(req, corpusSecret)
-			if err != nil {
-				t.Fatalf("ParseWebhookEvent: %v", err)
-			}
-			if ev == nil {
-				t.Fatal("ParseWebhookEvent returned a nil event (fixture dropped)")
-			}
-			got := normalizeForGolden(t, ev)
-
-			goldenPath := filepath.Join(dir, strings.TrimSuffix(name, ".json")+".golden.json")
-			if *corpusUpdate {
-				if err := os.WriteFile(goldenPath, got, 0o644); err != nil {
-					t.Fatalf("write golden: %v", err)
-				}
-				return
-			}
-			want, err := os.ReadFile(goldenPath)
-			if err != nil {
-				t.Fatalf("read golden (run with -corpus-update to create): %v", err)
-			}
-			if !bytes.Equal(bytes.TrimSpace(want), bytes.TrimSpace(got)) {
-				t.Fatalf("normalized event drifted from golden.\n--- golden ---\n%s\n--- got ---\n%s",
-					strings.TrimSpace(string(want)), string(got))
-			}
+			runCorpusFixture(t, v, parser, dir, name)
 		})
 	}
 	if ran == 0 {
 		t.Fatalf("no fixtures found in %s", dir)
+	}
+}
+
+// runCorpusFixture executes one corpus fixture: decode, sign, parse,
+// normalize, and compare against (or rewrite) the golden file.
+func runCorpusFixture(t *testing.T, v provider.WebhookValidator, parser WebhookParser, dir, name string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var fx struct {
+		Headers map[string]string `json:"headers"`
+		Body    json.RawMessage   `json:"body"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	body, err := json.Marshal(fx.Body)
+	if err != nil {
+		t.Fatalf("encode body: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/hook", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	for k, val := range fx.Headers {
+		req.Header.Set(k, val)
+	}
+	if v != nil {
+		signRequest(req, v, body, corpusSecret)
+	}
+
+	ev, err := parser.ParseWebhookEvent(req, corpusSecret)
+	if err != nil {
+		t.Fatalf("ParseWebhookEvent: %v", err)
+	}
+	if ev == nil {
+		t.Fatal("ParseWebhookEvent returned a nil event (fixture dropped)")
+	}
+	got := normalizeForGolden(t, ev)
+
+	goldenPath := filepath.Join(dir, strings.TrimSuffix(name, ".json")+".golden.json")
+	if *corpusUpdate {
+		if err := os.WriteFile(goldenPath, got, 0o600); err != nil {
+			t.Fatalf("write golden: %v", err)
+		}
+		return
+	}
+	want, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden (run with -corpus-update to create): %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(want), bytes.TrimSpace(got)) {
+		t.Fatalf("normalized event drifted from golden.\n--- golden ---\n%s\n--- got ---\n%s",
+			strings.TrimSpace(string(want)), string(got))
 	}
 }
 
