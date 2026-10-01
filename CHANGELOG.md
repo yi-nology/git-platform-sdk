@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.0] - 2026-10-01
+
+### Added
+
+- **native 后端 SSH 指纹钉扎真正生效**（`HostKeyFingerprint`）：
+  - 此前 native 路径的钉扎只退化为 `StrictHostKeyChecking=yes` + 已有
+    known_hosts，指纹从未被比对；gogit 路径却严格匹配——同一配置两个
+    后端语义不一致，native 用户"钉了个寂寞"
+  - 现在跑 git 前解析本次命令要连的主机（argv 的 ssh:// URL，或经
+    `git remote get-url` 解析 remote，支持 `fetch --all` 多 remote），
+    `ssh-keyscan` 抓公钥、在 Go 里比对 SHA256 指纹，匹配的行写入
+    `0600` 临时 known_hosts（用后即删），git 强制校验
+  - **fail-closed**：联网命令解析不出主机、keyscan 不可用、指纹零匹配
+    （可能 MITM/pin 过期）均直接报错；非联网子命令（status 等）不受影响
+  - TOFU-then-pin：密钥经网络获得后立即与钉扎比对，MITM 假密钥不会命中
+  - 端到端测试内嵌 x/crypto/ssh 服务端 + 真实 ssh-keyscan（正向/反向/
+    remote 解析/clone argv 四路）
+
 ## [0.69.0] - 2026-10-01
 
 ### Changed

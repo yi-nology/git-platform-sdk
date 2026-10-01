@@ -138,10 +138,18 @@ func (b *NativeGitBackend) runGitEnv(ctx context.Context, repoPath string, args 
 
 	// resolveAuth may create a temp key file for SSHKeyContent; cleanup after run.
 	resolvedAuth, cleanupKey := b.resolveAuth(auth)
+	// SSH 指纹钉扎（native 路径 v0.70.0 起真正校验）：keyscan 预校验 +
+	// 临时 known_hosts；fail-closed——指纹不匹配/无法校验直接报错。
+	pinAuth, cleanupPin, pinErr := b.resolveSSHPin(ctx, repoPath, args, resolvedAuth)
+	if pinErr != nil {
+		cleanupKey()
+		return "", "", pinErr
+	}
 	// configureAuth creates an ephemeral credential helper session for tokens;
 	// cleanup removes the temp token/script dir.
-	cleanupCred := b.configureAuth(cmd, resolvedAuth)
+	cleanupCred := b.configureAuth(cmd, pinAuth)
 	defer cleanupKey()
+	defer cleanupPin()
 	defer cleanupCred()
 
 	if len(extraEnv) > 0 {
@@ -280,7 +288,10 @@ func isText(data []byte) bool {
 }
 
 // sshHostKeyArgs 按 AuthConfig 生成 ssh 主机密钥校验参数。
-// 优先级:InsecureSkipTLS > HostKeyFingerprint(known_hosts 禁用) > KnownHostsPath/默认。
+// 优先级:InsecureSkipTLS > HostKeyFingerprint(经 resolveSSHPin 物化为
+// 临时 known_hosts 后转写到这里) > KnownHostsPath/默认。
+// 注:带 HostKeyFingerprint 到达这里的只剩"未经过 pin 预校验"的路径
+// (如 resolveSSHPin 判定不适用),维持旧的 strict+known_hosts 行为。
 func sshHostKeyArgs(auth AuthConfig) string {
 	if auth.InsecureSkipTLS {
 		return "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
