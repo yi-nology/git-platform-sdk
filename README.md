@@ -22,6 +22,10 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
 - **Capability-gated optional APIs** — 13 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
 - **CI failure diagnostics** — `CILogManager` (GitLab) returns failed jobs with the tail of their execution logs, sized for LLM consumption
 - **Agent/automation primitives** — `WaitForCommitStatus` (CI gates), bounded-concurrency batch file reads, field `projection` to shrink payloads before feeding LLMs
+- **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider
+- **Conditional requests** — opt-in `Config.ConditionalRequests` sends `If-None-Match` and replays cached 304s as 200s; on GitHub, 304s don't count against the rate-limit budget
+- **Idempotent ensure-helpers** — `EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey` converge desired state (created/updated/unchanged), safe to re-run
+- **Webhook event corpus** — per-backend golden fixtures pin the normalized event vocabulary (`cr./push/tag./branch./issue./comment.`) across all seven platforms
 - **Secure by default**
   - HTTPS tokens reach git via an **ephemeral credential helper** — never in argv or the child process environment, never persisted to the host credential store
   - SSH **host-key fingerprint pinning** enforced on both git backends (keyscan pre-verification, fail-closed)
@@ -95,6 +99,10 @@ if caps := p.Capabilities(); caps.Reviews {
 | DeployKeys | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `DeploymentKeyManager` |
 | RepoStats | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `RepoStatsManager` |
 | Users | — | ✅ | — | — | — | — | ✅ | `UserManager` |
+| Gists | ✅ | — | — | — | — | — | — | `GistManager` |
+| Starred | ✅ | — | — | — | — | — | — | `StarredManager` |
+| Migrations | ✅ | — | — | — | — | — | — | `MigrationManager` |
+| ReleaseAssets | ✅ | — | — | — | — | — | — | `ReleaseAssetManager` |
 | CI failure logs | — | ✅ | — | — | — | — | — | `CILogManager` (type-assert only) |
 
 The matrix stays honest: `examples/capabilities` probes every declared capability with read-only calls (`PLATFORM=gitea PLATFORM_TOKEN=xxx OWNER=o REPO=r go run ./examples/capabilities`).
@@ -123,7 +131,11 @@ The matrix stays honest: `examples/capabilities` probes every declared capabilit
 - **契约测试** (`backends/contracttest/`): 跨平台统一测试套件, 确保接口行为一致
 - **分歧台账** (`Divergence`): 每个后端把与统一语义的偏离 (stub/ignore/mapping/detour) 机器可读地登记, 由 `Provider.Divergences()` 与 `provider.Ignores` 等谓词暴露; 渲染文档在 [docs/divergence-ledger.md](docs/divergence-ledger.md), 编辑后用 `go generate ./...` 再生成。契约套件会在台账与实际行为漂移时失败
 - **错误归一** (`provider.ProviderError`): 自动从 4 种来源 (StatusCode 方法/字段, `*http.Response` 字段, 错误字符串) 提取 HTTP 状态码
-- **主动限流** (`transport.RateLimiter`): 跟踪 `X-RateLimit-*` 响应头, 在撞限前自适应节流 (含并发预约定, 避免惊群)
+- **主动限流** (`transport.RateLimiter`): 跟踪 `X-RateLimit-*` 响应头, 在撞限前自适应节流 (含并发预约定, 避免惊群); 限流类错误携带 `Retry-After`/`ResetAt` 恢复窗口 (`provider.RateLimitRecovery`)
+- **可刷新凭证** (`Config.TokenSource`): transport 层每请求取 token, GitHub App installation token / OAuth 轮换类凭证下一次请求即生效
+- **ETag 条件请求** (`Config.ConditionalRequests`, 默认关): GET 自动 `If-None-Match`, 304 透明回放缓存的 200 —— 轮询型负载在 GitHub 上不消耗限流配额
+- **期望态助手**: `EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey` 幂等收敛 (created/updated/unchanged)
+- **版本可观测**: `provider.Version()` + 默认 `User-Agent: ...go-git-platform/<ver>` 产品标识; `transport/metrics` 零依赖观测接口 (Recorder/ResponseHook/ClassifyPath)
 - **安全默认**:
   - HTTPS 令牌经**临时 credential helper** 注入 git —— 不进 argv、不进子进程环境变量、绝不落盘到主机凭证库 (钥匙串/~/.git-credentials)
   - SSH **主机密钥指纹钉扎** 在两个后端都真正生效 (native 走 keyscan 预校验 + 临时 known_hosts, fail-closed; gogit 内存中直接比对)

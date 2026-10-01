@@ -36,6 +36,10 @@ func testCapabilities(t *testing.T, h Harness) {
 	_, deployKeysImpl := p.(provider.DeploymentKeyManager)
 	_, repoStatsImpl := p.(provider.RepoStatsManager)
 	_, usersImpl := p.(provider.UserManager)
+	_, gistsImpl := p.(provider.GistManager)
+	_, starredImpl := p.(provider.StarredManager)
+	_, migrationsImpl := p.(provider.MigrationManager)
+	_, releaseAssetsImpl := p.(provider.ReleaseAssetManager)
 
 	// Declared capabilities must always type-assert, and implemented ones
 	// must be declared — both directions, uniformly across capabilities.
@@ -77,5 +81,17 @@ func testCapabilities(t *testing.T, h Harness) {
 	}
 	if caps.Users != usersImpl {
 		t.Errorf("Capabilities().Users = %v, but UserManager type assertion = %v; declaration and implementation have drifted", caps.Users, usersImpl)
+	}
+	if caps.Gists != gistsImpl {
+		t.Errorf("Capabilities().Gists = %v, but GistManager type assertion = %v; declaration and implementation have drifted", caps.Gists, gistsImpl)
+	}
+	if caps.Starred != starredImpl {
+		t.Errorf("Capabilities().Starred = %v, but StarredManager type assertion = %v; declaration and implementation have drifted", caps.Starred, starredImpl)
+	}
+	if caps.Migrations != migrationsImpl {
+		t.Errorf("Capabilities().Migrations = %v, but MigrationManager type assertion = %v; declaration and implementation have drifted", caps.Migrations, migrationsImpl)
+	}
+	if caps.ReleaseAssets != releaseAssetsImpl {
+		t.Errorf("Capabilities().ReleaseAssets = %v, but ReleaseAssetManager type assertion = %v; declaration and implementation have drifted", caps.ReleaseAssets, releaseAssetsImpl)
 	}
 }

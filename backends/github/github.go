@@ -19,6 +19,10 @@
 //   - reviews.go:  PR review list/get/create/dismiss/request-reviewers (ReviewManager)
 //   - milestones.go: repository milestone CRUD (MilestoneManager)
 //   - search.go:    global repo/issue/user search (SearchManager)
+//   - gists.go:      ListMyGists, token 用户的 gist 列表 (GistManager)
+//   - starred.go:    ListStarred, 认证用户 star 的仓库 (StarredManager)
+//   - migrations.go: CreateMigration/GetMigration, user/org 归档导出 (MigrationManager)
+//   - release_assets.go: DownloadReleaseAsset 流式下载附件 (ReleaseAssetManager)
 //   - types.go:    internal GitHub-API types and conversion helpers
 package github
 
@@ -106,10 +110,12 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitHub
 
 // Capabilities implements provider.Provider. GitHub implements the optional
 // LabelManager interface (see labels.go), the IssueManager interface
-// (see issues.go), the ReviewManager interface (see reviews.go), and the
-// SearchManager interface (see search.go).
+// (see issues.go), the ReviewManager interface (see reviews.go), the
+// SearchManager interface (see search.go), and the GitHub-only capabilities
+// GistManager (gists.go), StarredManager (starred.go), MigrationManager
+// (migrations.go), and ReleaseAssetManager (release_assets.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true, CommitStatuses: true, Notifications: true, Reactions: true, BranchProtections: true, Collaborators: true, DeployKeys: true, RepoStats: true}
+	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true, CommitStatuses: true, Notifications: true, Reactions: true, BranchProtections: true, Collaborators: true, DeployKeys: true, RepoStats: true, Gists: true, Starred: true, Migrations: true, ReleaseAssets: true}
 }
 
 // TestConnection implements provider.Provider.

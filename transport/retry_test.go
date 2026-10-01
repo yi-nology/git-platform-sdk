@@ -446,3 +446,287 @@ func TestRetry_DefaultConfigDisablesWriteRetries(t *testing.T) {
 		t.Error("RetryWrite must default to false: replaying writes is unsafe by default")
 	}
 }
+
+// --- GitHub-style rate-limit 403: retried only when the headers prove throttling ---
+
+// TestRetry_RateLimit403RetriesUntilSuccess covers the primary GitHub rate
+// limit: 403 + X-RateLimit-Remaining: 0 must be retried like a 429 and
+// eventually succeed.
+func TestRetry_RateLimit403RetriesUntilSuccess(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		if n < 3 {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Limit", "5000")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, None{})
+	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	resp, body, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200 after retries, got %d", resp.StatusCode)
+	}
+	if string(body) != "ok" {
+		t.Errorf("expected ok, got %q", body)
+	}
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Errorf("expected 3 calls (2 throttled 403 + success), got %d", got)
+	}
+}
+
+// TestRetry_Bare403NotRetried guards the permission-denial case: a 403 with
+// neither X-RateLimit-Remaining nor Retry-After is an authorization failure
+// and must never be replayed.
+func TestRetry_Bare403NotRetried(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"Resource not accessible by integration"}`))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, None{})
+	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	resp, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("bare 403 must not be retried: expected 1 attempt, got %d", got)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+// TestRetry_RateLimit403WithRemainingNonZeroNotRetried: a 403 that carries
+// the rate-limit header but with a non-zero remaining count is not the
+// primary rate limit, so it stays unretried.
+func TestRetry_RateLimit403WithRemainingNonZeroNotRetried(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("X-RateLimit-Remaining", "4999")
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, None{})
+	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	_, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("403 with non-zero remaining is not throttling: expected 1 attempt, got %d", got)
+	}
+}
+
+// TestRetry_RateLimit403RetryAfterZeroRetriesImmediately: Retry-After: 0
+// takes precedence over the exponential backoff, so the retry fires without
+// a measurable wait.
+func TestRetry_RateLimit403RetryAfterZeroRetriesImmediately(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, None{})
+	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: 100 * time.Millisecond, MaxDelay: time.Second}
+	start := time.Now()
+	resp, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200 after retry, got %d", resp.StatusCode)
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Errorf("expected 2 calls, got %d", got)
+	}
+	// Retry-After: 0 must win over the 100ms exponential base delay.
+	if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+		t.Errorf("Retry-After: 0 not honored: elapsed %v", elapsed)
+	}
+}
+
+// TestRetry_RateLimit403RetryAfterHonored verifies the Retry-After header is
+// preferred over the exponential backoff. Retry-After: 1 exceeds MaxDelay, so
+// the wait is clamped to the cap — still far longer than the ~1ms the
+// exponential path would produce, proving the header was used.
+func TestRetry_RateLimit403RetryAfterHonored(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, None{})
+	c.Retry = &RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: 50 * time.Millisecond}
+	start := time.Now()
+	resp, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	elapsed := time.Since(start)
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200 after retry, got %d", resp.StatusCode)
+	}
+	if elapsed < 40*time.Millisecond {
+		t.Errorf("Retry-After not honored: elapsed %v, want >= ~50ms cap", elapsed)
+	}
+}
+
+// TestRetry_RateLimit403PostNotRetried enforces the idempotency gate on the
+// new 403 path: even with rate-limit headers, a POST that already reached the
+// server must not be replayed (same rule as 429/5xx).
+func TestRetry_RateLimit403PostNotRetried(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, None{})
+	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/items", strings.NewReader(`{"k":"v"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, _, err := c.roundTripWithRetry(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("POST rate-limited 403 must not be replayed: expected 1 attempt, got %d", got)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected the 403 response, got %d", resp.StatusCode)
+	}
+}
+
+// TestRetryingRoundTripper_RateLimit403 covers the second execution path:
+// the RoundTripper wrapper used by third-party SDKs must apply the same
+// header-aware 403 logic.
+func TestRetryingRoundTripper_RateLimit403(t *testing.T) {
+	var calls int32
+	inner := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		n := atomic.AddInt32(&calls, 1)
+		h := make(http.Header)
+		status := http.StatusForbidden
+		if n == 2 {
+			status = http.StatusOK
+		} else {
+			h.Set("X-RateLimit-Remaining", "0")
+		}
+		return &http.Response{
+			StatusCode: status,
+			Body:       io.NopCloser(strings.NewReader("body")),
+			Header:     h,
+			Request:    req,
+		}, nil
+	})
+	rt := &retryingRoundTripper{
+		inner:  inner,
+		cfg:    &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},
+		logger: NoopLogger(),
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Errorf("expected 2 attempts (throttled 403 then success), got %d", got)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// TestRetryingRoundTripper_Bare403NotRetried: the RoundTripper path must
+// return a plain 403 on the first attempt.
+func TestRetryingRoundTripper_Bare403NotRetried(t *testing.T) {
+	var calls int32
+	inner := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		atomic.AddInt32(&calls, 1)
+		return &http.Response{
+			StatusCode: http.StatusForbidden,
+			Body:       io.NopCloser(strings.NewReader("denied")),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	})
+	rt := &retryingRoundTripper{
+		inner:  inner,
+		cfg:    &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},
+		logger: NoopLogger(),
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("bare 403 must not be retried: expected 1 attempt, got %d", got)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+// TestRetry_IsRateLimited403 unit-cases the header predicate. Headers are
+// built via Set so the keys get MIME-canonicalized, matching what net/http
+// produces when parsing a real response.
+func TestRetry_IsRateLimited403(t *testing.T) {
+	hdr := func(kv ...string) http.Header {
+		h := http.Header{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			h.Set(kv[i], kv[i+1])
+		}
+		return h
+	}
+	cases := []struct {
+		name   string
+		status int
+		header http.Header
+		want   bool
+	}{
+		{"403 remaining 0", 403, hdr("X-RateLimit-Remaining", "0"), true},
+		{"403 remaining 0 padded", 403, hdr("X-RateLimit-Remaining", " 0 "), true},
+		{"403 retry-after", 403, hdr("Retry-After", "1"), true},
+		{"403 bare", 403, http.Header{}, false},
+		{"403 remaining non-zero", 403, hdr("X-RateLimit-Remaining", "7"), false},
+		{"429 (status path handles it)", 429, http.Header{}, false},
+		{"404", 404, hdr("X-RateLimit-Remaining", "0"), false},
+		{"nil response", 0, nil, false},
+	}
+	for _, c := range cases {
+		var resp *http.Response
+		if c.status != 0 {
+			resp = &http.Response{StatusCode: c.status, Header: c.header}
+		}
+		if got := isRateLimited403(resp); got != c.want {
+			t.Errorf("%s: isRateLimited403 = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

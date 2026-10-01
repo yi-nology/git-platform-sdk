@@ -4,6 +4,77 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.72.0] - 2026-10-02
+
+### Added
+
+- **可刷新 `provider.TokenSource`**（`Config.TokenSource`，优先于 `Config.Token`）：
+  transport 层每请求取 token，GitHub App installation token / OAuth 轮换类凭证
+  下一次请求即生效；七个后端统一接线（工蜂 SDK 构造期需非空 token，占位符
+  由 RT 层每请求覆盖/清空）；`provider.StaticTokenSource` 提供静态等价物
+- **ETag 条件请求（`Config.ConditionalRequests`，默认关）**：GET 自动携带
+  `If-None-Match`，304 透明回放为缓存的 200（`Do` 与 SDK RoundTripper 双路径，
+  缓存键含 URL/Accept/Authorization，LRU+单条目体积上限，`Cache-Control:
+  no-store` 跳过）——轮询型负载（如 WaitForCommitStatus）在 GitHub 上不吃限流配额
+- **`EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey`** 期望态
+  收敛助手（created/updated/unchanged），幂等可重跑
+- **Webhook 事件语料库（golden）**：每后端 `testdata/webhooks/` 固定载荷 ×
+  规范化事件金样（`-corpus-update` 再生成），锁定 `cr./push/tag./branch./
+  issue./comment.` 词表的跨平台一致性
+- **`NormalizedEvent` 新增 `Issue` / `Comment` 字段**，七后端补齐 issue/comment
+  事件解析（GitHub IssuesEvent/IssueCommentEvent/PR review comment；GitLab
+  issue/note；Gitea/Forgejo/GitCode issues/issue_comment；Gitee Issue Hook/
+  note；工蜂 issue/note）
+- **版本戳与 User-Agent**：`provider.Version()`（buildinfo 解析，dev 回退），
+  transport 默认追加 `go-git-platform/<ver>` 产品标识（已有 UA 不覆盖）
+- **限流错误增富**：`transport.Error.RetryAfter/ResetAt`（Retry-After 与
+  X-RateLimit-Reset 解析）+ `Error.IsRateLimited()`（429 或 403+Remaining:0）；
+  `provider.RateLimitRecovery(err)` 一把取出恢复窗口
+- **`transport/metrics` 包**：零依赖观测接口（`Recorder` + `ResponseHook`
+  适配 + `ClassifyPath` 低基数路径模板），Prometheus/OTel 各自几行适配
+- **MCP**：`releases` toolset（`list_tags`/`list_releases`/`get_release`/
+  `create_release`(写)）；列表工具开放 `per_page`（1–100，默认 30）；
+  `--http :8080` 切换 streamable HTTP（端点 `/mcp`，可选 `--http-token`
+  Bearer 门禁）；server 版本号对齐主模块 `provider.Version()`
+- **契约测试新增两节**：`TokenSource_Rotation`（轮换按请求生效）与
+  `ConditionalRequests`（第二次 GET 恰好一次 304 回放）
+- **`provider` / `pkg/credential` 补包文档（doc.go）**
+- **provider 泛型分页 `ListAllPages[T]`**：循环翻页拉全量（短页即末页、
+  `maxPages` 安全上限、ctx 逐页取消），供下游替换手写 page++ 样板
+- **`githubapp` 顶层包**：GitHub App 凭证两步曲下沉——`MintJWT`（RS256，
+  iss=app_id，PKCS#1/#8 PEM）与 `FetchInstallationToken`（经
+  transport.Client 换 installation access token，自带重试/日志）
+- **四个 GitHub 专属可选能力**（接口在 provider，实现在 backends/github，
+  CapabilitySet 新增 Gists/Starred/Migrations/ReleaseAssets 四字段并登记
+  contract suite）：
+  - `GistManager.ListMyGists`——token 用户 gist 列表
+  - `StarredManager.ListStarred`——`/user/starred`，双形状响应兼容
+    （`star+json` 包裹与裸列表），返回统一 `PlatformRepo`
+  - `MigrationManager.CreateMigration/GetMigration`——GitHub Migration
+    API 用户级（org==""）与组织级两路径
+  - `ReleaseAssetManager.DownloadReleaseAsset`——附件流式下载
+    （302 跟随用裸 Client，签名 URL 不带 Bearer）
+  - `ReleaseInfo` 新增 `Assets []*ReleaseAsset`（ListReleases 即带附件元数据）
+
+### Changed
+
+- **Webhook 词表归一（行为变化）**：tag 事件统一 `tag.created`（GitCode/Gitee
+  此前发 `tag.push`；GitHub create/delete 按 `ref_type` 区分 tag/branch，此前
+  一律 branch.*；Gitea/Forgejo create 同样支持 `ref_type`）；GitLab note 事件
+  由非规范的 `cr.note` 改为 `comment.created`（CR/Issue 谁被评论看字段）
+- **Webhook 注册表 ↔ 后端签名校验对齐（修复三处静默漂移）**：Forgejo 注册表
+  改用双头 `ForgejoWebhookValidator`（X-Forgejo-Signature/X-Gitea-Signature）；
+  GitCode 注册表改用 `GitCodeWebhookValidator`（HMAC 双头或 X-GitCode-Token
+  静态）；Gitee 注册表在无时间戳时兼容后端 body-HMAC 方案；Gitea/Forgejo
+  后端校验容忍可选 `sha256=` 前缀
+- `NormalizeTagAction` 规范值改为 `created`（与三后端实际输出一致，原 `push`
+  无调用方）
+- **transport：GitHub 风格限流 403 纳入重试**——`403 +
+  X-RateLimit-Remaining: 0` 或带 `Retry-After` 时按 429 同路退避
+  （Retry-After 优先），仍受方法幂等门控；裸 403（权限拒绝）不重试。
+  导出的 `ShouldRetry(status)` 语义不变
+- README 能力矩阵补上述四项（仅 GitHub 支持）
+
 ## [0.71.0] - 2026-10-01
 
 ### Fixed

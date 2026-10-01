@@ -1,6 +1,29 @@
 package provider
 
-import "context"
+import (
+	"context"
+	"io"
+)
+
+// ReleaseAsset Release 附件元数据。json tag 与 GitHub API 对齐,与消费方
+// (git-sync-service githubapi.ReleaseAsset)字段保持兼容,Size 放大到 int64。
+type ReleaseAsset struct {
+	ID                 int64  `json:"id"`
+	Name               string `json:"name"`
+	Size               int64  `json:"size"`
+	ContentType        string `json:"content_type"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	URL                string `json:"url"`
+}
+
+// ReleaseAssetManager 下载 Release 附件。可选能力接口:使用前先看
+// Provider.Capabilities().ReleaseAssets(或类型断言)。附件可能很大,
+// 因此是流式接口而非返回 []byte,避免整读内存。
+type ReleaseAssetManager interface {
+	// DownloadReleaseAsset 下载 assetID 对应附件并流式写入 w。
+	// 非 2xx 响应或无响应体时返回错误。
+	DownloadReleaseAsset(ctx context.Context, owner, repo string, assetID int64, w io.Writer) error
+}
 
 // ReleaseManager handles tags, releases, and archives. Releases are
 // addressed by tag name across every method: tag names are stable and

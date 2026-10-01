@@ -46,6 +46,10 @@ type CapabilitySet struct {
 	DeployKeys        bool // provider.DeploymentKeyManager
 	RepoStats         bool // provider.RepoStatsManager
 	Users             bool // provider.UserManager
+	Gists             bool // provider.GistManager
+	Starred           bool // provider.StarredManager
+	Migrations        bool // provider.MigrationManager
+	ReleaseAssets     bool // provider.ReleaseAssetManager
 }
 
 // Provider is the unified interface for all Git hosting platforms.
@@ -291,4 +295,6 @@ type ReleaseInfo struct {
 	Prerelease  bool      `json:"prerelease"`
 	CreatedAt   time.Time `json:"created_at"`
 	PublishedAt time.Time `json:"published_at"`
+	// Assets 发布附件元数据(仅声明 ReleaseAssets 能力的后端填充)。
+	Assets []*ReleaseAsset `json:"assets,omitempty"`
 }

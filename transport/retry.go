@@ -17,7 +17,8 @@ import (
 // RetryConfig controls exponential-backoff retry on transient HTTP failures.
 //
 // A request is retried when the response status is in {429, 5xx} or matches
-// one of the Statuses entries. The delay between attempts is
+// one of the Statuses entries, plus the header-aware rate-limit 403 case
+// (see canRetryResponse). The delay between attempts is
 //
 //	delay = min(BaseDelay * 2^(attempt-1), MaxDelay) * jitter
 //
@@ -114,6 +115,38 @@ func (rc *RetryConfig) canRetryStatus(req *http.Request, status int) bool {
 	return rc.methodRetryable(req)
 }
 
+// isRateLimited403 reports whether resp is GitHub-style throttling rather
+// than a permission denial. GitHub's primary rate limit answers with
+// 403 + "X-RateLimit-Remaining: 0" (secondary limits and abuse detection use
+// 403 + "Retry-After") instead of 429, so those 403s must be retried like
+// 429s. A bare 403 without either header is an authorization failure —
+// retrying it can never succeed and would only amplify load.
+func isRateLimited403(resp *http.Response) bool {
+	if resp == nil || resp.StatusCode != http.StatusForbidden {
+		return false
+	}
+	if resp.Header.Get("Retry-After") != "" {
+		return true
+	}
+	return strings.TrimSpace(resp.Header.Get("X-RateLimit-Remaining")) == "0"
+}
+
+// canRetryResponse reports whether a received response may trigger a retry
+// for req. It extends canRetryStatus with the header-aware 403 rate-limit
+// case; the method idempotency gate still applies, so a POST carrying
+// rate-limit headers is not replayed any more than a plain 429 POST would be.
+// Call sites that only know the status code (not the headers) must keep
+// using canRetryStatus.
+func (rc *RetryConfig) canRetryResponse(req *http.Request, resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+	if rc.canRetryStatus(req, resp.StatusCode) {
+		return true
+	}
+	return isRateLimited403(resp) && rc.methodRetryable(req)
+}
+
 // canRetryNetworkError reports whether a transport-level error may trigger a
 // retry for req. Idempotent methods (or writes with RetryWrite) always retry;
 // non-idempotent methods retry only when the error proves the request was
@@ -127,7 +160,9 @@ func (rc *RetryConfig) canRetryNetworkError(req *http.Request, err error) bool {
 
 // ShouldRetry reports whether the given status code should trigger a retry.
 // This is the status-only predicate; call sites that know the request must
-// additionally gate on the method via canRetryStatus.
+// additionally gate on the method via canRetryStatus. Rate-limited 403s are
+// deliberately absent here — they depend on response headers and are handled
+// by canRetryResponse, keeping this exported signature status-only.
 func (rc *RetryConfig) ShouldRetry(status int) bool {
 	if status == http.StatusTooManyRequests {
 		return true
@@ -272,7 +307,7 @@ func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Re
 		}
 		lastResp = resp
 		lastBody = body
-		if !rc.canRetryStatus(req, resp.StatusCode) {
+		if !rc.canRetryResponse(req, resp) {
 			resp.Body = io.NopCloser(bytes.NewReader(body))
 			return resp, body, nil
 		}

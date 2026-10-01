@@ -179,7 +179,31 @@ func convertRelease(r *ghRelease) *provider.ReleaseInfo {
 		Prerelease:  r.GetPrerelease(),
 		CreatedAt:   tsOrZero(r.GetCreatedAt()),
 		PublishedAt: tsOrZero(r.GetPublishedAt()),
+		Assets:      convertReleaseAssets(r.Assets),
 	}
+}
+
+// convertReleaseAssets maps go-github release assets. SDK 的 Size 是 *int
+// (GitHub 附件体积在 int 范围内),provider 侧统一放大为 int64。
+func convertReleaseAssets(assets []*github.ReleaseAsset) []*provider.ReleaseAsset {
+	if len(assets) == 0 {
+		return nil
+	}
+	out := make([]*provider.ReleaseAsset, 0, len(assets))
+	for _, a := range assets {
+		if a == nil {
+			continue
+		}
+		out = append(out, &provider.ReleaseAsset{
+			ID:                 a.GetID(),
+			Name:               a.GetName(),
+			Size:               int64(a.GetSize()),
+			ContentType:        a.GetContentType(),
+			BrowserDownloadURL: a.GetBrowserDownloadURL(),
+			URL:                a.GetURL(),
+		})
+	}
+	return out
 }
 
 // convertUser maps a go-github User.

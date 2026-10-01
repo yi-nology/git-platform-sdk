@@ -27,11 +27,22 @@ func NewGoGitBackend(opts Options) *GoGitBackend {
 	return &GoGitBackend{logger: logger}
 }
 
+// TransportAuth maps AuthConfig onto a go-git transport.AuthMethod for callers
+// that drive go-git directly (e.g. a mirror pipeline that needs to list remote
+// tags or fetch by refspec) instead of going through a GitBackend. It is
+// package-level and stateless: the mapping depends only on the AuthConfig.
+//
+// AuthNone (and the empty Type) maps to a nil AuthMethod — anonymous access —
+// which is what go-git expects for "no credentials".
+func TransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
+	return buildTransportAuth(auth)
+}
+
 // buildTransportAuth maps AuthConfig onto a go-git AuthMethod. SSH key parse
 // failures and host-key setup problems are returned as errors wrapping
 // ErrAuthFailed — silently falling back to anonymous auth used to surface as
 // a misleading "authentication required" instead of the real cause.
-func (b *GoGitBackend) buildTransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
+func buildTransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
 	switch auth.Type {
 	case AuthHTTPBasic:
 		return &xhttp.BasicAuth{

@@ -441,8 +441,9 @@ func (c *Client) RoundTripper() http.RoundTripper {
 }
 
 // NewRetryingRoundTripper wraps rt in retry/backoff. The returned RoundTripper
-// can be plugged into any http.Client; retries fire on 429, 5xx, and the
-// configured retry list, but only for idempotent methods
+// can be plugged into any http.Client; retries fire on 429, 5xx, GitHub-style
+// rate-limit 403 (see RetryConfig.canRetryResponse), and the configured retry
+// list, but only for idempotent methods
 // {GET, HEAD, PUT, DELETE, OPTIONS} — non-idempotent requests (POST, PATCH,
 // ...) are retried exclusively on errors proving the request never reached
 // the network, unless RetryConfig.RetryWrite is set.
@@ -613,7 +614,9 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 			}
 			continue
 		}
-		if !rt.cfg.canRetryStatus(req, resp.StatusCode) {
+		// canRetryResponse adds the header-aware GitHub-style rate-limit 403
+		// on top of the status-only canRetryStatus gate.
+		if !rt.cfg.canRetryResponse(req, resp) {
 			return resp, nil
 		}
 		// Buffer the body before closing so the final response returned to

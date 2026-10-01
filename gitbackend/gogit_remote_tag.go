@@ -129,7 +129,7 @@ func (b *GoGitBackend) PushTag(ctx context.Context, repoPath, remote, name strin
 	}
 
 	refSpec := config.RefSpec(fmt.Sprintf("refs/tags/%s:refs/tags/%s", name, name))
-	am, err := b.buildTransportAuth(auth)
+	am, err := buildTransportAuth(auth)
 	if err != nil {
 		return newGitError("PushTag", repoPath, "", err)
 	}

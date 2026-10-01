@@ -276,12 +276,10 @@ func TestGoGit_Tags(t *testing.T) {
 }
 
 func TestBuildTransportAuth(t *testing.T) {
-	b := newTestGoGitBackend(t)
-
-	if got, err := b.buildTransportAuth(AuthConfig{Type: AuthNone}); got != nil || err != nil {
+	if got, err := buildTransportAuth(AuthConfig{Type: AuthNone}); got != nil || err != nil {
 		t.Errorf("AuthNone: expected (nil, nil), got %T, %v", got, err)
 	}
-	basic, err := b.buildTransportAuth(AuthConfig{Type: AuthHTTPBasic, Username: "u", Password: "p"})
+	basic, err := buildTransportAuth(AuthConfig{Type: AuthHTTPBasic, Username: "u", Password: "p"})
 	if err != nil {
 		t.Fatalf("AuthHTTPBasic: unexpected error %v", err)
 	}
@@ -292,10 +290,10 @@ func TestBuildTransportAuth(t *testing.T) {
 	// Invalid key content and missing key files must surface the real cause
 	// wrapped in ErrAuthFailed — silently falling back to anonymous auth
 	// used to masquerade as "authentication required".
-	if _, err := b.buildTransportAuth(AuthConfig{Type: AuthSSH, SSHKeyContent: "not a key"}); !errors.Is(err, ErrAuthFailed) {
+	if _, err := buildTransportAuth(AuthConfig{Type: AuthSSH, SSHKeyContent: "not a key"}); !errors.Is(err, ErrAuthFailed) {
 		t.Errorf("invalid SSHKeyContent: err = %v, want ErrAuthFailed", err)
 	}
-	if _, err := b.buildTransportAuth(AuthConfig{Type: AuthSSH, SSHKey: "/nonexistent/id_ed25519"}); !errors.Is(err, ErrAuthFailed) {
+	if _, err := buildTransportAuth(AuthConfig{Type: AuthSSH, SSHKey: "/nonexistent/id_ed25519"}); !errors.Is(err, ErrAuthFailed) {
 		t.Errorf("missing SSHKey file: err = %v, want ErrAuthFailed", err)
 	}
 }

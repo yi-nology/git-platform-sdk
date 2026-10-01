@@ -1,6 +1,7 @@
 package github_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -413,5 +414,254 @@ func TestValidateWebhookSignature_NoSecret(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", nil)
 	if err := p.ValidateWebhookSignature(r, ""); err != nil {
 		t.Errorf("expected no error with empty secret, got %v", err)
+	}
+}
+
+func TestListMyGists_Pagination(t *testing.T) {
+	var gotPath, gotPage, gotPerPage string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotPage = r.URL.Query().Get("page")
+		gotPerPage = r.URL.Query().Get("per_page")
+		w.Header().Set("Content-Type", "application/json")
+		// 原始 JSON 而非 SDK 结构体:同时验证 provider.Gist 的 json tag
+		// 与 GitHub 响应字段逐一对齐。
+		_, _ = w.Write([]byte(`[{"id":"g1","description":"notes","public":false,` +
+			`"html_url":"https://gist.github.com/g1",` +
+			`"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",` +
+			`"files":{"a.txt":{"filename":"a.txt","language":"Text",` +
+			`"raw_url":"https://gist.githubusercontent.com/raw","size":5,"content":"hello"}}}]`))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	gists, err := p.ListMyGists(context.Background(), 2, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/v3/gists" {
+		t.Errorf("expected GET /gists (token 用户列表), got path %s", gotPath)
+	}
+	if gotPage != "2" || gotPerPage != "5" {
+		t.Errorf("expected page=2 per_page=5, got page=%s per_page=%s", gotPage, gotPerPage)
+	}
+	if len(gists) != 1 {
+		t.Fatalf("expected 1 gist, got %d", len(gists))
+	}
+	g := gists[0]
+	if g.ID != "g1" || g.Public {
+		t.Errorf("unexpected gist identity: %+v", g)
+	}
+	if g.CreatedAt.Year() != 2026 || g.UpdatedAt.Year() != 2026 {
+		t.Errorf("expected 2026 timestamps, got %v / %v", g.CreatedAt, g.UpdatedAt)
+	}
+	f := g.Files["a.txt"]
+	if f.Content != "hello" || f.Size != 5 || f.Filename != "a.txt" || f.RawURL == "" {
+		t.Errorf("unexpected gist file: %+v", f)
+	}
+}
+
+func TestListStarred_ShapeCompat(t *testing.T) {
+	const repoJSON = `{"id":1,"full_name":"octo/hello","name":"hello","owner":{"login":"octo"},` +
+		`"clone_url":"https://github.com/octo/hello.git","description":"demo","private":false,` +
+		`"archived":true,"fork":true,"stargazers_count":42,"language":"Go"}`
+	cases := []struct {
+		name string
+		body string
+	}{
+		// Accept: star+json 时 GitHub 返回的包裹形状。
+		{"wrapped", `[{"starred_at":"2026-01-01T00:00:00Z","repo":` + repoJSON + `}]`},
+		// 服务端忽略 Accept 时的裸 repo 列表形状。
+		{"bare", `[` + repoJSON + `]`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v3/user/starred" {
+					t.Errorf("expected /user/starred, got %s", r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			p := newTestProvider(t, srv.URL+"/api/v3")
+			repos, err := p.ListStarred(context.Background(), 1, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(repos) != 1 {
+				t.Fatalf("expected 1 starred repo, got %d", len(repos))
+			}
+			r := repos[0]
+			if r.FullName != "octo/hello" || r.Owner != "octo" {
+				t.Errorf("unexpected identity: %+v", r)
+			}
+			if r.Stars != 42 || r.Language != "Go" || !r.Archived || !r.Fork {
+				t.Errorf("expected 元数据字段填全(stars/language/archived/fork), got %+v", r)
+			}
+			if r.CloneURL == "" || r.Description != "demo" {
+				t.Errorf("expected clone_url/description, got %+v", r)
+			}
+		})
+	}
+}
+
+func TestCreateMigration_OrgPaths(t *testing.T) {
+	cases := []struct {
+		name     string
+		org      string
+		wantPath string
+	}{
+		{"user_level", "", "/api/v3/user/migrations"},
+		{"org_level", "acme", "/api/v3/orgs/acme/migrations"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotMethod, gotPath string
+			var body map[string]any
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotMethod = r.Method
+				gotPath = r.URL.Path
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"id":7,"state":"pending","archive_url":""}`))
+			}))
+			defer srv.Close()
+
+			p := newTestProvider(t, srv.URL+"/api/v3")
+			info, err := p.CreateMigration(context.Background(), tc.org, provider.CreateMigrationOptions{
+				LockRepositories: true,
+				ExcludeMetadata:  false,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotMethod != http.MethodPost || gotPath != tc.wantPath {
+				t.Errorf("expected POST %s, got %s %s", tc.wantPath, gotMethod, gotPath)
+			}
+			// 与消费方线上请求体保持同一形状:两个 key 都显式上送。
+			if body["lock_repositories"] != true {
+				t.Errorf("expected lock_repositories=true, got %v", body["lock_repositories"])
+			}
+			if v, ok := body["exclude_metadata"]; !ok || v != false {
+				t.Errorf("expected explicit exclude_metadata=false, got %v (present=%v)", v, ok)
+			}
+			if info.ID != 7 || info.State != "pending" {
+				t.Errorf("unexpected migration info: %+v", info)
+			}
+		})
+	}
+}
+
+func TestGetMigration_OrgPaths(t *testing.T) {
+	cases := []struct {
+		name     string
+		org      string
+		wantPath string
+	}{
+		{"user_level", "", "/api/v3/user/migrations/7"},
+		{"org_level", "acme", "/api/v3/orgs/acme/migrations/7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":7,"state":"exported",` +
+					`"archive_url":"https://api.github.com/user/migrations/7/artifacts"}`))
+			}))
+			defer srv.Close()
+
+			p := newTestProvider(t, srv.URL+"/api/v3")
+			info, err := p.GetMigration(context.Background(), tc.org, 7)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotPath != tc.wantPath {
+				t.Errorf("expected GET %s, got %s", tc.wantPath, gotPath)
+			}
+			if info.State != "exported" || info.ArchiveURL == "" {
+				t.Errorf("unexpected migration info: %+v", info)
+			}
+		})
+	}
+}
+
+func TestDownloadReleaseAsset_Streams(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v3/repos/owner/repo/releases/assets/99" {
+			t.Errorf("unexpected asset path %s", r.URL.Path)
+		}
+		// 附件端点必须带 octet-stream Accept,否则 GitHub 回 JSON 元数据。
+		if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+			t.Errorf("expected Accept application/octet-stream, got %q", got)
+		}
+		_, _ = w.Write([]byte("asset-bytes"))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	var buf bytes.Buffer
+	if err := p.DownloadReleaseAsset(context.Background(), "owner", "repo", 99, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "asset-bytes" {
+		t.Errorf("expected streamed bytes, got %q", buf.String())
+	}
+}
+
+func TestDownloadReleaseAsset_Non2xx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	var buf bytes.Buffer
+	err := p.DownloadReleaseAsset(context.Background(), "owner", "repo", 404, &buf)
+	if err == nil {
+		t.Fatal("expected error on non-2xx asset response")
+	}
+	if !provider.IsNotFound(err) {
+		t.Errorf("expected IsNotFound, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no bytes written on error, got %q", buf.String())
+	}
+}
+
+func TestListReleases_AssetsConverted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeListPage(w, r, []*sdkgithub.RepositoryRelease{
+			{ID: 1, TagName: "v1.0.0", Name: new("v1.0.0"),
+				Assets: []*sdkgithub.ReleaseAsset{
+					{ID: new(int64(99)), Name: new("app.zip"), Size: new(123),
+						ContentType:        new("application/zip"),
+						BrowserDownloadURL: new("https://github.com/o/r/releases/download/v1.0.0/app.zip"),
+						URL:                new("https://api.github.com/repos/o/r/releases/assets/99")},
+				}},
+		})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	rels, err := p.ListReleases(context.Background(), "owner", "repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rels) != 1 || len(rels[0].Assets) != 1 {
+		t.Fatalf("expected 1 release with 1 asset, got %+v", rels)
+	}
+	a := rels[0].Assets[0]
+	if a.ID != 99 || a.Name != "app.zip" || a.Size != 123 {
+		t.Errorf("unexpected asset identity: %+v", a)
+	}
+	if a.ContentType != "application/zip" ||
+		a.BrowserDownloadURL != "https://github.com/o/r/releases/download/v1.0.0/app.zip" ||
+		a.URL != "https://api.github.com/repos/o/r/releases/assets/99" {
+		t.Errorf("unexpected asset urls/type: %+v", a)
 	}
 }

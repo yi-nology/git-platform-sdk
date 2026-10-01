@@ -34,7 +34,7 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
 
-	am, err := b.buildTransportAuth(opts.Auth)
+	am, err := buildTransportAuth(opts.Auth)
 	if err != nil {
 		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
@@ -155,7 +155,7 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 		rs = append(rs, config.RefSpec(s))
 	}
 
-	am, err := b.buildTransportAuth(opts.Auth)
+	am, err := buildTransportAuth(opts.Auth)
 	if err != nil {
 		return nil, newGitError("Push", opts.RepoPath, "", err)
 	}
@@ -185,7 +185,7 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 }
 
 func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
-	am, err := b.buildTransportAuth(opts.Auth)
+	am, err := buildTransportAuth(opts.Auth)
 	if err != nil {
 		return newGitError("Clone", opts.Path, "", err)
 	}
@@ -229,7 +229,7 @@ func (b *GoGitBackend) FetchAll(ctx context.Context, repoPath string, auth AuthC
 		return newGitError("FetchAll", repoPath, "", err)
 	}
 	for _, r := range remotes {
-		am, err := b.buildTransportAuth(auth)
+		am, err := buildTransportAuth(auth)
 		if err != nil {
 			return newGitError("FetchAll", repoPath, "", err)
 		}
@@ -255,7 +255,7 @@ func (b *GoGitBackend) Pull(ctx context.Context, repoPath, remote, branch string
 	if err != nil {
 		return newGitError("Pull", repoPath, "", err)
 	}
-	am, err := b.buildTransportAuth(auth)
+	am, err := buildTransportAuth(auth)
 	if err != nil {
 		return newGitError("Pull", repoPath, "", err)
 	}
@@ -288,7 +288,7 @@ func (b *GoGitBackend) TestConnection(ctx context.Context, url string, auth Auth
 		Name: "test",
 		URLs: []string{url},
 	})
-	am, err := b.buildTransportAuth(auth)
+	am, err := buildTransportAuth(auth)
 	if err != nil {
 		return newGitError("TestConnection", "", "", err)
 	}
