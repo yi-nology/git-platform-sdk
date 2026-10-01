@@ -8,6 +8,31 @@ import (
 
 // --- Commit operations ---
 
+// commitLogFormat 是 git log 提交行的输出格式。字段分隔用 NUL（%x00）：
+// 提交标题是任意文本，含 "|" 时旧的 `%H|%s|%an|%ai` 会把 Author/Date
+// 解析错位（"fix: handle a | b" 这类标题实测复现）。哈希为十六进制、
+// 日期为固定格式，均不含 NUL；%s 只输出单行标题，标题内不可能有 NUL。
+const commitLogFormat = "--pretty=format:%H%x00%s%x00%an%x00%ai"
+
+// parseCommitLines 解析 commitLogFormat 的输出（每提交一行，NUL 分字段）。
+func parseCommitLines(stdout string) []CommitInfo {
+	var commits []CommitInfo
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\x00", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		commits = append(commits, CommitInfo{
+			Hash: parts[0], Message: parts[1], Author: parts[2], Date: parts[3],
+		})
+	}
+	return commits
+}
+
 func (b *NativeGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to string) ([]CommitInfo, error) {
 	var rangeArg string
 	if from == "" {
@@ -16,27 +41,12 @@ func (b *NativeGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from
 		rangeArg = fmt.Sprintf("%s..%s", from, to)
 	}
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
-		"log", rangeArg, "--pretty=format:%H|%s|%an|%ai",
+		"log", rangeArg, commitLogFormat,
 	}, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("GetCommitsBetween", repoPath, stderr, err)
 	}
-
-	var commits []CommitInfo
-	for _, line := range strings.Split(stdout, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "|", 4)
-		if len(parts) < 4 {
-			continue
-		}
-		commits = append(commits, CommitInfo{
-			Hash: parts[0], Message: parts[1], Author: parts[2], Date: parts[3],
-		})
-	}
-	return commits, nil
+	return parseCommitLines(stdout), nil
 }
 
 func (b *NativeGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (bool, error) {
@@ -79,11 +89,14 @@ func (b *NativeGitBackend) Merge(ctx context.Context, repoPath, branch string, o
 }
 
 // isConflictOutput reports whether git's output announces merge conflicts.
-// git prints CONFLICT lines on stdout (stderr stays empty on a content
-// conflict), so both streams must be inspected.
+// Real conflicts always print the uppercase marker "CONFLICT (" (content/
+// rename/delete/...) on stdout; stderr stays empty on a content conflict, so
+// both streams are inspected. A bare lowercase "conflict" substring is NOT a
+// marker: it also appears in unrelated failures (e.g. merging a nonexistent
+// branch literally named "conflict-fix"), which used to be misclassified as
+// ErrMergeConflict.
 func isConflictOutput(stdout, stderr string) bool {
-	out := stdout + stderr
-	return strings.Contains(out, "CONFLICT") || strings.Contains(out, "conflict")
+	return strings.Contains(stdout+stderr, "CONFLICT (")
 }
 
 func (b *NativeGitBackend) CherryPick(ctx context.Context, repoPath, commitHash string) error {
@@ -131,21 +144,16 @@ func (b *NativeGitBackend) RebaseContinue(ctx context.Context, repoPath string) 
 
 func (b *NativeGitBackend) GetCommit(ctx context.Context, repoPath, hashStr string) (*CommitInfo, error) {
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
-		"log", "-1", "--pretty=format:%H|%s|%an|%ai", hashStr,
+		"log", "-1", commitLogFormat, hashStr,
 	}, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("GetCommit", repoPath, stderr, err)
 	}
-	parts := strings.SplitN(strings.TrimSpace(stdout), "|", 4)
-	if len(parts) < 4 {
+	commits := parseCommitLines(stdout)
+	if len(commits) == 0 {
 		return nil, newGitError("GetCommit", repoPath, "", fmt.Errorf("unexpected log format"))
 	}
-	return &CommitInfo{
-		Hash:    parts[0],
-		Message: parts[1],
-		Author:  parts[2],
-		Date:    parts[3],
-	}, nil
+	return &commits[0], nil
 }
 
 func (b *NativeGitBackend) Add(ctx context.Context, repoPath string, files []string) error {

@@ -80,7 +80,15 @@ func (b *NativeGitBackend) PushTag(ctx context.Context, repoPath, remote, name s
 }
 
 func (b *NativeGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error) {
-	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"tag", "-l", "--format=%(refname:short)|%(objectname)|%(subject)|%(authorname)"}, AuthConfig{})
+	// 字段分隔用 TAB，subject 置于末位：标签消息是任意文本，含分隔符时
+	// 由 SplitN 的最后一个分段整体吸收（for-each-ref 类 format 不支持
+	// %x00，argv 也无法内嵌 NUL，TAB 是能做到的最强分隔）。
+	// Author 字段：annotated tag 的身份在 tagger（%(authorname) 恒空），
+	// lightweight tag 在 commit author——条件格式取先命中者（旧实现
+	// 对 annotated tag 的 Author 恒为空串，属顺带修复）。
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
+		"tag", "-l", "--format=%(refname:short)\t%(objectname)\t%(if)%(taggername)%(then)%(taggername)%(else)%(authorname)%(end)\t%(subject)",
+	}, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("GetTagList", repoPath, stderr, err)
 	}
@@ -91,15 +99,15 @@ func (b *NativeGitBackend) GetTagList(ctx context.Context, repoPath string) ([]T
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 4)
+		parts := strings.SplitN(line, "\t", 4)
 		if len(parts) < 4 {
 			continue
 		}
 		tags = append(tags, TagInfo{
 			Name:    parts[0],
 			Hash:    parts[1],
-			Message: parts[2],
-			Author:  parts[3],
+			Author:  parts[2],
+			Message: parts[3],
 		})
 	}
 	return tags, nil

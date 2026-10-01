@@ -24,7 +24,7 @@ func (b *NativeGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path
 func (b *NativeGitBackend) GetFileHistory(ctx context.Context, repoPath, path string, limit int) ([]CommitInfo, error) {
 	// The -<limit> flag must precede the "--" separator: anything after it
 	// is a pathspec, and --follow rejects a second one outright.
-	args := []string{"log", "--pretty=format:%H|%s|%an|%ai", "--follow"}
+	args := []string{"log", commitLogFormat, "--follow"}
 	if limit > 0 {
 		args = append(args, fmt.Sprintf("-%d", limit))
 	}
@@ -33,22 +33,7 @@ func (b *NativeGitBackend) GetFileHistory(ctx context.Context, repoPath, path st
 	if err != nil {
 		return nil, newGitError("GetFileHistory", repoPath, stderr, err)
 	}
-
-	var commits []CommitInfo
-	for _, line := range strings.Split(stdout, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "|", 4)
-		if len(parts) < 4 {
-			continue
-		}
-		commits = append(commits, CommitInfo{
-			Hash: parts[0], Message: parts[1], Author: parts[2], Date: parts[3],
-		})
-	}
-	return commits, nil
+	return parseCommitLines(stdout), nil
 }
 
 // --- Tree and blob queries ---

@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.0] - 2026-10-01
+
+### Fixed
+
+- **native 输出解析器加固**（深度审查发现的正确性缺陷，均实测复现）：
+  - `GetCommitsBetween`/`GetCommit`/`GetFileHistory`：提交标题含 `|`
+  时（如 "fix: handle a | b"），旧的管道分隔把 **Author/Date 解析
+  错位**；改用 NUL（`%x00`）分隔 + 共享解析函数
+  - `GetTagList`/`ListBranches`：TAB 分隔 + subject 置尾整体吸收
+  （for-each-ref 类 format 不支持 `%x00`，TAB 是能做到的最强分隔）
+  - **annotated tag 的 Author 恒空**（顺带修复）：tag 对象身份在
+  tagger 而非 author，条件格式 `%(if)%(taggername)…%(else)
+  %(authorname)%(end)` 兼容 annotated/lightweight 两种
+  - `isConflictOutput` 收紧为 `CONFLICT (` 大写标记：合并不存在的
+  "conflict-*" 分支等无关失败曾被误判为 `ErrMergeConflict`
+- 回归测试：含 `|` 的提交标题、标签消息、分支 subject，及冲突判定
+  分类用例表
+
+### Changed
+
+- 依赖复核：v0.69.0 后无新版直接依赖发布，全部仍为最新
+  （go-git v6 仍为 alpha，不上）
+
 ## [0.70.0] - 2026-10-01
 
 ### Added

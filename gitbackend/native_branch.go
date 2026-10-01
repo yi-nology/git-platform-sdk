@@ -96,9 +96,11 @@ func (b *NativeGitBackend) ListBranches(ctx context.Context, repoPath string) ([
 	// The leading %(refname) column carries the full ref because
 	// %(refname:short) drops the refs/remotes/ prefix under --format, which
 	// would make remote-ness undetectable.
+	// 字段分隔用 TAB，subject 置于末位吸收其内可能出现的分隔符（同
+	// GetTagList；refname/hash/date 等字段按 git 规则不含 TAB）。
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
 		"branch", "-a",
-		"--format=%(refname)|%(refname:short)|%(objectname:short)|%(HEAD)|%(upstream:short)|%(authorname)|%(authoremail)|%(authordate:iso-strict)|%(subject)",
+		"--format=%(refname)\t%(refname:short)\t%(objectname:short)\t%(HEAD)\t%(upstream:short)\t%(authorname)\t%(authoremail)\t%(authordate:iso-strict)\t%(subject)",
 	}, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("ListBranches", repoPath, stderr, err)
@@ -110,7 +112,7 @@ func (b *NativeGitBackend) ListBranches(ctx context.Context, repoPath string) ([
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 9)
+		parts := strings.SplitN(line, "\t", 9)
 		if len(parts) < 9 {
 			continue
 		}
