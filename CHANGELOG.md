@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.0] - 2026-10-01
+
+### Changed
+
+- **依赖全量保鲜**（`go get -u ./...`）：
+  - 直接：`gitlab client-go/v3` v3.12.0 → **v3.15.0**；`gitea.dev/sdk`
+    v1.2.0 → **v1.3.0**
+  - 间接（crypto/传输类）：`ProtonMail/go-crypto` v1.5.2、
+    `cloudflare/circl` v1.6.5、`pjbgf/sha1cd` v0.7.0、
+    `skeema/knownhosts` v1.3.3、`x/net` v0.59.0、`go-openapi` 全家 0.29.x
+  - 验证：全量 `go test -race`、hermetic 模拟环境、lint、govulncheck
+    （0 可达漏洞；`x/crypto/openpgp` GO-2026-5932 为不可达且无修复版本
+    的"无人维护"公告，升级前即存在）
+  - 其余直接依赖已最新：go-github v92（无 v93）、go-git v5.19.2
+    （v6 仅 alpha）、forgejo-sdk v3
+
 ## [0.68.2] - 2026-10-01
 
 ### Fixed
