@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.2] - 2026-10-01
+
+### Fixed
+
+- **Lint 修复（CI Lint 腿红）**：`gitlab.Ptr` 已被 go-gitlab 废弃（SA1019），
+  10 处全部改用 go 1.26 内置 `new(value)`；`tailOfReader` 参数 `max`
+  遮蔽内建标识符改名 `budget`；注释 `//` 后补空格；`types.go` gofmt。
+
 ## [0.68.1] - 2026-10-01
 
 ### Fixed

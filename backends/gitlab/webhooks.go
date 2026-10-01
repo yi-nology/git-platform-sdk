@@ -198,7 +198,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case "pipeline":
 		// Pipeline Hook（v0.67.0）：只把失败终态送进事件流——成功/运行中对
 		// CI 失败归因场景是噪声。pipeline 的 sha 取 object_attributes.sha
-		//（merge_request 关联字段仅在 MR hook 出现，pipeline hook 用
+		// （merge_request 关联字段仅在 MR hook 出现，pipeline hook 用
 		// merge_request.iid 若有则带出，供评论回帖定位）。
 		status := pl.ObjectAttributes.Status
 		if status != "failed" && status != "canceled" {

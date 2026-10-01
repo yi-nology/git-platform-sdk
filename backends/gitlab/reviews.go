@@ -116,24 +116,24 @@ func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo str
 		}
 		path, line, body := c.Path, int64(c.Line), c.Body
 		position := &gitlab.PositionOptions{
-			BaseSHA:      gitlab.Ptr(refs.BaseSha),
-			HeadSHA:      gitlab.Ptr(refs.HeadSha),
-			StartSHA:     gitlab.Ptr(refs.StartSha),
-			PositionType: gitlab.Ptr(posType),
-			NewPath:      gitlab.Ptr(path),
-			OldPath:      gitlab.Ptr(path),
+			BaseSHA:      new(refs.BaseSha),
+			HeadSHA:      new(refs.HeadSha),
+			StartSHA:     new(refs.StartSha),
+			PositionType: new(posType),
+			NewPath:      new(path),
+			OldPath:      new(path),
 		}
 		if h, ok := hunks[path]; ok {
 			if old, in := h.newToOld[int(line)]; in {
 				// hunk 内：行级 position。上下文行必须带 old_line（服务端据此
 				// 生成 line_code）；纯新增行 old_line 置 0 不传。
-				position.NewLine = gitlab.Ptr(line)
+				position.NewLine = new(line)
 				if old > 0 {
-					position.OldLine = gitlab.Ptr(int64(old))
+					position.OldLine = new(int64(old))
 				}
 			} else {
 				// 行不在 hunk：file 级 position（不 400，评论挂文件下）
-				position.PositionType = gitlab.Ptr(fileType)
+				position.PositionType = new(fileType)
 				position.NewLine = nil
 				p.logger.Info("gitlab.CreateReview: line not in hunk, file-level position",
 					"path", c.Path, "line", c.Line)
@@ -145,7 +145,7 @@ func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo str
 			continue
 		}
 		opt := &gitlab.CreateMergeRequestDiscussionOptions{
-			Body:     gitlab.Ptr(body),
+			Body:     new(body),
 			Position: position,
 		}
 		// 单条失败 best-effort 跳过：行号不在 hunk / 文件二进制等，不该拖垮整轮评审；

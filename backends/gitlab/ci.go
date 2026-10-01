@@ -70,9 +70,9 @@ func (p *Provider) traceTail(ctx context.Context, pid string, jobID int64) (stri
 	return tailOfReader(r, ciTraceTailBytes)
 }
 
-// tailOfReader 读流并保留尾部 max 字节（行粒度扫描避免整文驻留内存；
+// tailOfReader 读流并保留尾部 budget 字节（行粒度扫描避免整文驻留内存；
 // trace 可能数十 MB）。
-func tailOfReader(r io.Reader, max int) (string, bool, error) {
+func tailOfReader(r io.Reader, budget int) (string, bool, error) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	var lines []string
@@ -80,7 +80,7 @@ func tailOfReader(r io.Reader, max int) (string, bool, error) {
 	for sc.Scan() {
 		lines = append(lines, sc.Text())
 		total += len(sc.Text()) + 1
-		for total > max*4 { // 行数软上限：超 4 倍预算从头部丢弃
+		for total > budget*4 { // 行数软上限：超 4 倍预算从头部丢弃
 			total -= len(lines[0]) + 1
 			lines = lines[1:]
 		}
@@ -94,7 +94,7 @@ func tailOfReader(r io.Reader, max int) (string, bool, error) {
 			joined = lines[i]
 			continue
 		}
-		if len(joined)+len(lines[i])+1 > max {
+		if len(joined)+len(lines[i])+1 > budget {
 			return joined, true, nil
 		}
 		joined = lines[i] + "\n" + joined
