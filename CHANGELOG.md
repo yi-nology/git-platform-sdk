@@ -4,7 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.68.1] - 2026-10-01
+
+### Fixed
+
+- **测试夹具 hermetic 化补全（CI/Release 连续全红的根因）**：夹具的
+  `git commit/merge/rebase/cherry-pick` 依赖本机全局 git 身份；CI runner
+  无全局身份 → `git` exit 128，自 09-27 起（含 v0.65.0~v0.68.0）所有
+  CI 与 Release 工作流失败。
+  - `gitOutput` 统一注入 `GIT_AUTHOR_*`/`GIT_COMMITTER_*`，失败时带出 stderr
+  - `createTestRepo` 设置仓库本地身份——被测 backend 的 Merge/Rebase
+    也不依赖机器环境
+  - 裸 `exec.Command(...).Run()`（吞错）的夹具调用全部改走 `gitOutput`
+  - 本地以 `GIT_CONFIG_GLOBAL=/dev/null` 模拟 runner 复现并验证归零
+
+## [0.68.0] - 2026-10-01
 
 ### Changed
 

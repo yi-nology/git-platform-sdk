@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,7 +27,10 @@ func createTestRepo(t *testing.T) string {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
-	// 身份用 -c 传给 commit,不依赖仓库/全局 config,保证 hermetic
+	// 仓库本地身份：该仓库内后续一切建提交操作（夹具的 commit/merge，
+	// 以及被测 backend 的 Merge/Rebase/CherryPick）都不依赖全局 config
+	gitOutput(t, dir, "config", "user.email", "test@test.com")
+	gitOutput(t, dir, "config", "user.name", "Test")
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("init"), 0644); err != nil {
 		t.Fatalf("write readme: %v", err)
 	}
@@ -35,10 +39,6 @@ func createTestRepo(t *testing.T) string {
 		t.Fatalf("git add: %v\n%s", err, out)
 	}
 	cmd = exec.Command("git", "-C", dir, "commit", "-m", "init")
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
-		"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com",
-	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git commit: %v\n%s", err, out)
 	}
@@ -48,8 +48,18 @@ func createTestRepo(t *testing.T) string {
 func gitOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	// 身份统一注入：commit/merge/rebase/cherry-pick 夹具都会创建提交，
+	// CI runner 没有全局 git 身份，不注入则 exit 128（CI 曾因此连续全红）
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com",
+	)
 	out, err := cmd.Output()
 	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			t.Fatalf("git %v: %v\n%s", args, err, ee.Stderr)
+		}
 		t.Fatalf("git %v: %v", args, err)
 	}
 	return strings.TrimRight(string(out), "\n")
@@ -162,8 +172,8 @@ func TestNative_GetCommitsBetween(t *testing.T) {
 	initHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
 	os.WriteFile(filepath.Join(repo, "file2.txt"), []byte("hello"), 0644)
-	exec.Command("git", "-C", repo, "add", ".").Run()
-	exec.Command("git", "-C", repo, "commit", "-m", "second").Run()
+	gitOutput(t, repo, "add", ".")
+	gitOutput(t, repo, "commit", "-m", "second")
 
 	secondHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
@@ -186,8 +196,8 @@ func TestNative_IsAncestor(t *testing.T) {
 	initHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
 	os.WriteFile(filepath.Join(repo, "file2.txt"), []byte("hello"), 0644)
-	exec.Command("git", "-C", repo, "add", ".").Run()
-	exec.Command("git", "-C", repo, "commit", "-m", "second").Run()
+	gitOutput(t, repo, "add", ".")
+	gitOutput(t, repo, "commit", "-m", "second")
 
 	secondHash := gitOutput(t, repo, "rev-parse", "HEAD")
 

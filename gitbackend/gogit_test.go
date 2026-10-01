@@ -3,7 +3,6 @@ package gitbackend
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -98,8 +97,8 @@ func TestGoGit_IsAncestor(t *testing.T) {
 	initHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
 	os.WriteFile(filepath.Join(repo, "file2.txt"), []byte("hello"), 0644)
-	exec.Command("git", "-C", repo, "add", ".").Run()
-	exec.Command("git", "-C", repo, "commit", "-m", "second").Run()
+	gitOutput(t, repo, "add", ".")
+	gitOutput(t, repo, "commit", "-m", "second")
 
 	secondHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
@@ -162,8 +161,8 @@ func TestGoGit_GetCommitsBetween(t *testing.T) {
 	initHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
 	os.WriteFile(filepath.Join(repo, "file2.txt"), []byte("hello"), 0644)
-	exec.Command("git", "-C", repo, "add", ".").Run()
-	exec.Command("git", "-C", repo, "commit", "-m", "second").Run()
+	gitOutput(t, repo, "add", ".")
+	gitOutput(t, repo, "commit", "-m", "second")
 
 	secondHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
@@ -187,8 +186,8 @@ func TestGoGit_Merge(t *testing.T) {
 	b.CreateBranch(context.Background(), repo, "feature", "HEAD")
 	b.Checkout(context.Background(), repo, "feature")
 	os.WriteFile(filepath.Join(repo, "feature.txt"), []byte("feature"), 0644)
-	exec.Command("git", "-C", repo, "add", ".").Run()
-	exec.Command("git", "-C", repo, "commit", "-m", "feature commit").Run()
+	gitOutput(t, repo, "add", ".")
+	gitOutput(t, repo, "commit", "-m", "feature commit")
 
 	// Switch back to main and merge
 	b.Checkout(context.Background(), repo, "main")
@@ -210,8 +209,8 @@ func TestGoGit_Diff(t *testing.T) {
 	initHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
 	os.WriteFile(filepath.Join(repo, "file2.txt"), []byte("hello"), 0644)
-	exec.Command("git", "-C", repo, "add", ".").Run()
-	exec.Command("git", "-C", repo, "commit", "-m", "second").Run()
+	gitOutput(t, repo, "add", ".")
+	gitOutput(t, repo, "commit", "-m", "second")
 
 	secondHash := gitOutput(t, repo, "rev-parse", "HEAD")
 
