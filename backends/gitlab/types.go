@@ -65,6 +65,7 @@ func convertMR(mr *gitlab.MergeRequest) *provider.ChangeRequest {
 		MergeStatus:  mr.DetailedMergeStatus,
 		WebURL:       mr.WebURL,
 		HeadSHA:      mrHeadSHA(mr),
+		Draft:        mr.Draft,
 		BaseSHA:      mr.DiffRefs.BaseSha,
 		StartSHA:     mr.DiffRefs.StartSha,
 		CreatedAt:    timeOrZero(mr.CreatedAt),
@@ -103,6 +104,11 @@ func convertBasicMR(mr *gitlab.BasicMergeRequest) *provider.ChangeRequest {
 		Title:        mr.Title,
 		Description:  mr.Description,
 		State:        mapGLState(mr.State),
+		// Draft/HeadSHA 必须映射（v0.67.1 修复）：poller 依赖 HeadSHA 判空跳过、
+		// 双路径依赖 Draft 做 skip-draft——此前列表路径两者恒零值，poller 对
+		// GitLab 所有 MR 静默跳过（兜底路径从未真正建过任务，215 实测实锤）。
+		Draft:        mr.Draft,
+		HeadSHA:      mr.SHA,
 		SourceBranch: mr.SourceBranch,
 		TargetBranch: mr.TargetBranch,
 		Author:       author,
