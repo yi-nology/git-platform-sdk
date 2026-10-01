@@ -6,6 +6,57 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **认证路径重构（credential helper）**：HTTPS 令牌改经**临时 credential helper +
+  GIT_ASKPASS** 注入 git（对标 gickup）：
+  - 令牌写入 `0600` 临时文件；helper 脚本读文件回 `password=`
+  - **不再**把 `Authorization: Basic …` 放进 `http.extraheader` / `GIT_CONFIG_VALUE_*`
+  - **令牌不进 argv、不进 git 进程 environ 明文**；会话目录 RAII 清理
+  - `configureAuth` 返回 cleanup；`runGitEnv` 修复 extraEnv 覆盖认证 env 的问题
+  - 建会话失败时回退旧 extraheader（保持可用性，并 `logger.Warn` 留痕）
+  - env 注入**空串 `credential.helper=` 先于本次 helper**：清空主机已配置的
+    helper 列表（osxkeychain / store / cache）。已实测两处回归风险：
+    (a) 主机 helper 先被查询，个人凭证会**遮蔽**本次令牌（GitHub/GitLab
+    推送成错误身份）；(b) 认证成功后 git 对全部 helper 执行 `store`，
+    一次性令牌会被**持久化进用户钥匙串 / 明文凭证文件**。
+  - 移除无效的 `credential.useHttpPath`；helper/askpass 路径 `ToSlash`
+    以兼容 Windows 上的 msys sh
+  - 集成测试用真实 git 钉死上述两条（主机 helper 不被 get/store 触达）
+
+## [0.67.1] - 2026-10-01
+
+### Fixed
+
+- **GitLab `convertBasicMR` 补 `Draft`/`HeadSHA` 映射**：poller 列表路径
+  恒零值导致上层兜底逻辑全静默失效。
+
+## [0.67.0] - 2026-10-01
+
+### Added
+
+- **GitLab CI 失败日志能力 + pipeline 失败事件**：`CILogManager` 可选接口，
+  pipeline 失败终态进入事件流，供上层拉取失败作业日志。
+
+## [0.66.0] - 2026-09-28
+
+### Added
+
+- **GitLab diff 感知行内定位**：评论 position 经 hunk 映射到新旧行号，
+  定位失败降级为 file 级 position。
+
+## [0.65.0] - 2026-09-27
+
+### Added
+
+- **GitLab `CreateReview` 行内评论（discussions）**：支持 position 级
+  行内 discussion。
+
+### Fixed
+
+- 行内 discussion 失败留痕（`logger.Warn`），不再静默全丢。
+- `diff_refs` 降级与行内路径日志；清理编辑残渣。
+
 ## [0.64.0] - 2026-09-27
 
 ### Added

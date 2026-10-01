@@ -137,12 +137,16 @@ func (b *NativeGitBackend) runGitEnv(ctx context.Context, repoPath string, args 
 	}
 
 	// resolveAuth may create a temp key file for SSHKeyContent; cleanup after run.
-	resolvedAuth, cleanup := b.resolveAuth(auth)
-	defer cleanup()
+	resolvedAuth, cleanupKey := b.resolveAuth(auth)
+	// configureAuth creates an ephemeral credential helper session for tokens;
+	// cleanup removes the temp token/script dir.
+	cleanupCred := b.configureAuth(cmd, resolvedAuth)
+	defer cleanupKey()
+	defer cleanupCred()
 
-	b.configureAuth(cmd, resolvedAuth)
 	if len(extraEnv) > 0 {
-		cmd.Env = append(os.Environ(), extraEnv...)
+		// 追加而非替换：保留 configureAuth 注入的凭证/SSH 环境
+		cmd.Env = append(cmd.Env, extraEnv...)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -193,10 +197,16 @@ func (b *NativeGitBackend) resolveAuth(auth AuthConfig) (AuthConfig, func()) {
 	return auth, cleanup
 }
 
-func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) {
+// configureAuth 为 git 命令注入认证环境。
+// HTTPS 令牌走**临时 credential helper + ASKPASS**（gickup 模式）：
+// 令牌写入 0600 文件，git 进程只拿到 helper 路径，**argv/environ 均无令牌**。
+// 返回 cleanup：调用方在 git 命令结束后删除临时凭证目录。
+func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) (cleanup func()) {
+	cleanup = func() {}
 	if cmd.Env == nil {
-		cmd.Env = append(cmd.Environ(), "GIT_TERMINAL_PROMPT=0")
+		cmd.Env = cmd.Environ()
 	}
+	cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0")
 
 	switch auth.Type {
 	case AuthHTTPBasic, AuthHTTPToken:
@@ -208,16 +218,23 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) {
 		if username == "" {
 			username = "token"
 		}
-		if token != "" {
-			// Use http.extraheader with Basic auth — works for all git
-			// operations (clone, fetch, push) without modifying URLs.
+		if token == "" {
+			return cleanup
+		}
+		sess, err := newCredSession(username, token)
+		if err != nil {
+			// 回退：无法建会话时仍用 extraheader（与旧行为一致），令牌仍不进 argv
+			b.logger.Warn("cred session unavailable, falling back to http.extraheader", "error", err)
 			cred := base64.StdEncoding.EncodeToString([]byte(username + ":" + token))
 			cmd.Env = append(cmd.Env,
 				"GIT_CONFIG_COUNT=1",
 				"GIT_CONFIG_KEY_0=http.extraheader",
 				fmt.Sprintf("GIT_CONFIG_VALUE_0=Authorization: Basic %s", cred),
 			)
+			return cleanup
 		}
+		cmd.Env = append(cmd.Env, sess.env()...)
+		return sess.close
 	case AuthSSH:
 		if auth.SSHKey != "" {
 			// %q keeps a caller-supplied key path from being interpreted by
@@ -227,6 +244,7 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
 		}
 	}
+	return cleanup
 }
 
 // --- Output parsers ---
