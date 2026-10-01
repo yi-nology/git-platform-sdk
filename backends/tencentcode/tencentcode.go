@@ -66,8 +66,9 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	// Build a transport.Client so we can leverage the retry/hooks/auth pipeline.
-	transportClient := transport.NewClient(baseURL+"/api/v3", transport.PrivateToken{Token: cfg.Token})
+	transportClient := transport.NewClient(baseURL+"/api/v3", backendutil.Auth(cfg, transport.AuthStylePrivate))
 	transportClient.Logger = backendutil.ToTransportLogger(logger)
+	transportClient.ETag = backendutil.ConditionalCache(cfg)
 	transportClient.Timeout = 30 * time.Second
 	if cfg.SkipTLS {
 		// Tencent 工蜂 requires TLS 1.2 with a specific cipher-suite
@@ -111,8 +112,16 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	sdkBaseURL := strings.TrimRight(baseURL, "/")
 	sdkBaseURL = strings.TrimSuffix(sdkBaseURL, "/api/v3")
 
-	// Create the gongfeng SDK client with the custom HTTP client.
-	gfClient, err := gongfeng.NewClient(cfg.Token,
+	// Create the gongfeng SDK client with the custom HTTP client. The SDK
+	// rejects an empty token at construction; under a refreshable
+	// TokenSource the placeholder below never reaches the network — the
+	// transport round tripper overwrites PRIVATE-TOKEN per request, and
+	// clears it entirely if the source yields an empty token.
+	gfToken := cfg.Token
+	if gfToken == "" && cfg.TokenSource != nil {
+		gfToken = "managed-by-token-source"
+	}
+	gfClient, err := gongfeng.NewClient(gfToken,
 		gongfeng.WithHTTPClient(httpClient),
 		gongfeng.WithBaseURL(sdkBaseURL),
 	)

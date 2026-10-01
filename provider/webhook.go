@@ -141,6 +141,48 @@ func (h HMACSHA256Validator) Validate(r *http.Request, body []byte, secret strin
 	return nil
 }
 
+// ForgejoWebhookValidator validates Forgejo's HMAC-SHA256 webhook
+// signature. Current Forgejo sends X-Forgejo-Signature; releases forked
+// from older Gitea send X-Gitea-Signature, so both are accepted —
+// whichever header is present is used (the signature format itself is
+// identical raw-hex HMAC-SHA256).
+type ForgejoWebhookValidator struct{}
+
+// Name implements WebhookValidator.
+func (ForgejoWebhookValidator) Name() string { return "forgejo-hmac-sha256" }
+
+// Validate implements WebhookValidator.
+func (ForgejoWebhookValidator) Validate(r *http.Request, body []byte, secret string) error {
+	for _, hdr := range []string{"X-Forgejo-Signature", "X-Gitea-Signature"} {
+		if r.Header.Get(hdr) != "" {
+			return HMACSHA256Validator{Header: hdr}.Validate(r, body, secret)
+		}
+	}
+	return fmt.Errorf("%w: missing X-Forgejo-Signature header", ErrWebhookValidation)
+}
+
+// GitCodeWebhookValidator accepts GitCode's two webhook verification
+// modes: an HMAC-SHA256 body signature (X-GitCode-Signature, falling back
+// to the gitea-inherited X-Gitea-Signature) or the documented static
+// password in X-GitCode-Token. Whichever header is present is used.
+type GitCodeWebhookValidator struct{}
+
+// Name implements WebhookValidator.
+func (GitCodeWebhookValidator) Name() string { return "gitcode" }
+
+// Validate implements WebhookValidator.
+func (GitCodeWebhookValidator) Validate(r *http.Request, body []byte, secret string) error {
+	for _, hdr := range []string{"X-GitCode-Signature", "X-Gitea-Signature"} {
+		if r.Header.Get(hdr) != "" {
+			return HMACSHA256Validator{Header: hdr}.Validate(r, body, secret)
+		}
+	}
+	if r.Header.Get("X-GitCode-Token") != "" {
+		return StaticTokenValidator{Header: "X-GitCode-Token"}.Validate(r, body, secret)
+	}
+	return fmt.Errorf("%w: missing GitCode signature header", ErrWebhookValidation)
+}
+
 // StaticTokenValidator compares a static token header against the configured
 // secret in constant time. Used for GitLab's X-Gitlab-Token.
 type StaticTokenValidator struct {
@@ -213,6 +255,14 @@ func (v GiteeWebhookValidator) Validate(r *http.Request, body []byte, secret str
 	}
 	ts := strings.TrimSpace(r.Header.Get("X-Gitee-Timestamp"))
 	if ts == "" {
+		// No timestamp: two body-independent modes remain. Password mode
+		// sends the plain secret (opt-in), and the Gitee backend's own
+		// scheme signs the request body with HMAC-SHA256 hex in
+		// X-Gitee-Token. The body-signature check runs first so a secret
+		// equal to another mode's token cannot cross-authenticate.
+		if err := (HMACSHA256Validator{Header: "X-Gitee-Token"}).Validate(r, body, secret); err == nil {
+			return nil
+		}
 		if !v.AllowPasswordMode {
 			return fmt.Errorf("%w: missing X-Gitee-Timestamp header (password mode requires AllowPasswordMode)", ErrWebhookValidation)
 		}
@@ -344,14 +394,14 @@ func ReadAndRestoreBody(r *http.Request) ([]byte, error) {
 func init() {
 	defaultWebhookRegistry.Register(PlatformGitHub, HMACSHA256Validator{Header: "X-Hub-Signature-256"})
 	defaultWebhookRegistry.Register(PlatformGitea, HMACSHA256Validator{Header: "X-Gitea-Signature"})
-	defaultWebhookRegistry.Register(PlatformForgejo, HMACSHA256Validator{Header: "X-Gitea-Signature"})
+	defaultWebhookRegistry.Register(PlatformForgejo, ForgejoWebhookValidator{})
 	defaultWebhookRegistry.Register(PlatformGitee, GiteeWebhookValidator{})
 	// GitCode documents its webhook password in X-GitCode-Token
 	// (docs.gitcode.com "配置 WebHook"); the X-Token body-HMAC scheme
 	// registered previously matched no documented mode. An HMAC sign mode
 	// exists but its exact message format is not yet verified against the
 	// docs — the documented password scheme is registered until then.
-	defaultWebhookRegistry.Register(PlatformGitCode, StaticTokenValidator{Header: "X-GitCode-Token"})
+	defaultWebhookRegistry.Register(PlatformGitCode, GitCodeWebhookValidator{})
 	defaultWebhookRegistry.Register(PlatformTencentCode, StaticTokenValidator{Header: "X-Token"})
 	defaultWebhookRegistry.Register(PlatformGitLab, StaticTokenValidator{Header: "X-Gitlab-Token"})
 }
@@ -377,6 +427,11 @@ const (
 	EventTypeBranch  = "branch."
 	EventTypeIssue   = "issue."
 	EventTypeComment = "comment."
+
+	// Comment actions. Platforms only notify on comment creation today;
+	// edits/deletions join the vocabulary when a platform starts sending
+	// them.
+	CommentActionCreated = "created"
 )
 
 // NormalizeCRAction maps platform-specific PR/MR action strings to the
@@ -413,11 +468,14 @@ func NormalizeCRAction(action string, merged bool) string {
 }
 
 // NormalizeTagAction maps platform-specific tag event actions to the
-// canonical vocabulary.
+// canonical vocabulary. The canonical full event type is "tag.created":
+// GitLab/Gitea/Tencent signal a tag with a tag_push hook (a tag being
+// pushed is the tag coming into existence), and GitHub's create/delete
+// events carry ref_type "tag".
 func NormalizeTagAction(action string) string {
 	switch strings.ToLower(action) {
 	case "push", "pushed", "created", "create":
-		return "push"
+		return "created"
 	default:
 		return action
 	}

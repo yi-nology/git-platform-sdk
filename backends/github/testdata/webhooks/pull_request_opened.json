@@ -1,0 +1,40 @@
+{
+  "headers": {
+    "X-GitHub-Event": "pull_request"
+  },
+  "body": {
+    "action": "opened",
+    "number": 7,
+    "pull_request": {
+      "number": 7,
+      "title": "t",
+      "state": "open",
+      "draft": false,
+      "user": {
+        "login": "dev",
+        "id": 1
+      },
+      "head": {
+        "ref": "f",
+        "sha": "abc123"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "def456"
+      },
+      "html_url": "https://github.com/owner/repo/pull/7"
+    },
+    "repository": {
+      "id": 99,
+      "name": "repo",
+      "full_name": "owner/repo",
+      "owner": {
+        "login": "owner"
+      }
+    },
+    "sender": {
+      "login": "dev",
+      "id": 1
+    }
+  }
+}

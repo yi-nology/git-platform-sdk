@@ -65,8 +65,9 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	sdkBaseURL := baseURL + "/"
 
 	// The transport client exists to provide the auth/retry/hooks pipeline.
-	transportClient := transport.NewClient(baseURL, transport.BearerToken{Token: cfg.Token})
+	transportClient := transport.NewClient(baseURL, backendutil.Auth(cfg, transport.AuthStyleBearer))
 	transportClient.Logger = backendutil.ToTransportLogger(logger)
+	transportClient.ETag = backendutil.ConditionalCache(cfg)
 	transportClient.Timeout = 30 * time.Second
 	if cfg.SkipTLS {
 		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)

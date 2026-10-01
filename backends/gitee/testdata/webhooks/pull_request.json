@@ -1,0 +1,22 @@
+{
+  "headers": {
+    "X-Gitee-Event": "pull_request"
+  },
+  "body": {
+    "action": "open",
+    "number": 7,
+    "title": "t",
+    "state": "open",
+    "source_branch": "f",
+    "target_branch": "main",
+    "html_url": "https://gitee.com/owner/repo/pulls/7",
+    "user": {
+      "id": 1,
+      "login": "dev",
+      "name": "Dev"
+    },
+    "repository": {
+      "full_name": "owner/repo"
+    }
+  }
+}

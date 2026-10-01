@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"time"
 )
 
 // Sentinel errors classify transport and provider failures so callers can
@@ -31,7 +32,14 @@ type ProviderError struct {
 	Op         string // operation name, e.g., "ListRepos"
 	Resource   string // optional resource identifier, e.g., "owner/repo"
 	StatusCode int    // 0 when not applicable (e.g. configuration errors)
-	Cause      error  // underlying cause; nil when constructed from raw fields
+	// RetryAfter / ResetAt carry the server-advised recovery window when
+	// the error is a rate-limit rejection and the platform sent hints
+	// (Retry-After header; X-RateLimit-Reset unix seconds). Zero when
+	// absent. Copied from the underlying transport error by Wrap; see
+	// RateLimitRecovery for the ergonomic accessor.
+	RetryAfter time.Duration
+	ResetAt    time.Time
+	Cause      error // underlying cause; nil when constructed from raw fields
 }
 
 // Error implements the error interface.
@@ -100,6 +108,7 @@ func Wrap(platform Platform, op string, err error) error {
 		if sc, ok := cur.(statusCoder); ok {
 			pe.StatusCode = sc.StatusCode()
 			pe.Cause = fmt.Errorf("%w: %w", classifyStatusCode(pe.StatusCode), err)
+			copyRateLimitHints(pe, cur)
 			break
 		}
 		// Slow path: reflection-based detection for third-party SDK errors
@@ -107,11 +116,25 @@ func Wrap(platform Platform, op string, err error) error {
 		if code, ok := httpStatusFromError(cur); ok {
 			pe.StatusCode = code
 			pe.Cause = fmt.Errorf("%w: %w", classifyStatusCode(code), err)
+			copyRateLimitHints(pe, cur)
 			break
 		}
 		cur = errors.Unwrap(cur)
 	}
 	return pe
+}
+
+// rateLimitInfo is the interface shape through which transport errors
+// expose server-advised recovery windows without the provider package
+// importing transport.
+type rateLimitInfo interface {
+	RateLimitInfo() (retryAfter time.Duration, resetAt time.Time)
+}
+
+func copyRateLimitHints(pe *ProviderError, cur error) {
+	if ri, ok := cur.(rateLimitInfo); ok {
+		pe.RetryAfter, pe.ResetAt = ri.RateLimitInfo()
+	}
 }
 
 // Wrapf is a convenience for creating a ProviderError with a formatted
@@ -364,6 +387,36 @@ func IsAuthentication(err error) bool { return errors.Is(err, ErrAuthentication)
 
 // IsRateLimited reports whether err wraps ErrRateLimited (HTTP 429).
 func IsRateLimited(err error) bool { return errors.Is(err, ErrRateLimited) }
+
+// RateLimitRecovery extracts the server-advised recovery window from a
+// rate-limited error, walking the wrapped chain for the transport hints
+// (Retry-After / X-RateLimit-Reset). ok is true only when at least one of
+// retryAfter or resetAt is known — callers rate-limited without hints
+// should fall back to their own backoff.
+//
+//	if ra, reset, ok := provider.RateLimitRecovery(err); ok {
+//	    wait := ra
+//	    if reset.After(time.Now()) && (wait == 0 || time.Until(reset) > wait) {
+//	        wait = time.Until(reset)
+//	    }
+//	    time.Sleep(wait)
+//	}
+func RateLimitRecovery(err error) (retryAfter time.Duration, resetAt time.Time, ok bool) {
+	for cur := err; cur != nil; cur = errors.Unwrap(cur) {
+		if pe, isPE := cur.(*ProviderError); isPE {
+			if pe.RetryAfter != 0 || !pe.ResetAt.IsZero() {
+				return pe.RetryAfter, pe.ResetAt, true
+			}
+			continue
+		}
+		if ri, ok := cur.(rateLimitInfo); ok {
+			if ra, at := ri.RateLimitInfo(); ra != 0 || !at.IsZero() {
+				return ra, at, true
+			}
+		}
+	}
+	return 0, time.Time{}, false
+}
 
 // IsForbidden reports whether err wraps ErrForbidden (HTTP 403).
 func IsForbidden(err error) bool { return errors.Is(err, ErrForbidden) }

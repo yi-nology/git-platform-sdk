@@ -3,6 +3,8 @@ package transport
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 // NewStatusError builds an error for an HTTP response with status >= 400. The
@@ -15,6 +17,37 @@ func NewStatusError(method, path string, status int, body []byte) error {
 		statusCode: status,
 		Body:       body,
 	}
+}
+
+// NewStatusErrorWithHeaders is NewStatusError plus the response headers,
+// from which rate-limit recovery hints are extracted onto the error:
+// Retry-After (RFC 9110 §10.2.3) becomes Error.RetryAfter, and
+// X-RateLimit-Reset (unix seconds, the GitHub/GitLab/Gitea convention)
+// becomes Error.ResetAt.
+func NewStatusErrorWithHeaders(method, path string, status int, body []byte, header http.Header) error {
+	e := &Error{
+		Method:     method,
+		Path:       path,
+		statusCode: status,
+		Body:       body,
+	}
+	if header == nil {
+		return e
+	}
+	if ra := header.Get("Retry-After"); ra != "" {
+		if d, ok := parseRetryAfter(ra, time.Now()); ok {
+			e.RetryAfter = d
+		}
+	}
+	if v := header.Get("X-RateLimit-Reset"); v != "" {
+		if sec, err := strconv.ParseInt(v, 10, 64); err == nil && sec > 0 {
+			e.ResetAt = time.Unix(sec, 0)
+		}
+	}
+	if status == http.StatusForbidden && header.Get("X-RateLimit-Remaining") == "0" {
+		e.rateLimited403 = true
+	}
+	return e
 }
 
 // Error is the structured error returned by Client when a request completes
@@ -34,6 +67,17 @@ type Error struct {
 	statusCode int
 	Body       []byte
 	Cause      error
+	// RetryAfter, when non-zero, is the server-advised wait before the
+	// request may be retried (Retry-After header). Populated by
+	// NewStatusErrorWithHeaders.
+	RetryAfter time.Duration
+	// ResetAt, when non-zero, is when the rate-limit window reopens
+	// (X-RateLimit-Reset, unix seconds). Populated by
+	// NewStatusErrorWithHeaders.
+	ResetAt time.Time
+	// rateLimited403 records a 403 carrying X-RateLimit-Remaining: 0 — how
+	// GitHub and Gitea signal an exhausted quota without using 429.
+	rateLimited403 bool
 }
 
 // Error implements the error interface.
@@ -78,6 +122,22 @@ func (e *Error) IsClientError() bool { return e.IsStatusClass(http.StatusBadRequ
 
 // IsServerError reports 5xx.
 func (e *Error) IsServerError() bool { return e.IsStatusClass(http.StatusInternalServerError) }
+
+// IsRateLimited reports whether the error is a rate-limit rejection: HTTP
+// 429, or a 403 carrying X-RateLimit-Remaining: 0 (how GitHub and Gitea
+// signal an exhausted quota). RetryAfter/ResetAt, when set, say when the
+// window reopens.
+func (e *Error) IsRateLimited() bool {
+	return e.statusCode == http.StatusTooManyRequests || e.rateLimited403
+}
+
+// RateLimitInfo exposes the server-advised recovery window for
+// rate-limited errors. Both values are zero when the server sent no
+// hints (or the error is not rate-limit shaped). The provider package
+// consumes this through the interface shape; it is also handy directly.
+func (e *Error) RateLimitInfo() (retryAfter time.Duration, resetAt time.Time) {
+	return e.RetryAfter, e.ResetAt
+}
 
 // ErrEmptyResponse is returned by DoJSON when the server returned a 2xx with
 // no body and the caller asked for a non-nil result.

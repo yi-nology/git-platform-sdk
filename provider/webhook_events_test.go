@@ -59,16 +59,16 @@ func TestNormalizeTagAction(t *testing.T) {
 		want   string
 	}{
 		// Standard mappings.
-		{"push", "push"},
-		{"pushed", "push"},
-		{"created", "push"},
-		{"create", "push"},
+		{"push", "created"},
+		{"pushed", "created"},
+		{"created", "created"},
+		{"create", "created"},
 
 		// Case insensitivity.
-		{"PUSH", "push"},
-		{"Pushed", "push"},
-		{"CREATED", "push"},
-		{"Create", "push"},
+		{"PUSH", "created"},
+		{"Pushed", "created"},
+		{"CREATED", "created"},
+		{"Create", "created"},
 
 		// Unknown action passes through unchanged.
 		{"deleted", "deleted"},

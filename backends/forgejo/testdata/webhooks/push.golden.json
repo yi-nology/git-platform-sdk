@@ -1,0 +1,22 @@
+{
+  "id": "",
+  "type": "push",
+  "source": "forgejo",
+  "timestamp": "0001-01-01T00:00:00Z",
+  "actor": {
+    "id": 1,
+    "username": "dev",
+    "name": "",
+    "avatar_url": ""
+  },
+  "repo": {
+    "id": 99,
+    "full_name": "owner/repo",
+    "owner": "owner",
+    "name": "repo"
+  },
+  "branch": "main",
+  "commit_sha": "abc123",
+  "action": "push",
+  "raw_payload": null
+}

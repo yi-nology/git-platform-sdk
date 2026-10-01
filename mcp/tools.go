@@ -12,12 +12,18 @@ import (
 
 // toolsetNames are the selectable toolset identifiers (Options.Toolsets).
 const (
-	toolsetCore   = "core"   // repos, branches, files, CR reads
-	toolsetCRs    = "crs"    // CR lifecycle writes
-	toolsetIssues = "issues" // issue reads/writes
-	toolsetStatus = "status" // commit status read/write/wait
-	toolsetSearch = "search" // repo/issue/user search
+	toolsetCore     = "core"     // repos, branches, files, CR reads
+	toolsetCRs      = "crs"      // CR lifecycle writes
+	toolsetIssues   = "issues"   // issue reads/writes
+	toolsetStatus   = "status"   // commit status read/write/wait
+	toolsetSearch   = "search"   // repo/issue/user search
+	toolsetReleases = "releases" // tags and release reads/writes
 )
+
+// defaultPerPage is the page size used when a tool caller leaves per_page
+// unset. It stays below the SDK's MaxPerPage (100) ceiling on purpose:
+// list payloads are the main context-cost driver for agents.
+const defaultPerPage = 30
 
 var toolsets = []toolset{
 	{name: toolsetCore, enabled: func(provider.CapabilitySet) bool { return true }, registered: registerCore},
@@ -25,11 +31,25 @@ var toolsets = []toolset{
 	{name: toolsetIssues, enabled: func(c provider.CapabilitySet) bool { return c.Issues }, registered: registerIssues},
 	{name: toolsetStatus, enabled: func(c provider.CapabilitySet) bool { return c.CommitStatuses }, registered: registerStatus},
 	{name: toolsetSearch, enabled: func(c provider.CapabilitySet) bool { return c.Search }, registered: registerSearch},
+	// ReleaseManager is a core Provider interface (every backend implements
+	// it), so the toolset mounts unconditionally.
+	{name: toolsetReleases, enabled: func(provider.CapabilitySet) bool { return true }, registered: registerReleases},
 }
 
 var knownToolsets = map[string]bool{
 	toolsetCore: true, toolsetCRs: true, toolsetIssues: true,
-	toolsetStatus: true, toolsetSearch: true,
+	toolsetStatus: true, toolsetSearch: true, toolsetReleases: true,
+}
+
+// perPage resolves the per_page tool parameter with the default fallback.
+func perPage(n int) int {
+	if n <= 0 {
+		return defaultPerPage
+	}
+	if n > provider.MaxPerPage {
+		return provider.MaxPerPage
+	}
+	return n
 }
 
 // validCommitStatusStates is the write-side vocabulary for
@@ -95,8 +115,9 @@ type getRepoOut struct {
 }
 
 type listReposIn struct {
-	Owner string `json:"owner" jsonschema:"list repositories owned by this account"`
-	Page  int    `json:"page,omitempty" jsonschema:"1-based page number"`
+	Owner   string `json:"owner" jsonschema:"list repositories owned by this account"`
+	Page    int    `json:"page,omitempty" jsonschema:"1-based page number"`
+	PerPage int    `json:"per_page,omitempty" jsonschema:"items per page (1-100); default 30"`
 }
 
 type getFileIn struct {
@@ -118,10 +139,11 @@ type listBranchesOut struct {
 }
 
 type listCRsIn struct {
-	Owner string `json:"owner"`
-	Repo  string `json:"repo"`
-	State string `json:"state,omitempty" jsonschema:"open|closed|merged|all; empty = platform default"`
-	Page  int    `json:"page,omitempty"`
+	Owner   string `json:"owner"`
+	Repo    string `json:"repo"`
+	State   string `json:"state,omitempty" jsonschema:"open|closed|merged|all; empty = platform default"`
+	Page    int    `json:"page,omitempty"`
+	PerPage int    `json:"per_page,omitempty" jsonschema:"items per page (1-100); default 30"`
 	// Fields trims every CR to the selected projection paths (e.g.
 	// ["number","title","head.ref"]); empty returns full CRs. Use this
 	// to keep large listings inside your context budget.
@@ -154,7 +176,7 @@ func registerCore(s *mcp.Server, st *state) {
 	})
 
 	add(s, st, "list_repos", "List repositories", "List the repositories owned by an account.", false, func(ctx context.Context, in listReposIn) ([]*provider.PlatformRepo, error) {
-		return st.p.ListRepos(ctx, provider.ListRepoOptions{Owner: in.Owner, Page: in.Page, PerPage: 30})
+		return st.p.ListRepos(ctx, provider.ListRepoOptions{Owner: in.Owner, Page: in.Page, PerPage: perPage(in.PerPage)})
 	})
 
 	add(s, st, "get_file", "Get file content", "Read one file from the repository at a ref (empty = default branch).", false, func(ctx context.Context, in getFileIn) (getFileOut, error) {
@@ -171,7 +193,7 @@ func registerCore(s *mcp.Server, st *state) {
 		if in.State != "" && !validCRStates[in.State] {
 			return listCRsOut{}, fmt.Errorf("invalid state %q (open|opened|closed|merged|all)", in.State)
 		}
-		opts := provider.ListCROptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: 30}
+		opts := provider.ListCROptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: perPage(in.PerPage)}
 		if in.State != "" {
 			opts.State = provider.CRState(in.State)
 		}
@@ -202,7 +224,7 @@ func registerCore(s *mcp.Server, st *state) {
 	})
 
 	add(s, st, "list_commits", "List commits", "List a repository's commits (newest first), optionally on one branch.", false, func(ctx context.Context, in listCommitsIn) ([]*provider.CommitInfo, error) {
-		return st.p.ListCommits(ctx, in.Owner, in.Repo, provider.ListCommitsOptions{Branch: in.Branch, Page: in.Page, PerPage: 30})
+		return st.p.ListCommits(ctx, in.Owner, in.Repo, provider.ListCommitsOptions{Branch: in.Branch, Page: in.Page, PerPage: perPage(in.PerPage)})
 	})
 }
 
@@ -254,11 +276,12 @@ func registerCRs(s *mcp.Server, st *state) {
 // --- issues ---
 
 type listIssuesIn struct {
-	Owner  string   `json:"owner"`
-	Repo   string   `json:"repo"`
-	State  string   `json:"state,omitempty" jsonschema:"open|closed|all; empty = platform default"`
-	Page   int      `json:"page,omitempty"`
-	Fields []string `json:"fields,omitempty" jsonschema:"projection paths (e.g. [\"number\",\"title\"]) to trim each issue"`
+	Owner   string   `json:"owner"`
+	Repo    string   `json:"repo"`
+	State   string   `json:"state,omitempty" jsonschema:"open|closed|all; empty = platform default"`
+	Page    int      `json:"page,omitempty"`
+	PerPage int      `json:"per_page,omitempty" jsonschema:"items per page (1-100); default 30"`
+	Fields  []string `json:"fields,omitempty" jsonschema:"projection paths (e.g. [\"number\",\"title\"]) to trim each issue"`
 }
 
 type listIssuesOut struct {
@@ -292,7 +315,7 @@ func registerIssues(s *mcp.Server, st *state) {
 		if in.State != "" && !validIssueStates[in.State] {
 			return listIssuesOut{}, fmt.Errorf("invalid state %q (open|closed|all)", in.State)
 		}
-		opts := provider.ListIssuesOptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: 30}
+		opts := provider.ListIssuesOptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: perPage(in.PerPage)}
 		if in.State != "" {
 			opts.State = provider.IssueState(in.State)
 		}
@@ -435,8 +458,9 @@ type listCommitsIn struct {
 	Owner string `json:"owner"`
 	Repo  string `json:"repo"`
 	// Branch restricts the listing to one branch; empty = default branch.
-	Branch string `json:"branch,omitempty"`
-	Page   int    `json:"page,omitempty"`
+	Branch  string `json:"branch,omitempty"`
+	Page    int    `json:"page,omitempty"`
+	PerPage int    `json:"per_page,omitempty" jsonschema:"items per page (1-100); default 30"`
 }
 
 type closeIssueIn struct {
@@ -485,5 +509,47 @@ func registerSearch(s *mcp.Server, st *state) {
 			t = *total
 		}
 		return searchUsersOut{Total: t, Users: users}, nil
+	})
+}
+
+// --- releases: tags and releases ---
+
+type listReleasesIn ownerRepo
+
+type getReleaseIn struct {
+	Owner string `json:"owner"`
+	Repo  string `json:"repo"`
+	Tag   string `json:"tag" jsonschema:"release tag name"`
+}
+
+type createReleaseIn struct {
+	Owner    string `json:"owner"`
+	Repo     string `json:"repo"`
+	TagName  string `json:"tag_name" jsonschema:"tag to release"`
+	Title    string `json:"title" jsonschema:"release title"`
+	Body     string `json:"body,omitempty" jsonschema:"release notes"`
+	Target   string `json:"target,omitempty" jsonschema:"commitish the tag points at; empty = default branch"`
+	Draft      bool `json:"draft,omitempty"`
+	Prerelease bool `json:"prerelease,omitempty"`
+}
+
+func registerReleases(s *mcp.Server, st *state) {
+	add(s, st, "list_tags", "List tags", "List a repository's tags.", false, func(ctx context.Context, in ownerRepo) ([]*provider.TagInfo, error) {
+		return st.p.ListTags(ctx, in.Owner, in.Repo)
+	})
+
+	add(s, st, "list_releases", "List releases", "List a repository's published releases.", false, func(ctx context.Context, in listReleasesIn) ([]*provider.ReleaseInfo, error) {
+		return st.p.ListReleases(ctx, in.Owner, in.Repo)
+	})
+
+	add(s, st, "get_release", "Get release by tag", "Fetch one release addressed by its tag name.", false, func(ctx context.Context, in getReleaseIn) (*provider.ReleaseInfo, error) {
+		return st.p.GetReleaseByTag(ctx, in.Owner, in.Repo, in.Tag)
+	})
+
+	add(s, st, "create_release", "Create release", "Publish a release for a tag.", true, func(ctx context.Context, in createReleaseIn) (*provider.ReleaseInfo, error) {
+		return st.p.CreateRelease(ctx, in.Owner, in.Repo, provider.CreateReleaseOptions{
+			TagName: in.TagName, Target: in.Target, Title: in.Title,
+			Body: in.Body, Draft: in.Draft, Prerelease: in.Prerelease,
+		})
 	})
 }

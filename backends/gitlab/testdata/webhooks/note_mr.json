@@ -1,0 +1,22 @@
+{
+  "headers": {},
+  "body": {
+    "object_kind": "note",
+    "user": {
+      "id": 1,
+      "username": "dev",
+      "name": "Dev"
+    },
+    "project": {
+      "id": 99,
+      "path_with_namespace": "owner/repo"
+    },
+    "object_attributes": {
+      "note": "lgtm",
+      "noteable_type": "MergeRequest"
+    },
+    "merge_request": {
+      "iid": 7
+    }
+  }
+}

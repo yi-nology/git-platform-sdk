@@ -161,6 +161,10 @@ type Client struct {
 	Transport http.RoundTripper
 	// Limiter provides proactive rate limiting. nil disables rate limiting.
 	Limiter *RateLimiter
+	// ETag enables conditional requests (If-None-Match / 304 replay) for
+	// GETs issued through both the Do and the RoundTripper paths. nil
+	// disables conditional requests entirely. See ETagCache.
+	ETag *ETagCache
 	// MaxBodySize limits the response body size in bytes. 0 means no limit.
 	// A value of -1 uses the default limit (10 MB). This prevents OOM from
 	// malicious or misconfigured servers.
@@ -234,10 +238,14 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 	if err != nil {
 		return nil, err
 	}
+	c.ETag.applyConditional(httpReq)
 
 	start := time.Now()
 	resp, body, err := c.roundTripWithRetry(ctx, httpReq)
 	duration := time.Since(start)
+	if err == nil {
+		resp, body = c.ETag.process(httpReq, resp, body)
+	}
 	if err != nil {
 		c.log().Error("transport request failed",
 			"method", req.Method,
@@ -272,7 +280,7 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 			"duration", duration,
 		)
 		c.Hooks.ExecuteResponse(ctx, httpReq, resp, duration, nil)
-		return nil, NewStatusError(req.Method, req.Path, resp.StatusCode, body)
+		return nil, NewStatusErrorWithHeaders(req.Method, req.Path, resp.StatusCode, body, resp.Header)
 	}
 
 	c.Hooks.ExecuteResponse(ctx, httpReq, resp, duration, nil)
@@ -320,9 +328,10 @@ func (c *Client) buildRequest(ctx context.Context, req *Request) (*http.Request,
 	if httpReq.Header.Get("Accept") == "" {
 		httpReq.Header.Set("Accept", "application/json")
 	}
-	if c.Auth != nil {
-		c.Auth.Apply(httpReq)
+	if err := applyAuth(ctx, c.Auth, httpReq); err != nil {
+		return nil, fmt.Errorf("transport: auth: %w", err)
 	}
+	setUserAgentDefault(httpReq)
 
 	if err := c.Hooks.ExecuteRequest(ctx, httpReq); err != nil {
 		return nil, err
@@ -336,9 +345,10 @@ func (c *Client) buildRequest(ctx context.Context, req *Request) (*http.Request,
 // A rejecting request hook aborts the request: the error is returned to the
 // caller (matching the Client.do path) rather than silently discarded.
 func (c *Client) roundTripRequest(req *http.Request) error {
-	if c.Auth != nil {
-		c.Auth.Apply(req)
+	if err := applyAuth(req.Context(), c.Auth, req); err != nil {
+		return err
 	}
+	setUserAgentDefault(req)
 	return c.Hooks.ExecuteRequest(req.Context(), req)
 }
 
@@ -503,12 +513,17 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		// silently swallowed (same semantics as the Client.do path).
 		return nil, err
 	}
+	rt.client.ETag.applyConditional(req)
 	start := time.Now()
 	resp, err := tr.RoundTrip(req)
 	duration := time.Since(start)
-	// Update rate limiter state from response headers.
+	// Update rate limiter state from the real response headers — a 304's
+	// headers describe the current quota, the replayed 200's do not.
 	if resp != nil && rt.client.Limiter != nil {
 		rt.client.Limiter.UpdateFromResponse(resp)
+	}
+	if err == nil {
+		resp = rt.client.ETag.processRT(req, resp)
 	}
 	rt.client.Hooks.ExecuteResponse(ctx, req, resp, duration, err)
 	if err != nil {

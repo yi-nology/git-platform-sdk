@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	tencentcode "github.com/yi-nology/go-git-platform/backends/tencentcode"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -88,4 +89,8 @@ func TestTencentCode_Contract(t *testing.T) {
 			GetUserResponse: `{"id":1,"username":"dev","name":"Dev","avatar_url":"https://tencentcode.com/avatars/1"}`,
 		},
 	})
+}
+
+func TestTencentCode_WebhookCorpus(t *testing.T) {
+	contracttest.RunWebhookCorpus(t, provider.PlatformTencentCode, &tencentcode.Provider{}, "testdata/webhooks")
 }

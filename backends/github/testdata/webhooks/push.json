@@ -1,0 +1,22 @@
+{
+  "headers": {
+    "X-GitHub-Event": "push"
+  },
+  "body": {
+    "ref": "refs/heads/main",
+    "before": "000",
+    "after": "abc123",
+    "repository": {
+      "id": 99,
+      "name": "repo",
+      "full_name": "owner/repo",
+      "owner": {
+        "login": "owner"
+      }
+    },
+    "sender": {
+      "login": "dev",
+      "id": 1
+    }
+  }
+}

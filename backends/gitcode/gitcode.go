@@ -54,9 +54,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	baseURL := backendutil.DefaultBaseURL(cfg.BaseURL, "https://api.gitcode.com/api/v5")
 	transportClient := transport.NewClient(
 		baseURL,
-		transport.BearerToken{Token: cfg.Token},
+		backendutil.Auth(cfg, transport.AuthStyleBearer),
 	)
 	transportClient.Logger = logger
+	transportClient.ETag = backendutil.ConditionalCache(cfg)
 	// Set TLS-skipping transport on the transport client so that all
 	// HTTP requests (including retries) honour SkipTLS.
 	if cfg.SkipTLS {

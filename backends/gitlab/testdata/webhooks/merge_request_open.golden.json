@@ -1,0 +1,46 @@
+{
+  "id": "",
+  "type": "cr.opened",
+  "source": "gitlab",
+  "timestamp": "0001-01-01T00:00:00Z",
+  "actor": {
+    "id": 1,
+    "username": "dev",
+    "name": "Dev",
+    "avatar_url": ""
+  },
+  "repo": {
+    "id": 99,
+    "full_name": "owner/repo",
+    "owner": "owner",
+    "name": "repo"
+  },
+  "cr": {
+    "id": 7,
+    "number": "7",
+    "title": "t",
+    "description": "d",
+    "state": "opened",
+    "source_branch": "f",
+    "target_branch": "main",
+    "head_sha": "hSHA",
+    "base_sha": "bSHA",
+    "start_sha": "sSHA",
+    "draft": false,
+    "author": {
+      "id": 1,
+      "username": "dev",
+      "name": "Dev",
+      "avatar_url": ""
+    },
+    "reviewers": null,
+    "labels": null,
+    "merge_status": "can_be_merged",
+    "web_url": "https://gitlab.com/owner/repo/-/merge_requests/7",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  "commit_sha": "abc",
+  "action": "opened",
+  "raw_payload": null
+}

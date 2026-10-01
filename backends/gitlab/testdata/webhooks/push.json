@@ -1,0 +1,17 @@
+{
+  "headers": {},
+  "body": {
+    "object_kind": "push",
+    "user": {
+      "id": 1,
+      "username": "dev",
+      "name": "Dev"
+    },
+    "project": {
+      "id": 99,
+      "path_with_namespace": "owner/repo"
+    },
+    "ref": "refs/heads/main",
+    "after": "abc123"
+  }
+}

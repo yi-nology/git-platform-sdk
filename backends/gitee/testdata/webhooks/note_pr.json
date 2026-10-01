@@ -1,0 +1,18 @@
+{
+  "headers": {
+    "X-Gitee-Event": "note"
+  },
+  "body": {
+    "noteable_type": "PullRequest",
+    "number": 7,
+    "note": "lgtm",
+    "user": {
+      "id": 1,
+      "login": "dev",
+      "name": "Dev"
+    },
+    "repository": {
+      "full_name": "owner/repo"
+    }
+  }
+}

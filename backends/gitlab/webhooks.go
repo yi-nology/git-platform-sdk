@@ -131,10 +131,21 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			UpdatedAt time.Time `json:"updated_at"`
 			SHA       string    `json:"sha"`
 			Status    string    `json:"status"`
+			// Note hook: object_attributes is the note itself.
+			Note         string `json:"note"`
+			NoteableType string `json:"noteable_type"`
 		} `json:"object_attributes"`
 		MergeRequest struct {
 			IID int64 `json:"iid"`
 		} `json:"merge_request"`
+		Issue struct {
+			IID         int64     `json:"iid"`
+			Title       string    `json:"title"`
+			Description string    `json:"description"`
+			State       string    `json:"state"`
+			CreatedAt   time.Time `json:"created_at"`
+			UpdatedAt   time.Time `json:"updated_at"`
+		} `json:"issue"`
 		Ref   string `json:"ref"`
 		After string `json:"after"`
 	}
@@ -214,16 +225,59 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			}
 		}
 	case "note":
-		if pl.ObjectAttributes.IID != 0 {
-			event.Type = "cr.note"
-			event.Action = "note"
+		// Note hook: object_attributes is the note; the noteable target
+		// rides along as a top-level issue or merge_request object. The
+		// canonical type is comment.created regardless of the target —
+		// consumers branch on which of CR/Issue is populated.
+		event.Type = provider.EventTypeComment + provider.CommentActionCreated
+		event.Action = provider.CommentActionCreated
+		// GitLab note hooks carry no comment timestamps; leave them zero
+		// rather than fabricating the parse time.
+		event.Comment = &provider.IssueComment{
+			Body: pl.ObjectAttributes.Note, Author: actor,
+		}
+		if pl.MergeRequest.IID != 0 {
 			event.CR = &provider.ChangeRequest{
-				ID:     pl.ObjectAttributes.IID,
-				Number: strconv.FormatInt(pl.ObjectAttributes.IID, 10),
+				ID: pl.MergeRequest.IID, Number: strconv.FormatInt(pl.MergeRequest.IID, 10),
 			}
+		}
+		if pl.Issue.IID != 0 {
+			event.Issue = &provider.Issue{
+				ID: pl.Issue.IID, Number: strconv.FormatInt(pl.Issue.IID, 10),
+				Title:     pl.Issue.Title,
+				State:     mapGLIssueState(pl.Issue.State),
+				Author:    actor,
+				CreatedAt: pl.Issue.CreatedAt, UpdatedAt: pl.Issue.UpdatedAt,
+			}
+		}
+	case "issue":
+		// Issue hook: object_attributes carries the issue (iid, title,
+		// description, state) plus the triggering action.
+		action := provider.NormalizeIssueAction(pl.ObjectAttributes.Action)
+		event.Type = provider.EventTypeIssue + action
+		event.Action = action
+		event.Issue = &provider.Issue{
+			ID: pl.ObjectAttributes.IID, Number: strconv.FormatInt(pl.ObjectAttributes.IID, 10),
+			Title: pl.ObjectAttributes.Title, Body: pl.ObjectAttributes.Description,
+			State:     mapGLIssueState(pl.ObjectAttributes.State),
+			Author:    actor,
+			CreatedAt: pl.ObjectAttributes.CreatedAt, UpdatedAt: pl.ObjectAttributes.UpdatedAt,
 		}
 	}
 	return event, nil
+}
+
+// mapGLIssueState maps GitLab issue states ("opened"/"reopened"/"closed")
+// onto the unified IssueState vocabulary.
+func mapGLIssueState(state string) provider.IssueState {
+	switch state {
+	case "closed":
+		return provider.IssueStateClosed
+	case "opened", "reopened", "":
+		return provider.IssueStateOpen
+	default:
+		return provider.IssueState(state)
+	}
 }
 
 var _ provider.WebhookManager = (*Provider)(nil)

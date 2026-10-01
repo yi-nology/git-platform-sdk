@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "X-Gitea-Event": "push"
+  },
+  "body": {
+    "ref": "refs/heads/main",
+    "after": "abc123",
+    "repository": {
+      "id": 99,
+      "full_name": "owner/repo"
+    },
+    "sender": {
+      "id": 1,
+      "login": "dev"
+    }
+  }
+}

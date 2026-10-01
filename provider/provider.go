@@ -174,13 +174,18 @@ type PlatformWebhook struct {
 
 // NormalizedEvent represents a normalized webhook event from any platform.
 type NormalizedEvent struct {
-	ID         string          `json:"id"`
-	Type       string          `json:"type"`
-	Source     Platform        `json:"source"`
-	Timestamp  time.Time       `json:"timestamp"`
-	Actor      *CRUser         `json:"actor"`
-	Repo       *EventRepo      `json:"repo"`
-	CR         *ChangeRequest  `json:"cr,omitempty"`
+	ID        string         `json:"id"`
+	Type      string         `json:"type"`
+	Source    Platform       `json:"source"`
+	Timestamp time.Time      `json:"timestamp"`
+	Actor     *CRUser        `json:"actor"`
+	Repo      *EventRepo     `json:"repo"`
+	CR        *ChangeRequest `json:"cr,omitempty"`
+	// Issue is set for issue.* events and for comments made on issues;
+	// Comment carries the comment body for comment.* events. A comment on
+	// a change request populates CR instead of (or alongside) nothing.
+	Issue      *Issue          `json:"issue,omitempty"`
+	Comment    *IssueComment   `json:"comment,omitempty"`
 	Branch     string          `json:"branch,omitempty"`
 	Tag        string          `json:"tag,omitempty"`
 	CommitSHA  string          `json:"commit_sha,omitempty"`

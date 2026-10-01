@@ -143,6 +143,23 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		After     string    `json:"after"`
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
+		// note hooks: the comment body and its target kind.
+		Note         string `json:"note"`
+		NoteableType string `json:"noteable_type"`
+		// issue hooks: the issue object (Gitee numbers are alphanumeric).
+		Issue *struct {
+			Number  string `json:"number"`
+			Title   string `json:"title"`
+			Body    string `json:"body"`
+			State   string `json:"state"`
+			HTMLURL string `json:"html_url"`
+			User    struct {
+				ID    int    `json:"id"`
+				Login string `json:"login"`
+			} `json:"user"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+		} `json:"issue"`
 	}
 	if err := json.Unmarshal(body, &pl); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ParseWebhookEvent", err)
@@ -184,16 +201,40 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
 		event.CommitSHA = pl.After
 	case "tag_push":
-		event.Type = "tag.push"
-		event.Action = "tag.push"
+		event.Type = provider.EventTypeTag + "created"
+		event.Action = "created"
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
 		event.CommitSHA = pl.After
 	case "note", "comment":
-		event.Type = "comment.created"
-		event.Action = "comment.created"
+		event.Type = provider.EventTypeComment + provider.CommentActionCreated
+		event.Action = provider.CommentActionCreated
+		event.Comment = &provider.IssueComment{Body: pl.Note, Author: actor}
+		if pl.NoteableType == "PullRequest" && pl.Number != 0 {
+			event.CR = &provider.ChangeRequest{Number: strconv.Itoa(pl.Number)}
+		}
+		if pl.Issue != nil {
+			event.Issue = &provider.Issue{
+				Number: pl.Issue.Number, Title: pl.Issue.Title, Body: pl.Issue.Body,
+				Author: &provider.CRUser{ID: int64(pl.Issue.User.ID), Username: pl.Issue.User.Login},
+				WebURL: pl.Issue.HTMLURL, CreatedAt: pl.Issue.CreatedAt, UpdatedAt: pl.Issue.UpdatedAt,
+			}
+		}
 	case "Issue Hook":
-		event.Type = "issue." + pl.Action
-		event.Action = pl.Action
+		action := provider.NormalizeIssueAction(pl.Action)
+		event.Type = provider.EventTypeIssue + action
+		event.Action = action
+		if pl.Issue != nil {
+			state := provider.IssueStateOpen
+			if strings.HasPrefix(pl.Issue.State, "closed") || strings.HasPrefix(pl.Issue.State, "reject") {
+				state = provider.IssueStateClosed
+			}
+			event.Issue = &provider.Issue{
+				Number: pl.Issue.Number, Title: pl.Issue.Title, Body: pl.Issue.Body,
+				State:  state,
+				Author: &provider.CRUser{ID: int64(pl.Issue.User.ID), Username: pl.Issue.User.Login},
+				WebURL: pl.Issue.HTMLURL, CreatedAt: pl.Issue.CreatedAt, UpdatedAt: pl.Issue.UpdatedAt,
+			}
+		}
 	}
 	return event, nil
 }

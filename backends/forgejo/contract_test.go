@@ -94,3 +94,7 @@ func TestForgejo_Contract(t *testing.T) {
 		},
 	})
 }
+
+func TestForgejo_WebhookCorpus(t *testing.T) {
+	contracttest.RunWebhookCorpus(t, provider.PlatformForgejo, &forgejo.Provider{}, "testdata/webhooks")
+}

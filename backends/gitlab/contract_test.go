@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	glbackend "github.com/yi-nology/go-git-platform/backends/gitlab"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -114,4 +115,8 @@ func TestGitLab_Contract(t *testing.T) {
 			GetUserResponse: `[{"id":1,"username":"dev","name":"Dev","avatar_url":"https://gitlab.com/avatars/1"}]`,
 		},
 	})
+}
+
+func TestGitLab_WebhookCorpus(t *testing.T) {
+	contracttest.RunWebhookCorpus(t, provider.PlatformGitLab, &glbackend.Provider{}, "testdata/webhooks")
 }

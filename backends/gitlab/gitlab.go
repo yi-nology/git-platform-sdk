@@ -55,15 +55,16 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	// Select auth strategy: "bearer" → OAuth Bearer, otherwise → PRIVATE-TOKEN (GitLab default).
-	var authStrategy transport.AuthStrategy = transport.PrivateToken{Token: cfg.Token}
+	style := transport.AuthStylePrivate
 	if cfg.TokenStyle == "bearer" {
-		authStrategy = transport.BearerToken{Token: cfg.Token}
+		style = transport.AuthStyleBearer
 	}
 	transportClient := transport.NewClient(
 		backendutil.DefaultBaseURL(cfg.BaseURL, "https://gitlab.com/api/v4"),
-		authStrategy,
+		backendutil.Auth(cfg, style),
 	)
 	transportClient.Logger = logger
+	transportClient.ETag = backendutil.ConditionalCache(cfg)
 	// Set TLS-skipping transport on the transport client so that all
 	// HTTP requests (including retries) honour SkipTLS.
 	if cfg.SkipTLS {
@@ -92,9 +93,15 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// Bearer auth (e.g. GitLab CI_JOB_TOKEN). The deprecated
 		// NewOAuthClient is replaced by NewAuthSourceClient per the
 		// client-go v2.60 guidance.
-		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cfg.Token})
+		var ts oauth2.TokenSource = oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cfg.Token})
+		if cfg.TokenSource != nil {
+			ts = providerTokenSource{src: cfg.TokenSource}
+		}
 		client, err = gitlab.NewAuthSourceClient(gitlab.OAuthTokenSource{TokenSource: ts}, opts...)
 	} else {
+		// With a refreshable TokenSource the static token may be empty;
+		// the transport round tripper injects the (fresh) PRIVATE-TOKEN
+		// header on every request, overwriting whatever the SDK set.
 		client, err = gitlab.NewClient(cfg.Token, opts...)
 	}
 	if err != nil {
@@ -106,6 +113,22 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		labelIDs: backendutil.NewIDCache(5 * time.Minute),
 		userIDs:  backendutil.NewIDCache(5 * time.Minute),
 	}, nil
+}
+
+// providerTokenSource adapts provider.TokenSource to the context-free
+// oauth2.TokenSource shape gitlab's OAuthTokenSource expects. Refresh
+// coordination loses the request context on this legacy interface; the
+// transport-layer auth still refreshes with full context on every request
+// and its header wins, so this adapter only feeds the SDK's own header
+// fallback.
+type providerTokenSource struct{ src provider.TokenSource }
+
+func (p providerTokenSource) Token() (*oauth2.Token, error) {
+	tok, err := p.src.Token(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return &oauth2.Token{AccessToken: tok}, nil
 }
 
 // Platform implements provider.Provider.

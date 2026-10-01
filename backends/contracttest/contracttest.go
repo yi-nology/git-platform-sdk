@@ -13,9 +13,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -100,6 +98,8 @@ func Run(t *testing.T, h Harness) {
 	t.Run("IsNotFound", func(t *testing.T) { testIsNotFound(t, h) })
 	t.Run("Pagination_Normalized", func(t *testing.T) { testPagination(t, h) })
 	t.Run("Retry_On5xx", func(t *testing.T) { testRetry(t, h) })
+	t.Run("TokenSource_Rotation", func(t *testing.T) { testTokenSourceRotation(t, h) })
+	t.Run("ConditionalRequests", func(t *testing.T) { testConditionalRequests(t, h) })
 	t.Run("Webhook_ValidateSignature", func(t *testing.T) { testWebhookSignature(t, h) })
 	t.Run("Context_Cancel", func(t *testing.T) { testContextCancel(t, h) })
 	t.Run("Capabilities_Consistency", func(t *testing.T) { testCapabilities(t, h) })
@@ -283,15 +283,22 @@ func signRequest(req *http.Request, v provider.WebhookValidator, body []byte, se
 		req.Header.Set(vv.Header, "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	case provider.StaticTokenValidator:
 		req.Header.Set(vv.Header, secret)
-	case provider.GiteeWebhookValidator:
-		// Gitee sign mode: Base64(HMAC-SHA256(secret, ts+"\n"+secret)) with
-		// the send time in X-Gitee-Timestamp. The body is not signed.
-		ts := fmt.Sprintf("%d", time.Now().UnixMilli())
+	case provider.ForgejoWebhookValidator:
 		mac := hmac.New(sha256.New, []byte(secret))
-		_, _ = mac.Write([]byte(ts + "\n" + secret))
-		req.Header.Set("X-Gitee-Timestamp", ts)
-		req.Header.Set("X-Gitee-Token", base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+		_, _ = mac.Write(body)
+		req.Header.Set("X-Forgejo-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	case provider.GiteeWebhookValidator:
+		// Gitee backend scheme: HMAC-SHA256 hex over the body in
+		// X-Gitee-Token (no timestamp). The registry also accepts the
+		// ts-based sign mode, but the corpus pins the backend's scheme.
+		mac := hmac.New(sha256.New, []byte(secret))
+		_, _ = mac.Write(body)
+		req.Header.Set("X-Gitee-Token", hex.EncodeToString(mac.Sum(nil)))
 		_ = vv
+	case provider.GitCodeWebhookValidator:
+		mac := hmac.New(sha256.New, []byte(secret))
+		_, _ = mac.Write(body)
+		req.Header.Set("X-GitCode-Signature", hex.EncodeToString(mac.Sum(nil)))
 	}
 }
 

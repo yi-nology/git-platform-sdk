@@ -84,6 +84,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
+	sig = strings.TrimPrefix(sig, "sha256=")
 	expected := hex.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(sig), []byte(expected)) {
 		return provider.Wrapf(provider.PlatformGitea, "ValidateWebhookSignature", "%w: invalid webhook signature", provider.ErrWebhookValidation)
@@ -140,6 +141,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		Number int    `json:"number"`
 		Ref    string `json:"ref"`
 		After  string `json:"after"`
+		// create/delete hooks carry the ref kind ("branch" or "tag").
+		RefType string `json:"ref_type"`
+		// issues/issue_comment hooks carry the issue object; a PR-shaped
+		// issue additionally carries a pull_request key.
+		Issue *webhookIssuePayload `json:"issue"`
 	}
 	if err := json.Unmarshal(body, &pl); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ParseWebhookEvent", err)
@@ -194,13 +200,83 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
 		event.CommitSHA = pl.After
 	case "create":
-		event.Type = "branch.created"
-		event.Branch = pl.Ref
+		if pl.RefType == "tag" {
+			event.Type = provider.EventTypeTag + "created"
+			event.Action = "created"
+			event.Tag = pl.Ref
+		} else {
+			event.Type = provider.EventTypeBranch + "created"
+			event.Action = "created"
+			event.Branch = pl.Ref
+		}
 	case "delete":
-		event.Type = "branch.deleted"
-		event.Branch = pl.Ref
+		if pl.RefType == "tag" {
+			event.Type = provider.EventTypeTag + "deleted"
+			event.Action = "deleted"
+			event.Tag = pl.Ref
+		} else {
+			event.Type = provider.EventTypeBranch + "deleted"
+			event.Action = "deleted"
+			event.Branch = pl.Ref
+		}
+	case "issues":
+		action := provider.NormalizeIssueAction(pl.Action)
+		event.Type = provider.EventTypeIssue + action
+		event.Action = action
+		attachWebhookIssue(event, pl.Issue)
+	case "issue_comment":
+		event.Type = provider.EventTypeComment + provider.CommentActionCreated
+		event.Action = provider.CommentActionCreated
+		attachWebhookIssue(event, pl.Issue)
 	}
 	return event, nil
+}
+
+// webhookIssuePayload is the issue object carried by issues and
+// issue_comment hooks.
+type webhookIssuePayload struct {
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	State   string `json:"state"`
+	HTMLURL string `json:"html_url"`
+	User    struct {
+		ID    int    `json:"id"`
+		Login string `json:"login"`
+	} `json:"user"`
+	PullRequest *struct {
+		Merged bool `json:"merged"`
+	} `json:"pull_request"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// attachWebhookIssue populates event.Issue (and, for PR-shaped issues,
+// event.CR) from a hook's issue payload.
+func attachWebhookIssue(event *provider.NormalizedEvent, issue *webhookIssuePayload) {
+	if issue == nil {
+		return
+	}
+	state := provider.IssueStateOpen
+	if issue.State == "closed" {
+		state = provider.IssueStateClosed
+	}
+	event.Issue = &provider.Issue{
+		ID:        int64(issue.Number),
+		Number:    strconv.Itoa(issue.Number),
+		Title:     issue.Title,
+		Body:      issue.Body,
+		State:     state,
+		Author:    &provider.CRUser{ID: int64(issue.User.ID), Username: issue.User.Login},
+		WebURL:    issue.HTMLURL,
+		CreatedAt: issue.CreatedAt,
+		UpdatedAt: issue.UpdatedAt,
+	}
+	if issue.PullRequest != nil {
+		event.CR = &provider.ChangeRequest{
+			ID: int64(issue.Number), Number: strconv.Itoa(issue.Number), Title: issue.Title,
+		}
+	}
 }
 
 var _ provider.WebhookManager = (*Provider)(nil)

@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "X-Forgejo-Event": "tag_push"
+  },
+  "body": {
+    "ref": "refs/tags/v1.0.0",
+    "after": "abc123",
+    "repository": {
+      "id": 99,
+      "full_name": "owner/repo"
+    },
+    "sender": {
+      "id": 1,
+      "login": "dev"
+    }
+  }
+}

@@ -7,6 +7,7 @@ import (
 	sdkgithub "github.com/google/go-github/v92/github"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	ghbackend "github.com/yi-nology/go-git-platform/backends/github"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -108,4 +109,8 @@ func githubNonEmptyList() string {
 	}
 	b, _ := json.Marshal(repos)
 	return string(b)
+}
+
+func TestGitHub_WebhookCorpus(t *testing.T) {
+	contracttest.RunWebhookCorpus(t, provider.PlatformGitHub, &ghbackend.Provider{}, "testdata/webhooks")
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	gitcode "github.com/yi-nology/go-git-platform/backends/gitcode"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -97,4 +98,14 @@ func TestGitCode_Contract(t *testing.T) {
 			CreateResponse: `{"id":1,"content":"heart","user":{"id":1,"login":"dev"}}`,
 		},
 	})
+}
+
+func TestGitCode_WebhookCorpus(t *testing.T) {
+	// The gitcode parse path goes through the SDK client, so a real
+	// (offline) provider instance is required rather than a zero value.
+	p, err := gitcode.New(provider.Config{Token: "t"})
+	if err != nil {
+		t.Fatalf("gitcode.New: %v", err)
+	}
+	contracttest.RunWebhookCorpus(t, provider.PlatformGitCode, p, "testdata/webhooks")
 }

@@ -1,0 +1,22 @@
+{
+  "headers": {},
+  "body": {
+    "object_kind": "issue",
+    "user": {
+      "id": 1,
+      "username": "dev",
+      "name": "Dev"
+    },
+    "project": {
+      "id": 99,
+      "path_with_namespace": "owner/repo"
+    },
+    "object_attributes": {
+      "iid": 12,
+      "title": "bug",
+      "description": "d",
+      "state": "opened",
+      "action": "open"
+    }
+  }
+}

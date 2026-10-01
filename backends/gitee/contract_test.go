@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	gitee "github.com/yi-nology/go-git-platform/backends/gitee"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -88,4 +89,8 @@ func TestGitee_Contract(t *testing.T) {
 			EmptyResponse: `{"total_count":0,"check_runs":[]}`,
 		},
 	})
+}
+
+func TestGitee_WebhookCorpus(t *testing.T) {
+	contracttest.RunWebhookCorpus(t, provider.PlatformGitee, &gitee.Provider{}, "testdata/webhooks")
 }

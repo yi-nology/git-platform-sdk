@@ -1,0 +1,21 @@
+{
+  "headers": {
+    "X-GitHub-Event": "create"
+  },
+  "body": {
+    "ref": "v1.0.0",
+    "ref_type": "tag",
+    "repository": {
+      "id": 99,
+      "name": "repo",
+      "full_name": "owner/repo",
+      "owner": {
+        "login": "owner"
+      }
+    },
+    "sender": {
+      "login": "dev",
+      "id": 1
+    }
+  }
+}

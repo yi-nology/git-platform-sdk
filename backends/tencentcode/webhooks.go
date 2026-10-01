@@ -140,7 +140,19 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			} `json:"diff_refs"`
 			CreatedAt gongfeng.Time `json:"created_at"`
 			UpdatedAt gongfeng.Time `json:"updated_at"`
+			// note hooks carry the comment body in object_attributes (the
+			// triggering action field above serves issue hooks).
+			Note string `json:"note"`
 		} `json:"object_attributes"`
+		// note hooks carry their target as a top-level issue or
+		// merge_request object.
+		Issue struct {
+			IID  int    `json:"iid"`
+			Name string `json:"title"`
+		} `json:"issue"`
+		MergeRequest struct {
+			IID int `json:"iid"`
+		} `json:"merge_request"`
 		Ref        string `json:"ref"`
 		Before     string `json:"before"`
 		After      string `json:"after"`
@@ -210,11 +222,46 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Type = "tag.created"
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
 	case "issue":
-		event.Type = "issue"
+		action := provider.NormalizeIssueAction(pl.ObjectAttributes.Action)
+		event.Type = provider.EventTypeIssue + action
+		event.Action = action
+		event.Issue = &provider.Issue{
+			ID:     int64(pl.ObjectAttributes.IID),
+			Number: strconv.Itoa(pl.ObjectAttributes.IID),
+			Title:  pl.ObjectAttributes.Title,
+			Body:   pl.ObjectAttributes.Description,
+			State:  mapGongfengIssueState(pl.ObjectAttributes.State),
+			Author: actor,
+		}
 	case "note":
-		event.Type = "comment"
+		event.Type = provider.EventTypeComment + provider.CommentActionCreated
+		event.Action = provider.CommentActionCreated
+		event.Comment = &provider.IssueComment{Body: pl.ObjectAttributes.Note, Author: actor}
+		if pl.MergeRequest.IID != 0 {
+			event.CR = &provider.ChangeRequest{
+				ID: int64(pl.MergeRequest.IID), Number: strconv.Itoa(pl.MergeRequest.IID),
+			}
+		}
+		if pl.Issue.IID != 0 {
+			event.Issue = &provider.Issue{
+				ID: int64(pl.Issue.IID), Number: strconv.Itoa(pl.Issue.IID), Title: pl.Issue.Name, Author: actor,
+			}
+		}
 	}
 	return event, nil
+}
+
+// mapGongfengIssueState maps gongfeng (GitLab-v3-flavored) issue states
+// onto the unified IssueState vocabulary.
+func mapGongfengIssueState(state string) provider.IssueState {
+	switch state {
+	case "closed":
+		return provider.IssueStateClosed
+	case "opened", "reopened", "":
+		return provider.IssueStateOpen
+	default:
+		return provider.IssueState(state)
+	}
 }
 
 var _ provider.WebhookManager = (*Provider)(nil)

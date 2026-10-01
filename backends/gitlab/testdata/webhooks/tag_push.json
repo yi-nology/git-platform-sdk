@@ -1,0 +1,17 @@
+{
+  "headers": {},
+  "body": {
+    "object_kind": "tag_push",
+    "user": {
+      "id": 1,
+      "username": "dev",
+      "name": "Dev"
+    },
+    "project": {
+      "id": 99,
+      "path_with_namespace": "owner/repo"
+    },
+    "ref": "refs/tags/v1.0.0",
+    "after": "abc123"
+  }
+}

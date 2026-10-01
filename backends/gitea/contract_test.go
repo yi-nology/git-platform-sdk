@@ -101,3 +101,7 @@ func TestGitea_Contract(t *testing.T) {
 		},
 	})
 }
+
+func TestGitea_WebhookCorpus(t *testing.T) {
+	contracttest.RunWebhookCorpus(t, provider.PlatformGitea, &gitea.Provider{}, "testdata/webhooks")
+}

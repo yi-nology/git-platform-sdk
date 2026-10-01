@@ -1,0 +1,49 @@
+{
+  "id": "",
+  "type": "comment.created",
+  "source": "gitee",
+  "timestamp": "0001-01-01T00:00:00Z",
+  "actor": {
+    "id": 1,
+    "username": "dev",
+    "name": "Dev",
+    "avatar_url": ""
+  },
+  "repo": {
+    "id": 0,
+    "full_name": "owner/repo",
+    "owner": "owner",
+    "name": "repo"
+  },
+  "cr": {
+    "id": 0,
+    "number": "7",
+    "title": "",
+    "description": "",
+    "state": "",
+    "source_branch": "",
+    "target_branch": "",
+    "draft": false,
+    "author": null,
+    "reviewers": null,
+    "labels": null,
+    "merge_status": "",
+    "web_url": "",
+    "created_at": "0001-01-01T00:00:00Z",
+    "updated_at": "0001-01-01T00:00:00Z"
+  },
+  "comment": {
+    "id": 0,
+    "body": "lgtm",
+    "author": {
+      "id": 1,
+      "username": "dev",
+      "name": "Dev",
+      "avatar_url": ""
+    },
+    "created_at": "0001-01-01T00:00:00Z",
+    "updated_at": "0001-01-01T00:00:00Z"
+  },
+  "action": "created",
+  "raw_payload": null
+}

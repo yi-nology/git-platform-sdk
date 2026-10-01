@@ -58,8 +58,9 @@ func New(cfg provider.Config) (provider.Provider, error) {
 
 	baseURL := backendutil.NormalizeBaseURL(backendutil.DefaultBaseURL(cfg.BaseURL, "https://codeberg.org"))
 
-	transportClient := transport.NewClient(baseURL, transport.TokenHeader{Token: cfg.Token})
+	transportClient := transport.NewClient(baseURL, backendutil.Auth(cfg, transport.AuthStyleToken))
 	transportClient.Logger = logger
+	transportClient.ETag = backendutil.ConditionalCache(cfg)
 	// Set TLS-skipping transport on the transport client so that all
 	// HTTP requests (including retries) honour SkipTLS.
 	if cfg.SkipTLS {

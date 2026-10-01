@@ -19,6 +19,7 @@ AI agent 可直接调用的工具面。
 | `issues`(需 Capability) | `list_issues` `get_issue` `create_issue`(写) `close_issue`(写) `add_issue_comment`(写) |
 | `status`(需 CommitStatuses) | `get_commit_statuses` `set_commit_status`(写) `wait_for_status` |
 | `search`(需 Search) | `search_repositories` `search_issues` `search_users` |
+| `releases`(必有) | `list_tags` `list_releases` `get_release` `create_release`(写) |
 
 上下文经济设计(承接 [github/github-mcp-server] 的 toolset 实践):
 
@@ -26,6 +27,7 @@ AI agent 可直接调用的工具面。
 - `list_crs` / `list_issues` 支持 `fields` 投影参数(复用
   [pkg/projection](../pkg/projection)),大列表只取
   `["number","title","head.ref"]` 这类字段,不再为 50 个 PR 烧掉整段上下文;
+- 列表工具开放 `per_page` 参数(1–100,默认 30),与 `page` 配合翻页;
 - `wait_for_status` 内置轮询原语(provider.WaitForCommitStatus),
   agent 提交状态后一条工具调用即可等待 CI 终态。
 
@@ -53,7 +55,17 @@ GIT_PLATFORM_TOKEN=xxx ./go-git-platform-mcp \
 ```
 
 Flags:`--platform`(必填)`--base-url` `--token` / `--token-env`
-`--skip-tls` `--read-only` `--toolsets core,status`(逗号分隔子集)。
+`--skip-tls` `--read-only` `--toolsets core,status,releases`(逗号分隔子集)
+`--http :8080`(改为 streamable HTTP,端点在 `/mcp`)
+`--http-token <bearer>`(HTTP 模式的 Bearer 门禁,绑定非 localhost 时务必设置)。
+
+HTTP 远程部署(对齐 GitHub 官方 MCP 的 remote server 形态):
+
+```bash
+./go-git-platform-mcp --platform github --token-env GITHUB_TOKEN \
+  --http :8080 --http-token "$MCP_BEARER" --read-only
+# MCP endpoint: http://host:8080/mcp (监听为明文 HTTP,公网请前置 TLS 反代)
+```
 
 ## 测试
 

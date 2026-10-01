@@ -9,6 +9,21 @@ type Config struct {
 	Token    string
 	SkipTLS  bool
 
+	// TokenSource, when non-nil, supplies the access token on every
+	// request through the transport layer and takes precedence over Token.
+	// Use it for credentials that rotate or expire (GitHub App installation
+	// tokens, OAuth flows); see the TokenSource interface. Static tokens
+	// keep using Token.
+	TokenSource TokenSource
+
+	// ConditionalRequests enables HTTP conditional requests for GETs: the
+	// transport caches responses keyed by their ETag, sends If-None-Match
+	// on re-reads, and replays the cached body when the platform answers
+	// 304. On platforms that meter 304s favorably (GitHub) this raises
+	// sustainable polling rates for wait-for-CI style workloads. Off by
+	// default; see transport.ETagCache for the exact semantics.
+	ConditionalRequests bool
+
 	// TokenStyle overrides the default authentication header style.
 	// Supported values: "private" (PRIVATE-TOKEN, default for GitLab),
 	// "bearer" (Authorization: Bearer). Empty string uses platform default.

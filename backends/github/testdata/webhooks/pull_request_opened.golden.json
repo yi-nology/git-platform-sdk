@@ -1,0 +1,45 @@
+{
+  "id": "",
+  "type": "cr.opened",
+  "source": "github",
+  "timestamp": "0001-01-01T00:00:00Z",
+  "actor": {
+    "id": 1,
+    "username": "dev",
+    "name": "",
+    "avatar_url": ""
+  },
+  "repo": {
+    "id": 99,
+    "full_name": "owner/repo",
+    "owner": "owner",
+    "name": "repo"
+  },
+  "cr": {
+    "id": 7,
+    "number": "7",
+    "title": "t",
+    "description": "",
+    "state": "opened",
+    "source_branch": "f",
+    "target_branch": "main",
+    "head_sha": "abc123",
+    "base_sha": "def456",
+    "start_sha": "def456",
+    "draft": false,
+    "author": {
+      "id": 1,
+      "username": "dev",
+      "name": "",
+      "avatar_url": ""
+    },
+    "reviewers": null,
+    "labels": null,
+    "merge_status": "unknown",
+    "web_url": "https://github.com/owner/repo/pull/7",
+    "created_at": "0001-01-01T00:00:00Z",
+    "updated_at": "0001-01-01T00:00:00Z"
+  },
+  "commit_sha": "abc123",
+  "raw_payload": null
+}

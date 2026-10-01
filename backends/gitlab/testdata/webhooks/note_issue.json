@@ -1,0 +1,24 @@
+{
+  "headers": {},
+  "body": {
+    "object_kind": "note",
+    "user": {
+      "id": 1,
+      "username": "dev",
+      "name": "Dev"
+    },
+    "project": {
+      "id": 99,
+      "path_with_namespace": "owner/repo"
+    },
+    "object_attributes": {
+      "note": "a comment",
+      "noteable_type": "Issue"
+    },
+    "issue": {
+      "iid": 12,
+      "title": "bug",
+      "state": "opened"
+    }
+  }
+}

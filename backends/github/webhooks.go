@@ -119,14 +119,85 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
 			ne.Repo.ID = e.GetRepo().GetID()
 		}
+	case *github.IssuesEvent:
+		action := provider.NormalizeIssueAction(e.GetAction())
+		ne.Type = provider.EventTypeIssue + action
+		ne.Action = action
+		ne.Actor = convertUser(e.GetSender())
+		if e.GetRepo() != nil {
+			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo.ID = e.GetRepo().GetID()
+		}
+		if e.GetIssue() != nil {
+			ne.Issue = convertIssue(e.GetIssue())
+		}
+	case *github.IssueCommentEvent:
+		// Comments on both plain issues and PRs arrive here; a PR comment
+		// also carries the pull request, so CR is populated alongside Issue.
+		ne.Type = provider.EventTypeComment + provider.CommentActionCreated
+		ne.Action = provider.CommentActionCreated
+		ne.Actor = convertUser(e.GetSender())
+		if e.GetRepo() != nil {
+			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo.ID = e.GetRepo().GetID()
+		}
+		if e.GetIssue() != nil {
+			ne.Issue = convertIssue(e.GetIssue())
+		}
+		if pr := e.GetIssue().GetPullRequestLinks(); pr != nil {
+			ne.CR = &provider.ChangeRequest{Number: ne.Issue.Number}
+		}
+	case *github.PullRequestReviewCommentEvent:
+		ne.Type = provider.EventTypeComment + provider.CommentActionCreated
+		ne.Action = provider.CommentActionCreated
+		ne.Actor = convertUser(e.GetSender())
+		if e.GetRepo() != nil {
+			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo.ID = e.GetRepo().GetID()
+		}
+		if e.GetPullRequest() != nil {
+			ne.CR = convertPR(e.GetPullRequest())
+		}
+		if c := e.GetComment(); c != nil {
+			// PullRequestComment is a different SDK type from IssueComment
+			// but carries the same normalized fields.
+			ne.Comment = &provider.IssueComment{
+				ID:     c.GetID(),
+				Body:   c.GetBody(),
+				Author: convertUser(c.GetUser()),
+			}
+		}
 	case *github.CreateEvent:
-		ne.Type = "branch.created"
-		ne.Branch = e.GetRef()
+		// ref_type distinguishes tags from branches.
 		ne.Actor = convertUser(e.GetSender())
+		if e.GetRepo() != nil {
+			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo.ID = e.GetRepo().GetID()
+		}
+		if e.GetRefType() == "tag" {
+			ne.Type = provider.EventTypeTag + "created"
+			ne.Action = "created"
+			ne.Tag = e.GetRef()
+		} else {
+			ne.Type = provider.EventTypeBranch + "created"
+			ne.Action = "created"
+			ne.Branch = e.GetRef()
+		}
 	case *github.DeleteEvent:
-		ne.Type = "branch.deleted"
-		ne.Branch = e.GetRef()
 		ne.Actor = convertUser(e.GetSender())
+		if e.GetRepo() != nil {
+			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo.ID = e.GetRepo().GetID()
+		}
+		if e.GetRefType() == "tag" {
+			ne.Type = provider.EventTypeTag + "deleted"
+			ne.Action = "deleted"
+			ne.Tag = e.GetRef()
+		} else {
+			ne.Type = provider.EventTypeBranch + "deleted"
+			ne.Action = "deleted"
+			ne.Branch = e.GetRef()
+		}
 	default:
 		ne.Type = eventType
 	}

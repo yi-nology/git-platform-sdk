@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "X-Gitee-Event": "tag_push"
+  },
+  "body": {
+    "ref": "refs/tags/v1.0.0",
+    "after": "abc123",
+    "user": {
+      "id": 1,
+      "login": "dev",
+      "name": "Dev"
+    },
+    "repository": {
+      "full_name": "owner/repo"
+    }
+  }
+}

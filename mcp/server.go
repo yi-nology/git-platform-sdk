@@ -4,8 +4,8 @@
 //
 // Design conventions mirror the platform MCP servers agents already know:
 //
-//   - Toolsets group tools by domain (core, crs, issues, status, search)
-//     and can be selected at construction time.
+//   - Toolsets group tools by domain (core, crs, issues, status, search,
+//     releases) and can be selected at construction time.
 //   - Read/write separation: every mutating tool carries a
 //     "mutating: ..." annotation; Options.ReadOnly drops them all.
 //   - Capability gating: a tool is only registered when the connected
@@ -21,8 +21,10 @@ import (
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// Version is the MCP server's own version.
-const Version = "0.1.0"
+// Version is the MCP server's version. It follows the go-git-platform
+// module version (see provider.Version) so a server binary always reports
+// the SDK feature level it was built against; "dev" for local builds.
+func Version() string { return provider.Version() }
 
 // Options configures NewServer. A zero Options is valid: all toolsets
 // are enabled, read/write mode is on.
@@ -61,14 +63,14 @@ func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 	if name == "" {
 		name = "go-git-platform"
 	}
-	s := mcp.NewServer(&mcp.Implementation{Name: name, Version: Version}, nil)
+	s := mcp.NewServer(&mcp.Implementation{Name: name, Version: Version()}, nil)
 
 	st := &state{p: p, readonly: opts.ReadOnly}
 	caps := p.Capabilities()
 	selected := map[string]bool{}
 	for _, t := range opts.Toolsets {
 		if !knownToolsets[t] {
-			return nil, fmt.Errorf("unknown toolset %q (known: core, crs, issues, status, search)", t)
+			return nil, fmt.Errorf("unknown toolset %q (known: core, crs, issues, status, search, releases)", t)
 		}
 		selected[t] = true
 	}
