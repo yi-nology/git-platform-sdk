@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.73.0] - 2026-10-02
+
+### Changed
+
+- **分页 API 收敛为一套**：删除 `provider.ListAllPages`（v0.72.0 引入，零调用方），
+  `provider.Each` / `Collect` / `EachBounded` / `CollectBounded` 成为唯一泛型分页
+  面。理由：两套并存会永久留在公共 API 上；且 ListAllPages 的"短页即末页"
+  终止规则与仓库实测过的 Forgejo 行为相悖（服务端把页大小压到请求值以下时
+  短页≠末页），Each/Collect 的"空页终止"规则与 backendutil.AllPages 一致。
+  原测试中"迭代中途取消下一轮生效"用例已移植到 pageiter 测试
+- **限流 403 判定收敛为单一谓词** `transport.isRateLimitedStatus`（429 恒真；
+  403 + `X-RateLimit-Remaining: 0`；403 + 仅 `Retry-After` 即 GitHub secondary
+  limit）——v0.72.0 中错误构造（`Error.IsRateLimited`）与重试门控
+  （`canRetryResponse`）各写了一份且口径不一，现由同一函数支撑，两端口径
+  统一为含 Retry-After-only 的最宽口径；新增 secondary-limit 测试用例
+
 ## [0.72.0] - 2026-10-02
 
 ### Added

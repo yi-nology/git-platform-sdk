@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -44,10 +45,35 @@ func NewStatusErrorWithHeaders(method, path string, status int, body []byte, hea
 			e.ResetAt = time.Unix(sec, 0)
 		}
 	}
-	if status == http.StatusForbidden && header.Get("X-RateLimit-Remaining") == "0" {
+	if status == http.StatusForbidden && isRateLimitedStatus(status, header) {
 		e.rateLimited403 = true
 	}
 	return e
+}
+
+// isRateLimitedStatus is the single rate-limit predicate for the transport
+// package: it classifies the HTTP exchange (status + response headers) so
+// error construction (NewStatusErrorWithHeaders) and retry gating
+// (RetryConfig.canRetryResponse) cannot drift apart. It reports:
+//
+//   - 429, always;
+//   - 403 carrying GitHub-style throttle headers: X-RateLimit-Remaining: 0
+//     (primary limit) or a Retry-After header (secondary limits / abuse
+//     detection).
+//
+// A bare 403 is an authorization failure, not throttling — retrying it can
+// never succeed and would only amplify load.
+func isRateLimitedStatus(status int, h http.Header) bool {
+	if status == http.StatusTooManyRequests {
+		return true
+	}
+	if status != http.StatusForbidden || h == nil {
+		return false
+	}
+	if h.Get("Retry-After") != "" {
+		return true
+	}
+	return strings.TrimSpace(h.Get("X-RateLimit-Remaining")) == "0"
 }
 
 // Error is the structured error returned by Client when a request completes
@@ -75,8 +101,9 @@ type Error struct {
 	// (X-RateLimit-Reset, unix seconds). Populated by
 	// NewStatusErrorWithHeaders.
 	ResetAt time.Time
-	// rateLimited403 records a 403 carrying X-RateLimit-Remaining: 0 — how
-	// GitHub and Gitea signal an exhausted quota without using 429.
+	// rateLimited403 records a 403 classified as throttling by
+	// isRateLimitedStatus — how GitHub and Gitea signal an exhausted or
+	// abuse-detected quota without using 429.
 	rateLimited403 bool
 }
 
@@ -124,9 +151,10 @@ func (e *Error) IsClientError() bool { return e.IsStatusClass(http.StatusBadRequ
 func (e *Error) IsServerError() bool { return e.IsStatusClass(http.StatusInternalServerError) }
 
 // IsRateLimited reports whether the error is a rate-limit rejection: HTTP
-// 429, or a 403 carrying X-RateLimit-Remaining: 0 (how GitHub and Gitea
-// signal an exhausted quota). RetryAfter/ResetAt, when set, say when the
-// window reopens.
+// 429, or a 403 carrying throttle headers (X-RateLimit-Remaining: 0, or a
+// Retry-After alone — how GitHub and Gitea signal exhausted quotas and
+// secondary limits without using 429). RetryAfter/ResetAt, when set, say
+// when the window reopens.
 func (e *Error) IsRateLimited() bool {
 	return e.statusCode == http.StatusTooManyRequests || e.rateLimited403
 }

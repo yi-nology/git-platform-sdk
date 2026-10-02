@@ -90,6 +90,25 @@ func TestEachHonorsContextCancel(t *testing.T) {
 	}
 }
 
+func TestEachHonorsMidIterationCancel(t *testing.T) {
+	// Cancellation raised inside a page fetch must take effect on the next
+	// loop pass instead of grinding through the remaining pages.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var calls int
+	err := EachBounded(ctx, func(_ context.Context, _ int) ([]int, error) {
+		calls++
+		cancel()
+		return []int{1}, nil
+	}, 10, func(int) error { return nil })
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if calls != 1 {
+		t.Fatalf("fetches = %d, want 1 (abort on next pass)", calls)
+	}
+}
+
 func TestCollect(t *testing.T) {
 	got, err := Collect(context.Background(), func(_ context.Context, page int) ([]int, error) {
 		if page == 2 {

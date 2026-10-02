@@ -115,28 +115,14 @@ func (rc *RetryConfig) canRetryStatus(req *http.Request, status int) bool {
 	return rc.methodRetryable(req)
 }
 
-// isRateLimited403 reports whether resp is GitHub-style throttling rather
-// than a permission denial. GitHub's primary rate limit answers with
-// 403 + "X-RateLimit-Remaining: 0" (secondary limits and abuse detection use
-// 403 + "Retry-After") instead of 429, so those 403s must be retried like
-// 429s. A bare 403 without either header is an authorization failure —
-// retrying it can never succeed and would only amplify load.
-func isRateLimited403(resp *http.Response) bool {
-	if resp == nil || resp.StatusCode != http.StatusForbidden {
-		return false
-	}
-	if resp.Header.Get("Retry-After") != "" {
-		return true
-	}
-	return strings.TrimSpace(resp.Header.Get("X-RateLimit-Remaining")) == "0"
-}
-
 // canRetryResponse reports whether a received response may trigger a retry
-// for req. It extends canRetryStatus with the header-aware 403 rate-limit
-// case; the method idempotency gate still applies, so a POST carrying
-// rate-limit headers is not replayed any more than a plain 429 POST would be.
-// Call sites that only know the status code (not the headers) must keep
-// using canRetryStatus.
+// for req. It extends canRetryStatus with the header-aware rate-limit case
+// (isRateLimitedStatus — GitHub answers primary limits with 403 +
+// X-RateLimit-Remaining: 0 and secondary limits with 403 + Retry-After);
+// the method idempotency gate still applies, so a POST carrying rate-limit
+// headers is not replayed any more than a plain 429 POST would be. A bare
+// 403 is an authorization failure and never retries. Call sites that only
+// know the status code (not the headers) must keep using canRetryStatus.
 func (rc *RetryConfig) canRetryResponse(req *http.Request, resp *http.Response) bool {
 	if resp == nil {
 		return false
@@ -144,7 +130,7 @@ func (rc *RetryConfig) canRetryResponse(req *http.Request, resp *http.Response) 
 	if rc.canRetryStatus(req, resp.StatusCode) {
 		return true
 	}
-	return isRateLimited403(resp) && rc.methodRetryable(req)
+	return isRateLimitedStatus(resp.StatusCode, resp.Header) && rc.methodRetryable(req)
 }
 
 // canRetryNetworkError reports whether a transport-level error may trigger a

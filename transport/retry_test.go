@@ -716,17 +716,13 @@ func TestRetry_IsRateLimited403(t *testing.T) {
 		{"403 retry-after", 403, hdr("Retry-After", "1"), true},
 		{"403 bare", 403, http.Header{}, false},
 		{"403 remaining non-zero", 403, hdr("X-RateLimit-Remaining", "7"), false},
-		{"429 (status path handles it)", 429, http.Header{}, false},
+		{"429", 429, http.Header{}, true},
 		{"404", 404, hdr("X-RateLimit-Remaining", "0"), false},
-		{"nil response", 0, nil, false},
+		{"nil header", 403, nil, false},
 	}
 	for _, c := range cases {
-		var resp *http.Response
-		if c.status != 0 {
-			resp = &http.Response{StatusCode: c.status, Header: c.header}
-		}
-		if got := isRateLimited403(resp); got != c.want {
-			t.Errorf("%s: isRateLimited403 = %v, want %v", c.name, got, c.want)
+		if got := isRateLimitedStatus(c.status, c.header); got != c.want {
+			t.Errorf("%s: isRateLimitedStatus = %v, want %v", c.name, got, c.want)
 		}
 	}
 }

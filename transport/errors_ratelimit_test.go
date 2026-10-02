@@ -38,6 +38,17 @@ func TestNewStatusError403WithExhaustedQuotaIsRateLimited(t *testing.T) {
 		t.Fatal("403 + X-RateLimit-Remaining: 0 must be rate-limited")
 	}
 
+	// Secondary limit / abuse detection: Retry-After alone, no quota header.
+	h2 := http.Header{}
+	h2.Set("Retry-After", "60")
+	secondary := NewStatusErrorWithHeaders("GET", "/x", http.StatusForbidden, nil, h2).(*Error)
+	if !secondary.IsRateLimited() {
+		t.Fatal("403 + Retry-After (secondary limit) must be rate-limited")
+	}
+	if secondary.RetryAfter != 60*time.Second {
+		t.Fatalf("RetryAfter = %v, want 60s", secondary.RetryAfter)
+	}
+
 	h.Set("X-RateLimit-Remaining", "12")
 	if err := NewStatusErrorWithHeaders("GET", "/x", http.StatusForbidden, nil, h).(*Error); err.IsRateLimited() {
 		t.Fatal("403 with remaining quota must not be rate-limited")
