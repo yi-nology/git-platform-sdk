@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 
+	_ "github.com/yi-nology/go-git-platform/backends/all" // register every platform
 	"github.com/yi-nology/go-git-platform/provider"
 )
 

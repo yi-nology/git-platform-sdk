@@ -22,6 +22,39 @@ make cover    # print the coverage summary
 
 Run `make check` before pushing — it mirrors what CI runs.
 
+## Versioning & compatibility commitment
+
+The project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the
+0.x convention: breaking changes may land in a minor release, but must be
+called out in the CHANGELOG. What counts as what:
+
+**Non-breaking (fine in any release)**
+
+- Adding a field to an exported struct (`options.go` types, `Error`,
+  `NormalizedEvent`, ...). Callers using unkeyed struct literals is not a
+  supported pattern.
+- Adding a new optional capability: a new `iface_*.go` interface plus a
+  `CapabilitySet` field. Existing `Capabilities()` declarations compile
+  unchanged because the zero value means "not implemented".
+- Adding a package, function, or method (including new helper functions in
+  `provider`).
+- New toolsets/tools in the MCP module; new tool parameters are additive
+  JSON fields.
+
+**Breaking (minor release + CHANGELOG entry; avoid where possible)**
+
+- Removing or renaming an exported identifier (`provider.ListAllPages`
+  removal in v0.73.0 is the precedent).
+- Adding a method to an interface others implement — every `Provider`
+  implementor breaks. Route new surface through optional capability
+  interfaces instead.
+- Changing a function signature or the meaning of an existing value
+  (e.g. webhook event-type vocabulary renames in v0.72.0).
+
+When a release contains breaking changes, the CHANGELOG entry must start
+with the migration note (see v0.72.0's `cr.note` → `comment.created` for
+the shape).
+
 ## What we look for in changes
 
 - **Tests.** Add or update tests for behavior changes. Backends share a

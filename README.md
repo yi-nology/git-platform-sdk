@@ -19,10 +19,10 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
 **Highlights**
 
 - **Unified transport layer** — one auth/retry/hooks/rate-limit/logging pipeline for every platform; third-party SDKs (go-github, gitlab client-go, …) plug in via `http.RoundTripper`
-- **Capability-gated optional APIs** — 13 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
+- **Capability-gated optional APIs** — 17 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
 - **CI failure diagnostics** — `CILogManager` (GitLab) returns failed jobs with the tail of their execution logs, sized for LLM consumption
-- **Agent/automation primitives** — `WaitForCommitStatus` (CI gates), bounded-concurrency batch file reads, field `projection` to shrink payloads before feeding LLMs
-- **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider
+- **Agent/automation primitives** — `WaitForCommitStatus` (CI gates), bounded-concurrency batch file reads, page-walking iterators (`Each`/`Collect`), field `projection` to shrink payloads before feeding LLMs
+- **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider; the `githubapp` package mints the RS256 JWT and fetches installation tokens to plug in directly
 - **Conditional requests** — opt-in `Config.ConditionalRequests` sends `If-None-Match` and replays cached 304s as 200s; on GitHub, 304s don't count against the rate-limit budget
 - **Idempotent ensure-helpers** — `EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey` converge desired state (created/updated/unchanged), safe to re-run
 - **Webhook event corpus** — per-backend golden fixtures pin the normalized event vocabulary (`cr./push/tag./branch./issue./comment.`) across all seven platforms
@@ -132,9 +132,10 @@ The matrix stays honest: `examples/capabilities` probes every declared capabilit
 - **分歧台账** (`Divergence`): 每个后端把与统一语义的偏离 (stub/ignore/mapping/detour) 机器可读地登记, 由 `Provider.Divergences()` 与 `provider.Ignores` 等谓词暴露; 渲染文档在 [docs/divergence-ledger.md](docs/divergence-ledger.md), 编辑后用 `go generate ./...` 再生成。契约套件会在台账与实际行为漂移时失败
 - **错误归一** (`provider.ProviderError`): 自动从 4 种来源 (StatusCode 方法/字段, `*http.Response` 字段, 错误字符串) 提取 HTTP 状态码
 - **主动限流** (`transport.RateLimiter`): 跟踪 `X-RateLimit-*` 响应头, 在撞限前自适应节流 (含并发预约定, 避免惊群); 限流类错误携带 `Retry-After`/`ResetAt` 恢复窗口 (`provider.RateLimitRecovery`)
-- **可刷新凭证** (`Config.TokenSource`): transport 层每请求取 token, GitHub App installation token / OAuth 轮换类凭证下一次请求即生效
+- **可刷新凭证** (`Config.TokenSource`): transport 层每请求取 token, GitHub App installation token / OAuth 轮换类凭证下一次请求即生效; 顶层 `githubapp` 包提供 JWT 铸造 + installation token 换取, 可直接作为 TokenSource 接入
 - **ETag 条件请求** (`Config.ConditionalRequests`, 默认关): GET 自动 `If-None-Match`, 304 透明回放缓存的 200 —— 轮询型负载在 GitHub 上不消耗限流配额
 - **期望态助手**: `EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey` 幂等收敛 (created/updated/unchanged)
+- **泛型分页迭代器**: `provider.Each` / `Collect`(带 Bounded 变体)逐页惰性遍历, 空页终止 + 页预算硬错误, 不再手写 page++ 循环
 - **版本可观测**: `provider.Version()` + 默认 `User-Agent: ...go-git-platform/<ver>` 产品标识; `transport/metrics` 零依赖观测接口 (Recorder/ResponseHook/ClassifyPath)
 - **安全默认**:
   - HTTPS 令牌经**临时 credential helper** 注入 git —— 不进 argv、不进子进程环境变量、绝不落盘到主机凭证库 (钥匙串/~/.git-credentials)
@@ -258,7 +259,7 @@ type Provider interface {
 }
 ```
 
-### 可选能力(13 项 + CI 日志)
+### 可选能力(17 项 + CI 日志)
 
 可选能力不进入 `Provider` 组合, 调用方通过 `Capabilities()` 声明式判断(或直接类型断言):
 
@@ -302,9 +303,23 @@ results := provider.GetFileContents(ctx, p, "o", "r", "main", []string{
 
 // 投影: 把统一模型裁剪成只含选定字段, 喂给 LLM 前省上下文
 doc, _ := projection.Project(cr, "number", "title", "head.ref", "state")
+
+// 分页: 逐页惰性遍历全量列表(空页终止, 平台忽略 page 参数时页预算兜底报错)
+err := provider.Each(ctx, func(ctx context.Context, page int) ([]*provider.PlatformRepo, error) {
+    return p.ListRepos(ctx, provider.ListRepoOptions{Owner: "org", Page: page, PerPage: 100})
+}, func(r *provider.PlatformRepo) error {
+    fmt.Println(r.FullName)
+    return nil // provider.ErrStopIteration 可提前止步
+})
+
+// 期望态: 幂等创建或修复 webhook, 重跑安全(created/updated/unchanged)
+action, hook, err := provider.EnsureWebhook(ctx, p, provider.CreateWebhookOptions{
+    Owner: "o", Repo: "r", URL: "https://ci.example.com/hook",
+    Events: []string{"push", "pull_request"},
+})
 ```
 
-`mcp/` 子模块(独立 go module)提供开箱即用的 MCP server: 七平台一套工具面, toolset 按能力声明门控、`--read-only` 注册期丢弃写工具、列表工具支持 `fields` 投影参数。详见 [mcp/README.md](mcp/README.md)。
+`mcp/` 子模块(独立 go module)提供开箱即用的 MCP server: 七平台一套工具面, 六个 toolset(core/crs/issues/status/search/releases)按能力声明门控、`--read-only` 注册期丢弃写工具、列表工具支持 `fields` 投影与 `per_page` 分页参数、`--http` 可切换 streamable HTTP 远程部署(`/mcp` 端点 + `--http-token` Bearer 门禁)。详见 [mcp/README.md](mcp/README.md)。
 
 ### 仓库元数据与部分克隆
 
@@ -351,6 +366,21 @@ p, err := provider.NewProvider(provider.Config{
 
 **Retry/Hooks/Logger 对所有平台生效** (包括使用第三方 SDK 的 GitHub/GitLab/Gitea/Forgejo), 因为它们都通过 `transport.RoundTripper` 包装。
 
+`Config` 还携带两个 v0.72 引入的开关:
+
+```go
+p, err := provider.NewProvider(provider.Config{
+    Platform: provider.PlatformGitHub,
+    // TokenSource 优先于 Token: 每请求取 token, 过期凭证轮换下一请求即生效
+    TokenSource: rotatingSource,
+    // ConditionalRequests: GET 携带 If-None-Match, 304 透明回放缓存的 200
+    // (GitHub 上 304 不占限流配额, 轮询型负载受益)
+    ConditionalRequests: true,
+})
+```
+
+GitHub App 凭证两步曲已下沉为顶层 `githubapp` 包: `MintJWT`(RS256 签名) + `FetchInstallationToken`(换短期 installation token), 配合 `Config.TokenSource` 即为完整的每小时轮换链路。
+
 ## Git 后端操作
 
 `gitbackend` 提供本地 Git 仓库的底层操作 (Fetch/Push/Clone/状态/Diff/分支/标签/文件/Stash/Rebase…), 双后端实现, 工厂自动选择:
@@ -359,6 +389,8 @@ p, err := provider.NewProvider(provider.Config{
 |------|------|------|
 | 原生 git | `"native"` | 调用本地 `git` 命令, 功能最全 (支持 Rebase/Stash/CherryPick/RunRaw) |
 | go-git | `"gogit"` | 纯 Go 实现 (基于 go-git/v5), 无需 git 二进制, 部分高级操作返回 `ErrNotSupported` |
+
+直接使用 go-git 的调用方可通过 `gitbackend.TransportAuth(auth)` 把同一套 `AuthConfig`(含 SSH 指纹钉扎)映射为 `transport.AuthMethod`, 与本包后端共享认证语义。
 
 ```go
 import "github.com/yi-nology/go-git-platform/gitbackend"
@@ -467,6 +499,10 @@ go-git-platform/
 │   ├── detect.go                # 平台自动检测
 │   ├── factory.go / registry.go # 平台注册 + NewProvider
 │   ├── pagination.go            # NormalizePageOpts + X-Total-Count 解析
+│   ├── pageiter.go              # Each/Collect 泛型分页迭代器 (空页终止+页预算)
+│   ├── ensure.go                # EnsureWebhook/BranchProtection/DeployKey 期望态收敛
+│   ├── tokensource.go           # 可刷新 TokenSource + StaticTokenSource
+│   ├── version.go               # provider.Version() (buildinfo)
 │   ├── diffutil.go / stateutil.go / convertutil.go
 │   ├── wait.go / batch.go       # Agent 原语: CI 门禁等待 + 有界并发批量
 │   ├── commitstatus.go          # 提交状态工具
@@ -477,9 +513,15 @@ go-git-platform/
 ├── transport/                   # 统一 HTTP 传输层
 │   ├── client.go                # Client + Do/DoJSON/DoRaw + RoundTripper + AuthStrategy
 │   ├── ratelimit.go             # 主动限流 (X-RateLimit-* 自适应)
-│   ├── retry.go                 # 指数退避 + jitter + Retry-After + 幂等感知
+│   ├── retry.go                 # 指数退避 + jitter + Retry-After + 幂等感知 + 限流 403 判定
+│   ├── etag.go                  # ETag 条件请求 (If-None-Match / 304 回放)
+│   ├── tokensource.go           # 每请求取 token 的 AuthStrategy
+│   ├── useragent.go             # 默认 User-Agent 产品标识
+│   ├── metrics/                 # 零依赖观测接口 (Recorder/ResponseHook/ClassifyPath)
 │   ├── hooks.go / errors.go / logger.go
 │
+├── githubapp/                   # GitHub App 凭证: MintJWT + FetchInstallationToken
+
 ├── backends/                    # 平台实现 (每个独立包)
 │   ├── github/                  # GitHub (go-github SDK + transport 包装)
 │   ├── gitlab/                  # GitLab (client-go SDK + transport 包装, 含 CI 日志/行内评论)
@@ -488,7 +530,7 @@ go-git-platform/
 │   ├── gitee/                   # Gitee (go-gitee SDK + transport 包装)
 │   ├── tencentcode/             # 腾讯工蜂 (transport.Client + Extras 专属能力)
 │   ├── all/                     # 一行 blank import 注册所有平台
-│   └── contracttest/            # 跨平台契约测试套件
+│   └── contracttest/            # 跨平台契约套件 + webhook 事件语料库 (testdata/webhooks)
 │
 ├── gitbackend/                  # 本地 Git 操作 (native + gogit 双后端)
 │   ├── native*.go               # 原生 git 后端 (argguard 白名单 + 冲突检测)
@@ -509,7 +551,7 @@ go-git-platform/
 ├── docs/
 │   ├── divergence-ledger.md     # 渲染后的分歧台账 (go generate 再生成)
 │   └── v1.0-readiness.md        # 1.0 路线
-├── examples/                    # capabilities/credential/gitbackend/notification/provider/reaction/webhook
+├── examples/                    # automation/capabilities/credential/gitbackend/notification/provider/reaction/webhook
 ├── Makefile                     # test/lint/fmt/cover 等命令
 ├── .golangci.yml                # lint 配置
 └── go.mod
@@ -547,8 +589,8 @@ make cover      # 打印覆盖率摘要
 - **Release** (推送 `v*` tag): 测试门禁 → 编译 → 自动识别预发布 → 创建 GitHub Release
 
 ```bash
-git tag v0.72.0
-git push origin v0.72.0
+git tag v0.73.0
+git push origin v0.73.0
 ```
 
 ## 相关项目
