@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.67.2] - 2026-10-02
+
+### Added
+
+- **NoteManager 可选接口**(provider + gitlab backend):CR(MR/PR)评论的定点
+  更新 `UpdateNote` 与全量分页列举 `ListNotes`,走 MergeRequest Notes API。
+  动机:GitLab 的 MR 与 issue 是两个 iid 命名空间,IssueManager 的评论方法
+  (Issues Notes API)对 MR 必 404——上层按评论 ID 做原地更新/扫描定位时全部
+  失效,只能每轮新建造成重复评论。GitHub/Gitea 等 issue 即 PR 的平台由
+  IssueManager 天然覆盖,无需实现本接口(与 DiffManager 同为类型断言的
+  可选能力,不进 CapabilitySet)。
+
 ## [0.64.0] - 2026-09-27
 
 ### Added

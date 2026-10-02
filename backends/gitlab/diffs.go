@@ -121,3 +121,47 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 }
 
 var _ provider.DiffManager = (*Provider)(nil)
+
+// UpdateNote updates one merge-request note (MergeRequest Notes API; v0.67.2).
+// IssueManager.UpdateIssueComment targets the Issues Notes API and 404s for
+// merge requests — consumers doing CR-comment maintenance should prefer this.
+func (p *Provider) UpdateNote(ctx context.Context, owner, repo, number, noteID, body string) (*provider.IssueComment, error) {
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "UpdateNote", number)
+	if err != nil {
+		return nil, err
+	}
+	nid, err := strconv.ParseInt(noteID, 10, 64)
+	if err != nil {
+		return nil, provider.Wrapf(provider.PlatformGitLab, "UpdateNote", "invalid note ID %q: %v", noteID, err)
+	}
+	note, _, err := p.client.Notes.UpdateMergeRequestNote(pidOf(owner, repo), n, nid,
+		&gitlab.UpdateMergeRequestNoteOptions{Body: new(body)}, gitlab.WithContext(ctx))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateNote", err)
+	}
+	return convertIssueComment(note), nil
+}
+
+// ListNotes lists every merge-request note, oldest first across all pages
+// (MergeRequest Notes API; v0.67.2). IssueManager.ListIssueComments targets
+// the Issues Notes API and 404s for merge requests.
+func (p *Provider) ListNotes(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
+	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ListNotes", number)
+	if err != nil {
+		return nil, err
+	}
+	notes, err := backendutil.AllPages(func(page int) ([]*gitlab.Note, error) {
+		batch, _, err := p.client.Notes.ListMergeRequestNotes(pidOf(owner, repo), n, &gitlab.ListMergeRequestNotesOptions{
+			ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: backendutil.IssueCommentPageSize},
+		}, gitlab.WithContext(ctx))
+		return batch, err
+	})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListNotes", err)
+	}
+	result := make([]*provider.IssueComment, 0, len(notes))
+	for _, note := range notes {
+		result = append(result, convertIssueComment(note))
+	}
+	return result, nil
+}
