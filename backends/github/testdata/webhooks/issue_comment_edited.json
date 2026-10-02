@@ -1,0 +1,39 @@
+{
+  "headers": {
+    "X-GitHub-Event": "issue_comment"
+  },
+  "body": {
+    "action": "edited",
+    "issue": {
+      "number": 12,
+      "title": "bug",
+      "body": "b",
+      "state": "open",
+      "user": {
+        "login": "dev",
+        "id": 1
+      },
+      "html_url": "https://github.com/owner/repo/issues/12"
+    },
+    "comment": {
+      "id": 55,
+      "body": "nice (edited)",
+      "user": {
+        "login": "dev",
+        "id": 1
+      }
+    },
+    "repository": {
+      "id": 99,
+      "name": "repo",
+      "full_name": "owner/repo",
+      "owner": {
+        "login": "owner"
+      }
+    },
+    "sender": {
+      "login": "dev",
+      "id": 1
+    }
+  }
+}

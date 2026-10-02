@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -14,11 +13,12 @@ import (
 // SDK 内部用 bareDoUntilFound 处理资产端点的 302(GitHub 对
 // Accept: application/octet-stream 返回重定向而非直接字节流),302 目标
 // 是签名 URL:必须用无鉴权的裸 client 跟随,不能复用 SDK 自己的
-// http.Client(其 CheckRedirect 被禁用)也不该带上 API Bearer。
+// http.Client(其 CheckRedirect 被禁用)也不该带上 API Bearer。跟随用
+// p.followClient —— 同 SkipTLS 策略,GHES 自签场景第二跳不再 x509。
 // 跟随后的响应体经 CheckResponse 校验,非 2xx 直接报错;rc 即字节流,
 // io.Copy 流式写入 w,不整读内存。
 func (p *Provider) DownloadReleaseAsset(ctx context.Context, owner, repo string, assetID int64, w io.Writer) error {
-	rc, redirectURL, err := p.client.Repositories.DownloadReleaseAsset(ctx, owner, repo, assetID, &http.Client{})
+	rc, redirectURL, err := p.client.Repositories.DownloadReleaseAsset(ctx, owner, repo, assetID, p.followClient)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset", err)
 	}

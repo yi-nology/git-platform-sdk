@@ -201,3 +201,155 @@ func TestETagTokenRotationPartitionsCache(t *testing.T) {
 		t.Fatalf("authorizations seen = %v", seen)
 	}
 }
+
+func TestETagOversizedKnownLengthStreamsThrough(t *testing.T) {
+	big := `{"pad":"` + strings.Repeat("x", 2*DefaultMaxCachedBodySize) + `"}`
+	srv, _, conditional := newETagServer(big, nil)
+	defer srv.Close()
+
+	c := NewClientWithTransport(srv.URL, None{}, srv.Client().Transport)
+	c.ETag = NewETagCache(0)
+	hc := &http.Client{Transport: c.RoundTripper()}
+
+	resp, err := hc.Get(srv.URL + "/data")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	n, err := io.Copy(io.Discard, resp.Body)
+	if err != nil {
+		t.Fatalf("stream oversized body: %v", err)
+	}
+	if n != int64(len(big)) {
+		t.Fatalf("streamed %d bytes, want %d (must not truncate or buffer-cap)", n, len(big))
+	}
+	if c.ETag.Len() != 0 {
+		t.Fatalf("cache holds %d entries, want 0", c.ETag.Len())
+	}
+	if got := conditional.Load(); got != 0 {
+		t.Fatalf("oversized body was cached (%d conditional requests)", got)
+	}
+}
+
+func TestETagOversizedChunkedBodyStreamsThrough(t *testing.T) {
+	// No Content-Length (chunked): the cap+1 probe must detect overflow and
+	// replay prefix + remainder so the caller still receives every byte.
+	big := `{"pad":"` + strings.Repeat("y", 2*DefaultMaxCachedBodySize) + `"}`
+	srv, _, _ := newETagServer(big, nil)
+	defer srv.Close()
+
+	c := NewClientWithTransport(srv.URL, None{}, srv.Client().Transport)
+	c.ETag = NewETagCache(0)
+	hc := &http.Client{Transport: c.RoundTripper()}
+
+	resp, err := hc.Get(srv.URL + "/data")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	n, err := io.Copy(io.Discard, resp.Body)
+	if err != nil {
+		t.Fatalf("stream chunked oversized body: %v", err)
+	}
+	if n != int64(len(big)) {
+		t.Fatalf("streamed %d bytes, want %d", n, len(big))
+	}
+	if c.ETag.Len() != 0 {
+		t.Fatalf("cache holds %d entries, want 0", c.ETag.Len())
+	}
+}
+
+func TestETagMidBodyReadErrorSurfaces(t *testing.T) {
+	// A body that fails mid-read must surface as a transport error on the
+	// RoundTripper path — never as a silently truncated 200.
+	failing := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		h := http.Header{}
+		h.Set("ETag", `"v1"`)
+		h.Set("Content-Type", "application/json")
+		body := io.NopCloser(io.MultiReader(
+			strings.NewReader(`{"partial":`),
+			&errReader{},
+		))
+		return &http.Response{StatusCode: 200, Header: h, Body: body, ContentLength: -1}, nil
+	})
+	c := NewClient("https://example.invalid", None{})
+	c.Transport = failing
+	c.ETag = NewETagCache(0)
+	hc := &http.Client{Transport: c.RoundTripper()}
+
+	resp, err := hc.Get("https://example.invalid/data")
+	if err == nil {
+		// The error may arrive on first body read instead of RoundTrip;
+		// either way the caller must see it.
+		_, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr == nil {
+			t.Fatal("mid-body failure swallowed: neither RoundTrip nor read reported it")
+		}
+		return
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("err = %v, want the underlying read error", err)
+	}
+}
+
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) { return 0, errBoom }
+
+var errBoom = errorString("boom")
+
+type errorString string
+
+func (e errorString) Error() string { return string(e) }
+
+func TestETagNoStoreInDirectiveList(t *testing.T) {
+	srv, _, conditional := newETagServer(`{"v":1}`, map[string]string{"Cache-Control": "private, no-store, max-age=0"})
+	defer srv.Close()
+
+	c := NewClient(srv.URL, None{})
+	c.ETag = NewETagCache(0)
+	for range 2 {
+		if _, err := c.Do(t.Context(), &Request{Method: "GET", Path: "/data"}); err != nil {
+			t.Fatalf("Do: %v", err)
+		}
+	}
+	if got := conditional.Load(); got != 0 {
+		t.Fatalf("no-store inside a directive list was cached (%d conditional requests)", got)
+	}
+}
+
+func TestETagExplicitAcceptEncodingNotCached(t *testing.T) {
+	srv, _, conditional := newETagServer(`{"v":1}`, nil)
+	defer srv.Close()
+
+	c := NewClient(srv.URL, None{})
+	c.ETag = NewETagCache(0)
+	for range 2 {
+		if _, err := c.Do(t.Context(), &Request{
+			Method: "GET", Path: "/data",
+			Headers: http.Header{"Accept-Encoding": []string{"gzip"}},
+		}); err != nil {
+			t.Fatalf("Do: %v", err)
+		}
+	}
+	if got := conditional.Load(); got != 0 {
+		t.Fatalf("explicitly-encoded response was cached (%d conditional requests)", got)
+	}
+	if c.ETag.Len() != 0 {
+		t.Fatalf("cache holds %d entries, want 0", c.ETag.Len())
+	}
+}
+
+func TestETag304WithoutEntryIsAnError(t *testing.T) {
+	c := NewETagCache(1)
+	req := httptest.NewRequest(http.MethodGet, "/data", nil)
+	resp := &http.Response{StatusCode: http.StatusNotModified, Body: http.NoBody}
+
+	if _, err := c.processRT(req, resp); err == nil {
+		t.Fatal("304 with no cached entry must be an error, not a bodyless 200-shape passthrough")
+	}
+	if _, _, err := c.process(req, resp, nil); err == nil {
+		t.Fatal("process: 304 with no cached entry must be an error")
+	}
+}

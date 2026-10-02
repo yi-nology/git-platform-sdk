@@ -428,10 +428,11 @@ const (
 	EventTypeIssue   = "issue."
 	EventTypeComment = "comment."
 
-	// Comment actions. Platforms only notify on comment creation today;
-	// edits/deletions join the vocabulary when a platform starts sending
-	// them.
+	// Comment actions. GitHub delivers created/edited/deleted; the other
+	// platforms only notify on creation today.
 	CommentActionCreated = "created"
+	CommentActionEdited  = "edited"
+	CommentActionDeleted = "deleted"
 )
 
 // NormalizeCRAction maps platform-specific PR/MR action strings to the

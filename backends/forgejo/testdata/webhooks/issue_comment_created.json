@@ -24,6 +24,16 @@
     "sender": {
       "id": 1,
       "login": "dev"
+    },
+    "comment": {
+      "id": 555,
+      "body": "a review comment",
+      "user": {
+        "id": 1,
+        "login": "dev"
+      },
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
     }
   }
 }

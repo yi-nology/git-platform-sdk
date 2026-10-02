@@ -31,12 +31,16 @@ package main
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpserver "github.com/yi-nology/go-git-platform/mcp"
@@ -137,5 +141,22 @@ func serveHTTP(addr, bearer string, srv *mcp.Server) error {
 	log.Printf("go-git-platform-mcp %s: streamable HTTP on http://%s/mcp (auth: %s)",
 		mcpserver.Version(), addr, map[bool]string{true: "bearer token", false: "NONE — set --http-token"}[bearer != ""])
 	server := &http.Server{Addr: addr, Handler: handler}
-	return server.ListenAndServe()
+
+	// Graceful shutdown: SIGINT/SIGTERM stop accepting and give in-flight
+	// tool calls a grace window instead of dropping them mid-request.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	errCh := make(chan error, 1)
+	go func() { errCh <- server.ListenAndServe() }()
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return server.Shutdown(shutdownCtx)
 }

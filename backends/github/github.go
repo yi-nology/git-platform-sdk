@@ -45,6 +45,10 @@ import (
 type Provider struct {
 	client *github.Client
 	logger provider.Logger
+	// followClient redirects to signed URLs (release-asset downloads). It
+	// carries no credentials and must honour SkipTLS so GHES self-signed
+	// deployments do not fail x509 on the second hop.
+	followClient *http.Client
 }
 
 // New builds a GitHub Provider from the given config. It registers itself
@@ -102,7 +106,14 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		ghClient = c
 	}
 
-	return &Provider{client: ghClient, logger: logger}, nil
+	return &Provider{
+		client: ghClient,
+		logger: logger,
+		// Bare client on purpose (signed URLs must not see the API token),
+		// but built on the same TLS policy as everything else so SkipTLS
+		// holds on the redirect hop too.
+		followClient: &http.Client{Transport: backendutil.HTTPTransport(cfg.SkipTLS)},
+	}, nil
 }
 
 // Platform implements provider.Provider.

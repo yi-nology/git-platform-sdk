@@ -144,8 +144,10 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		// create/delete hooks carry the ref kind ("branch" or "tag").
 		RefType string `json:"ref_type"`
 		// issues/issue_comment hooks carry the issue object; a PR-shaped
-		// issue additionally carries a pull_request key.
-		Issue *webhookIssuePayload `json:"issue"`
+		// issue additionally carries a pull_request key, and issue_comment
+		// hooks carry the comment itself.
+		Issue   *webhookIssuePayload   `json:"issue"`
+		Comment *webhookCommentPayload `json:"comment"`
 	}
 	if err := json.Unmarshal(body, &pl); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitea, "ParseWebhookEvent", err)
@@ -227,6 +229,19 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case "issue_comment":
 		event.Type = provider.EventTypeComment + provider.CommentActionCreated
 		event.Action = provider.CommentActionCreated
+		if pl.Comment != nil {
+			author := &provider.CRUser{ID: int64(pl.Comment.User.ID), Username: pl.Comment.User.Login}
+			if author.ID == 0 && author.Username == "" {
+				author = actor
+			}
+			event.Comment = &provider.IssueComment{
+				ID:        pl.Comment.ID,
+				Body:      pl.Comment.Body,
+				Author:    author,
+				CreatedAt: pl.Comment.CreatedAt,
+				UpdatedAt: pl.Comment.UpdatedAt,
+			}
+		}
 		attachWebhookIssue(event, pl.Issue)
 	}
 	return event, nil
@@ -247,6 +262,19 @@ type webhookIssuePayload struct {
 	PullRequest *struct {
 		Merged bool `json:"merged"`
 	} `json:"pull_request"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// webhookCommentPayload is the comment object carried by issue_comment
+// hooks.
+type webhookCommentPayload struct {
+	ID   int64  `json:"id"`
+	Body string `json:"body"`
+	User struct {
+		ID    int    `json:"id"`
+		Login string `json:"login"`
+	} `json:"user"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

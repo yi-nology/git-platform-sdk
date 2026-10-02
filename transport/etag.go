@@ -2,9 +2,11 @@ package transport
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 )
@@ -95,12 +97,31 @@ func (c *ETagCache) applyConditional(req *http.Request) {
 	}
 }
 
-// cacheable reports whether resp may be stored for this req.
+// cacheable reports whether resp may be stored for this req. Requests that
+// carry an explicit Accept-Encoding are excluded: only Go's transparent
+// gzip delivers bodies decoded (with the header stripped), so an explicitly
+// negotiated encoding would be stored verbatim while the replay strips the
+// Content-Encoding header — handing callers encoded bytes labeled identity.
 func (c *ETagCache) cacheable(req *http.Request, resp *http.Response) bool {
 	return req.Method == http.MethodGet &&
 		resp.StatusCode == http.StatusOK &&
 		resp.Header.Get("ETag") != "" &&
-		resp.Header.Get("Cache-Control") != "no-store"
+		req.Header.Get("Accept-Encoding") == "" &&
+		!hasNoStoreDirective(resp.Header)
+}
+
+// hasNoStoreDirective reports whether any Cache-Control directive list on
+// the response contains no-store (case-insensitive, comma-separated lists
+// included: "private, no-store" must not be cached either).
+func hasNoStoreDirective(h http.Header) bool {
+	for _, v := range h.Values("Cache-Control") {
+		for _, d := range strings.Split(v, ",") {
+			if strings.EqualFold(strings.TrimSpace(d), "no-store") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // store caches body for req/resp. Content-Encoding and Content-Length are
@@ -141,58 +162,81 @@ func (e etagEntry) synthesize(req *http.Request) *http.Response {
 // process handles a completed Client.do-style exchange where the body has
 // already been read in full: 304s are turned into the cached 200 (with the
 // cached body returned as outBody), and 200s are stored. Everything else
-// passes through unchanged.
-func (c *ETagCache) process(req *http.Request, resp *http.Response, body []byte) (*http.Response, []byte) {
+// passes through unchanged. A 304 whose cache entry no longer exists
+// (evicted between applyConditional and the response) is an error: the
+// caller sent If-None-Match and cannot distinguish a bodyless 304 from an
+// empty payload.
+func (c *ETagCache) process(req *http.Request, resp *http.Response, body []byte) (*http.Response, []byte, error) {
 	if c == nil || resp == nil {
-		return resp, body
+		return resp, body, nil
 	}
 	switch resp.StatusCode {
 	case http.StatusNotModified:
 		if e, ok := c.entries.Get(etagKey(req)); ok {
 			out := e.synthesize(req)
-			return out, e.body
+			return out, e.body, nil
 		}
+		return nil, nil, fmt.Errorf("transport: conditional request for %s answered 304 but the cached entry is gone", redactURL(*req.URL))
 	case http.StatusOK:
 		c.store(req, resp, body)
 	}
-	return resp, body
+	return resp, body, nil
 }
 
 // processRT handles a completed RoundTripper-style exchange whose body is
-// still streaming: 304s are replaced by the cached 200, and cacheable 200s
-// are buffered (so they can be stored) and re-wrapped for single
-// consumption by the caller. Non-cacheable responses are returned
-// untouched.
-func (c *ETagCache) processRT(req *http.Request, resp *http.Response) *http.Response {
+// still streaming: 304s are replaced by the cached 200 (or fail, see
+// process), and cacheable 200s are buffered up to the entry-size cap and
+// re-wrapped for single consumption by the caller. Responses that are not
+// cacheable — including any body known or discovered to exceed the cap —
+// stream through untouched, preserving the memory bounds and streaming
+// contract of the underlying transport.
+func (c *ETagCache) processRT(req *http.Request, resp *http.Response) (*http.Response, error) {
 	if c == nil || resp == nil || resp.Body == nil {
-		return resp
+		return resp, nil
 	}
 	if resp.StatusCode == http.StatusNotModified {
-		if e, ok := c.entries.Get(etagKey(req)); ok {
+		e, ok := c.entries.Get(etagKey(req))
+		if !ok {
 			_ = resp.Body.Close()
-			return e.synthesize(req)
+			return nil, fmt.Errorf("transport: conditional request for %s answered 304 but the cached entry is gone", redactURL(*req.URL))
 		}
-		return resp
+		_ = resp.Body.Close()
+		return e.synthesize(req), nil
 	}
 	if !c.cacheable(req, resp) {
-		return resp
+		return resp, nil
 	}
-	// Read the full body once, then decide: within the size cap it enters
-	// the cache; beyond it we merely replay it.
-	body, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
+	// Declared length already over the cap: never buffer, just stream.
+	if resp.ContentLength > c.maxBodySize {
+		return resp, nil
+	}
+	// Read at most cap+1 bytes: the +1 distinguishes "fits" from "too
+	// big" without committing to buffer an unbounded body.
+	head, err := io.ReadAll(io.LimitReader(resp.Body, c.maxBodySize+1))
 	if err != nil {
-		// A mid-body failure must not silently truncate: surface an empty
-		// body with the original status so SDK decoders see the error they
-		// would have seen anyway.
-		resp.Body = io.NopCloser(bytes.NewReader(nil))
-		resp.ContentLength = 0
-		return resp
+		// A mid-body failure must surface as a transport error, never as a
+		// silently truncated 200.
+		_ = resp.Body.Close()
+		return nil, err
 	}
-	c.store(req, resp, body)
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	resp.ContentLength = int64(len(body))
+	if int64(len(head)) > c.maxBodySize {
+		// Too big to cache: replay the prefix concatenated with the unread
+		// remainder so the caller still sees every byte, streamed.
+		resp.Body = readCloser{Reader: io.MultiReader(bytes.NewReader(head), resp.Body), Closer: resp.Body}
+		return resp, nil
+	}
+	_ = resp.Body.Close()
+	c.store(req, resp, head)
+	resp.Body = io.NopCloser(bytes.NewReader(head))
+	resp.ContentLength = int64(len(head))
 	resp.Header.Del("Content-Encoding")
-	resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
-	return resp
+	resp.Header.Set("Content-Length", strconv.Itoa(len(head)))
+	return resp, nil
+}
+
+// readCloser pairs an io.Reader (e.g. an io.MultiReader over buffered and
+// live bytes) with the original response body's closer.
+type readCloser struct {
+	io.Reader
+	io.Closer
 }

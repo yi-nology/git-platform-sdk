@@ -244,7 +244,7 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 	resp, body, err := c.roundTripWithRetry(ctx, httpReq)
 	duration := time.Since(start)
 	if err == nil {
-		resp, body = c.ETag.process(httpReq, resp, body)
+		resp, body, err = c.ETag.process(httpReq, resp, body)
 	}
 	if err != nil {
 		c.log().Error("transport request failed",
@@ -524,7 +524,7 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		rt.client.Limiter.UpdateFromResponse(resp)
 	}
 	if err == nil {
-		resp = rt.client.ETag.processRT(req, resp)
+		resp, err = rt.client.ETag.processRT(req, resp)
 	}
 	rt.client.Hooks.ExecuteResponse(ctx, req, resp, duration, err)
 	if err != nil {

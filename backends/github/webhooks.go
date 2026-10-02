@@ -134,8 +134,10 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case *github.IssueCommentEvent:
 		// Comments on both plain issues and PRs arrive here; a PR comment
 		// also carries the pull request, so CR is populated alongside Issue.
-		ne.Type = provider.EventTypeComment + provider.CommentActionCreated
-		ne.Action = provider.CommentActionCreated
+		// GitHub sends action created|edited|deleted — derived, not assumed.
+		action := normalizeCommentAction(e.GetAction())
+		ne.Type = provider.EventTypeComment + action
+		ne.Action = action
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
 			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
@@ -148,8 +150,9 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			ne.CR = &provider.ChangeRequest{Number: ne.Issue.Number}
 		}
 	case *github.PullRequestReviewCommentEvent:
-		ne.Type = provider.EventTypeComment + provider.CommentActionCreated
-		ne.Action = provider.CommentActionCreated
+		action := normalizeCommentAction(e.GetAction())
+		ne.Type = provider.EventTypeComment + action
+		ne.Action = action
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
 			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
@@ -202,6 +205,20 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		ne.Type = eventType
 	}
 	return ne, nil
+}
+
+// normalizeCommentAction maps a GitHub comment action onto the canonical
+// vocabulary; unknown values pass through so new GitHub actions surface
+// verbatim instead of masquerading as creations.
+func normalizeCommentAction(action string) string {
+	switch action {
+	case "created", "edited", "deleted":
+		return action
+	case "":
+		return provider.CommentActionCreated
+	default:
+		return action
+	}
 }
 
 // compile-time guard

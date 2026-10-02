@@ -4,6 +4,41 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.74.0] - 2026-10-02
+
+### Fixed
+
+v0.71→v0.73 全量代码审查(双流合流后)发现的 8 项问题修复,两项 P2 门禁级:
+
+- **ETag 条件请求恢复流式契约与内存上界**(P2): RT 路径此前对带 ETag 的
+  200 无界整读(绕过 MaxBodySize,大附件/归档端点全量进内存),且中途读错
+  被吞成空 200。现在:ContentLength 已知超限直接流式放行;未知长度按
+  cap+1 探读、超限用 MultiReader 回放"已读前缀+未读余量"零丢失;读错
+  上浮为传输错误。附带两处加固:`Cache-Control` 指令列表中的 no-store
+  (如 "private, no-store")不再误缓存;请求带显式 `Accept-Encoding` 时
+  不缓存(仅透明 gzip 场景存解码体,防编码体被剥头回放)
+- **304 无缓存条目改为报错**(原静默透传裸 304): 条目在 If-None-Match
+  发出与响应到达之间被 LRU 逐出时,调用方拿到无 body 的 304 无法与空
+  载荷区分——现两条路径均返回明确错误
+- **Gitea/Forgejo `comment.created` 补上评论正文**(P2): 两后端此前丢弃
+  issue_comment 载荷中的 comment 对象,事件发出但 `Comment` 恒空;已补
+  解析并更新语料 fixture + golden
+- **GitHub 评论 edited/deleted 不再误报 created**: `IssueCommentEvent`/
+  `PullRequestReviewCommentEvent` 的 action 改为如实派生(词表新增
+  `comment.edited`/`comment.deleted`,新增语料 fixture 锁定)
+- **GitHub release asset 302 跟随客户端尊重 SkipTLS**: 原裸
+  `&http.Client{}` 在 GHES 自签场景第二跳 x509 失败;现随 Provider 构造
+  (仍不带鉴权,签名 URL 语义不变)
+- **MCP HTTP 模式优雅关停**: SIGINT/SIGTERM 触发 10s 宽限 Shutdown,
+  不再硬切在途工具调用
+
+### Reviewed
+
+- 全量审查范围 v0.71.0..HEAD(165 文件): tokensource 接线/retry 门控/
+  githubapp JWT/gitbackend TransportAuth/语料驱动/ensure 语义均确认无恙;
+  githubapp 的 installation token 按调用铸造,直接作 TokenSource 略贵,
+  缓存适配器列为后续项
+
 ## [0.73.0] - 2026-10-02
 
 ### Changed
