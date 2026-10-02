@@ -22,7 +22,7 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
 - **Capability-gated optional APIs** — 17 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
 - **CI failure diagnostics** — `CILogManager` (GitLab) returns failed jobs with the tail of their execution logs, sized for LLM consumption
 - **Agent/automation primitives** — `WaitForCommitStatus` (CI gates), bounded-concurrency batch file reads, page-walking iterators (`Each`/`Collect`), field `projection` to shrink payloads before feeding LLMs
-- **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider; the `githubapp` package mints the RS256 JWT and fetches installation tokens to plug in directly
+- **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider; the `githubapp` package mints the RS256 JWT and its caching `InstallationTokenSource` exchanges it once per hour
 - **Conditional requests** — opt-in `Config.ConditionalRequests` sends `If-None-Match` and replays cached 304s as 200s; on GitHub, 304s don't count against the rate-limit budget
 - **Idempotent ensure-helpers** — `EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey` converge desired state (created/updated/unchanged), safe to re-run
 - **Webhook event corpus** — per-backend golden fixtures pin the normalized event vocabulary (`cr./push/tag./branch./issue./comment.`) across all seven platforms

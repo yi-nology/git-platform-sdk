@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.0] - 2026-10-02
+
+### Added
+
+- **`githubapp.InstallationTokenSource`(缓存式 TokenSource, v0.74 审查遗留项)**:
+  `NewInstallationTokenSource(apiBase, appID, installationID, pem)` 实现
+  `Token(ctx)`,可直接作为 `provider.Config.TokenSource`——按服务端
+  `expires_at` 缓存(缺失时回退 1h 默认 TTL),到期前 1 分钟提前换新,
+  互斥锁让并发调用收敛为单次抓取(防击穿);刷新失败保留旧缓存、下次
+  调用照常重试。每小时一次 JWT 铸造 + 一次 POST,而非每请求一次
+  (`FetchInstallationToken` 原签名不变,内部改共享带过期时间的实现)
+- 端到端测试: github 后端 + TokenSource 接线实测"两次 API 调用只打一次
+  token 端点、请求头带缓存 token";单测覆盖缓存命中/到期刷新/提前量/
+  缺失过期回退/并发防击穿/失败可重试六条路径(race 检测下)
+
 ## [0.74.0] - 2026-10-02
 
 ### Fixed

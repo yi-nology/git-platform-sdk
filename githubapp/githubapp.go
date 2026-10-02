@@ -66,9 +66,17 @@ func MintJWT(appID int64, privateKeyPEM string) (string, error) {
 // 钩子链路；access_tokens 是不幂等的写操作，默认重试配置只允许"请求根本
 // 没发出去"（DNS/dial 失败）级别的安全重试，不会重放已到达服务端的 POST。
 func FetchInstallationToken(ctx context.Context, apiBase string, appID, installationID int64, privateKeyPEM string) (string, error) {
+	token, _, err := fetchInstallationToken(ctx, apiBase, appID, installationID, privateKeyPEM)
+	return token, err
+}
+
+// fetchInstallationToken additionally reports the token's server-declared
+// expiry (zero when the response omits expires_at) — the input the caching
+// InstallationTokenSource needs.
+func fetchInstallationToken(ctx context.Context, apiBase string, appID, installationID int64, privateKeyPEM string) (string, time.Time, error) {
 	jwt, err := MintJWT(appID, privateKeyPEM)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	if apiBase == "" {
 		apiBase = DefaultAPIBase
@@ -88,22 +96,22 @@ func FetchInstallationToken(ctx context.Context, apiBase string, appID, installa
 	if err != nil {
 		// transport 只把 >=400 包装成带 status 的错误；3xx 走下面统一判定，
 		// 保证 >=300 一律报错且错误信息带 status。
-		return "", fmt.Errorf("githubapp: fetch installation token: %w", err)
+		return "", time.Time{}, fmt.Errorf("githubapp: fetch installation token: %w", err)
 	}
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("githubapp: fetch installation token: status %d", resp.StatusCode)
+		return "", time.Time{}, fmt.Errorf("githubapp: fetch installation token: status %d", resp.StatusCode)
 	}
 	var body struct {
 		Token     string    `json:"token"`
 		ExpiresAt time.Time `json:"expires_at"`
 	}
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
-		return "", fmt.Errorf("githubapp: decode installation token: %w", err)
+		return "", time.Time{}, fmt.Errorf("githubapp: decode installation token: %w", err)
 	}
 	if body.Token == "" {
-		return "", fmt.Errorf("githubapp: installation token empty in response")
+		return "", time.Time{}, fmt.Errorf("githubapp: installation token empty in response")
 	}
-	return body.Token, nil
+	return body.Token, body.ExpiresAt, nil
 }
 
 // parseRSAPrivateKey 解析 PEM RSA 私钥，先试 PKCS#1 再试 PKCS#8。
