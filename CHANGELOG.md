@@ -273,6 +273,18 @@ v0.71→v0.73 全量代码审查(双流合流后)发现的 8 项问题修复,两
 - 行内 discussion 失败留痕（`logger.Warn`），不再静默全丢。
 - `diff_refs` 降级与行内路径日志；清理编辑残渣。
 
+## [0.76.0] - 2026-10-02
+
+### Added
+
+- **NoteManager 可选接口**(provider + gitlab backend):CR(MR/PR)评论的定点
+  更新 `UpdateNote` 与全量分页列举 `ListNotes`,走 MergeRequest Notes API。
+  动机:GitLab 的 MR 与 issue 是两个 iid 命名空间,IssueManager 的评论方法
+  (Issues Notes API)对 MR 必 404——上层按评论 ID 做原地更新/扫描定位时全部
+  失效,只能每轮新建造成重复评论。GitHub/Gitea 等 issue 即 PR 的平台由
+  IssueManager 天然覆盖,无需实现本接口(与 DiffManager 同为类型断言的
+  可选能力,不进 CapabilitySet)。
+
 ## [0.64.0] - 2026-09-27
 
 ### Added
