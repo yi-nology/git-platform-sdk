@@ -523,14 +523,14 @@ type getReleaseIn struct {
 }
 
 type createReleaseIn struct {
-	Owner    string `json:"owner"`
-	Repo     string `json:"repo"`
-	TagName  string `json:"tag_name" jsonschema:"tag to release"`
-	Title    string `json:"title" jsonschema:"release title"`
-	Body     string `json:"body,omitempty" jsonschema:"release notes"`
-	Target   string `json:"target,omitempty" jsonschema:"commitish the tag points at; empty = default branch"`
-	Draft      bool `json:"draft,omitempty"`
-	Prerelease bool `json:"prerelease,omitempty"`
+	Owner      string `json:"owner"`
+	Repo       string `json:"repo"`
+	TagName    string `json:"tag_name" jsonschema:"tag to release"`
+	Title      string `json:"title" jsonschema:"release title"`
+	Body       string `json:"body,omitempty" jsonschema:"release notes"`
+	Target     string `json:"target,omitempty" jsonschema:"commitish the tag points at; empty = default branch"`
+	Draft      bool   `json:"draft,omitempty"`
+	Prerelease bool   `json:"prerelease,omitempty"`
 }
 
 func registerReleases(s *mcp.Server, st *state) {
